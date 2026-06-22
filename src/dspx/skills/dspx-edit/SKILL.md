@@ -34,10 +34,16 @@ tone, but you never change the outline, decisions, or develop.md. **Never touch 
 and never backwards. Once you reach proofread you STOP rewriting; proofread only
 catches, and real fixes loop back to line/copy.
 
-**IMPORTANT: engine first, agent only for the irreducible.** Leaked codes, dead
-links, formatting, number/term consistency, and structural integrity are the engine's
-job — do not eyeball them. Readability, register, contextual word-choice, and the
-final whole-document read are the only things worth a subagent.
+**IMPORTANT: engine first — but route to what the engine ACTUALLY enforces.**
+Leaked codes/anchors/scaffolding, placeholder leftovers (`[TBD]`/`[TBD: …]`/`[TODO]`/
+`[待補]`), leftover `> [!WARNING]` alerts, dead links, and structural integrity are the
+engine's job (`docspec lint`/`check`, blocking ERROR) — do not eyeball them.
+Cross-document **number** consistency and **term** identity are engine **WARN** advisories
+(`docspec lint` V10/Vg): the engine flags, it does not fix — review each and reconcile by
+hand. Banned openers and **cross-section references** (`as above` / `如前一節所述`) are
+writing-guide doctrine the engine does **NOT** validate — they are your manual proofread
+duty, not a lint catch. Readability, register, contextual word-choice, and the final
+whole-document read are the only things worth a subagent.
 
 **This is a procedure, not a stance.** Unlike develop/factcheck, edit has an ordered
 sequence — because copy-prep that runs out of order wastes itself (you don't proofread
@@ -51,9 +57,12 @@ whole-document **style contract**, and you are the first and only actor who sees
 whole document at once, so verifying every section conforms to it **consistently** is
 your job — the blind per-section drafter could not. Route its rules exactly like
 everything else (don't treat the guide as a separate kind of work):
-- **Mechanical rules** → engine or fix-in-place: banned openers, "no cross-section
-  references" (`as above` / `the next section`), deliverable-language requirement
-  keywords, canonical terms, clean output. `docspec lint` catches most; grep/fix the rest.
+- **Mechanical rules** → route by what the engine truly enforces. `docspec lint` catches
+  clean output (leaked machinery, placeholders, leftover `[!WARNING]` alerts) as blocking
+  ERROR, and flags term-identity / number drift as WARN. It does **NOT** check banned
+  openers or "no cross-section references" (`as above` / `如前一節所述`) — the engine does
+  not validate writing-guide doctrine, so those are yours: grep and fix them in place.
+  Deliverable-language keywords and canonical terms: lint/glossary flag, you normalize.
 - **Judgment rules** → fold into your **line-edit subagent's** brief: tone, register,
   density, rhythm. Never mechanize taste; never hand a regex's job to a subagent.
 
@@ -112,7 +121,10 @@ that is a `develop` finding — flag it and leave it.
 1. Run `docspec lint`. Fix each finding in place:
    - leaked code/anchor/scaffolding → rewrite to display-text + hidden target, or cut
    - dead link / cross-reference → repair or remove
-   - number/format drift, glossary exact-match miss → normalize to the one term/format.
+   - glossary exact-match miss / format drift → normalize to the one canonical term/format.
+   - **number** drift (lint V10 WARN): the engine flags a value conflict but you cannot tell
+     which is correct — do NOT pick one (numbers stay byte-for-byte). Raise an audit / diff-
+     summary finding to reconcile against the source.
      The projected glossary is a **lean index** (`canonical` + `bucket` + `aliases_forbidden`);
      for a term's meaning or English original, `docspec show <term-id>` returns the full record
      (incl `definition`) — prose should be written PER the definition in its own words (not cloned);
@@ -125,8 +137,9 @@ This is a living document: overwrite stale state in place, never append a correc
 
 ## Stage 3 — Proofread (final gate) · ENGINE gate + one catch-only read
 1. Re-run the engine as the deterministic final gate:
-   - `docspec lint` — deliverable cleanliness must be **zero**: no leaked machinery, no
-     `[TBD]`/placeholder/`[!WARNING]`.
+   - `docspec lint` — deliverable cleanliness ERRORs must be **zero**: no leaked machinery,
+     no `[TBD]`/placeholder, no leftover `[!WARNING]`. (Number-drift V10 is a WARN — review
+     and reconcile it; it does not block, but don't ship an unreviewed value conflict.)
    - `docspec check` — every reference resolves, structure whole.
 2. Dispatch a subagent for ONE clean-context, end-to-end read — **catch-only**: flow
    seams, a contradiction across sections, anything confusing on first read. It LISTS

@@ -24,7 +24,7 @@ Freeze it. Publish is the one irreversible action in docspec: it turns a working
 
 ## Gate (must pass before anything else)
 
-- **Engine green (the deterministic hard gate)** — `docspec check` (references resolve, structure intact) and `docspec lint` (deliverable cleanliness: no leaked machinery, no `[TBD]`/placeholder/`[!WARNING]`) both pass **with zero ERROR**. `docspec publish` re-runs these itself — it does not trust that `edit` was run. **lint WARN findings (e.g. V8 drift) are advisory — surface them to the human, but they do NOT block; only an ERROR aborts.**
+- **Engine green (the deterministic hard gate)** — `docspec check` (references resolve, structure intact) and `docspec lint` (deliverable cleanliness: no leaked machinery, no `[TBD]`/placeholder/`[!WARNING]`) both pass **with zero ERROR**. `docspec publish` re-runs these itself — it does not trust that `edit` was run. **lint WARN findings (e.g. V8 drift, V10 number-consistency, Vg term identity) are advisory — surface them to the human, but they do NOT block; only an ERROR aborts.**
 - `dspx-edit` finished with no open copy-edit/proofread findings.
 - **Open audit findings do NOT block** — audit is non-blocking by design; `docspec publish` only **warns** if findings are still `open` and proceeds. Whether to ship over an open finding is the human's judgment, not an engine gate.
 - The human has explicitly said to publish.

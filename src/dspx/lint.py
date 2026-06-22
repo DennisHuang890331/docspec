@@ -1,19 +1,22 @@
 """lint：交付物潔淨度（報告；publish 時 ERROR 級當閘）。
 
-規則（engine-spec §6）。MVP 實作 V1–V5、V7：
-  V1 docs 洩漏代號/id          ERROR
-  V2 docs 殘留內部錨點          ERROR
-  V3 docs 殘留鷹架痕跡          ERROR
-  V4 docs 殘留 [TBD]            ERROR
-  V5 material 分塊文法          ERROR
-  V7 material 雜思痕跡          ERROR
-  V8 骨肉漂移（corpus↔docs）     WARN
-  V9 realizes 指向退場決策       WARN
-  V11 凍結區（archive/）被竄改   ERROR  ← 已發行版本不可變（見 dspx.freeze）
-  Vg1/Vg2 術語一致              WARN
-  Ve1 死錨點連結（export 破）    WARN  ← `](#x)` 對不上任何標題 slug → xelatex PDF 整份失敗
-  Ve2 非標準 markdown（@import） WARN  ← MPE 指令不會在 docx/PDF 渲染
-  V6/V10（散文偵測/數字）→ 後補。
+潔淨規則的權威 SoT＝capability `deliverable-cleanliness`（openspec/specs/，由 change
+deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 engine-spec §6）。
+  V1 docs 洩漏代號/id           ERROR
+  V2 docs 殘留內部錨點           ERROR
+  V3 docs 殘留鷹架痕跡           ERROR
+  V4 docs 殘留 placeholder 類    ERROR  ← [TBD]/[TBD: …]/[TODO]/[FIXME]/[待補] 與裸填空 <…>/{…}
+  V5 material 分塊文法           ERROR
+  V7 material 雜思痕跡           ERROR
+  V8 骨肉漂移（corpus↔docs）      WARN
+  V9 realizes 指向退場決策        WARN
+  V10 跨文件數字一致             WARN   ← 同 snake_case 指涉的同單位值相互衝突（advisory、不阻塞）
+  V11 凍結區（archive/）被竄改    ERROR  ← 已發行版本不可變（見 dspx.freeze）
+  V12 docs 殘留 GFM 警示/暫停旗   ERROR  ← `> [!WARNING]` 等 alert；draft 撞決策衝突刻意產生、絕不該 ship
+  Vg1/Vg2 術語一致               WARN
+  Ve1 死錨點連結（export 破）     WARN  ← `](#x)` 對不上任何標題 slug → xelatex PDF 整份失敗
+  Ve2 非標準 markdown（@import）  WARN  ← MPE 指令不會在 docx/PDF 渲染
+  V6（散文滲入 docs 偵測）→ 後補。
 
   export-safety（Ve）＝把「匯出時才炸的機械問題」前移成 lint 事前驗證：交付物潔淨＝
   export-clean by construction。只收**機械 drift**（死連結、非標準語法）；mermaid 圖渲染、
@@ -35,7 +38,19 @@ WARN = "WARN"
 
 _ANCHOR_RE = re.compile(r"\{#[^}]+\}")
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.DOTALL)
-_TBD_RE = re.compile(r"\[TBD\]", re.IGNORECASE)
+# V4 placeholder 類（掃描在剝程式碼後做）：括號式 [TBD]/[TBD: …]/[TODO]/[FIXME]/[XXX]/[待補]/
+# [待填]，與裸填空 <…>/{…}（後者僅在含 placeholder 關鍵字時抓，避免誤殺泛型 <T>/變數 {value}）。
+_PLACEHOLDER_RE = re.compile(
+    r"\[\s*(?:TBD|TODO|FIXME|XXX|待補|待填)\b[^\]]*\]"
+    r"|[<{]\s*(?:TBD|TODO|FIXME|XXX|待補|待填|placeholder|fill[\s-]?in|tktk)\b[^>}]*[>}]",
+    re.IGNORECASE,
+)
+# V12 GFM 警示/暫停旗（剝程式碼後、逐行）：blockquote 開頭的 [!NOTE|TIP|IMPORTANT|WARNING|CAUTION]。
+_ALERT_RE = re.compile(r"^\s*>\s*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]", re.IGNORECASE | re.MULTILINE)
+# V10 數字一致：number+unit token 與同行最近的 snake_case 指涉（如 e_stop / task_assign）。
+# 封閉單位集抑制誤報；snake_case（至少一個底線）才當 key，排除 timeout/status 等裸詞與 CJK 鄰詞。
+_NUM_UNIT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(ms|s|Hz|%)\b")
+_SNAKE_RE = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+")
 # V3 只抓 docspec 自己塞的鷹架佔位字（instructions 模板的 {id}/{title}/{order}/{name}）；
 # generic `<…>` 在技術散文太氾濫（KE 模板 <vehicle_id>、泛型 <T> 都合法），不再誤殺。
 _SCAFFOLD_RE = re.compile(r"\{(?:id|title|order|name)\}")
@@ -87,8 +102,48 @@ def _lint_docs(layout: Layout, articles: list[str], all_ids: set[str]) -> list[F
             findings.append(Finding("V2", ERROR, where, f"leftover internal anchor \"{m}\""))
         if _SCAFFOLD_RE.search(body):
             findings.append(Finding("V3", ERROR, where, "leftover scaffold placeholder ({id}/{title}/{order}/{name})"))
-        if _TBD_RE.search(body):
-            findings.append(Finding("V4", ERROR, where, "leftover [TBD]"))
+        for m in dict.fromkeys(_PLACEHOLDER_RE.findall(body)):
+            findings.append(Finding("V4", ERROR, where, f"leftover placeholder \"{m.strip()}\""))
+        for m in _ALERT_RE.findall(body):
+            findings.append(Finding("V12", ERROR, where,
+                                    "leftover GFM alert/admonition (e.g. `> [!WARNING]`) -- "
+                                    "draft emits these as a stop-and-flag marker; never ship one"))
+    return findings
+
+
+def _lint_numbers(layout: Layout, articles: list[str]) -> list[Finding]:
+    """V10 跨文件數字一致（WARN、非阻塞、不改寫）。
+
+    把每個 number+unit token 關聯到「同一行最近的 snake_case 指涉」（如 e_stop、task_assign）。
+    全文蒐集後，同一 (指涉, 單位) 出現相互衝突的值 → WARN。封閉單位集 + snake_case-only key
+    抑制誤報（不同度量如 timeout 1000ms vs 延遲 100ms 因指涉不同而不衝突）。
+    """
+    findings: list[Finding] = []
+    for article in articles:
+        path = layout.docs_latest(article)
+        if not path.is_file():
+            continue
+        body = _strip_frontmatter(path.read_text(encoding="utf-8"))
+        body = _HTML_COMMENT_RE.sub("", body)
+        body = _FENCED_CODE_RE.sub("", body)
+        body = _INLINE_CODE_RE.sub("", body)
+        where = f"docs/{article}/_latest.md"
+        # (key, unit) -> 值集合
+        seen: dict[tuple[str, str], set[str]] = {}
+        for line in body.splitlines():
+            for nm in _NUM_UNIT_RE.finditer(line):
+                # 最近的「在此數字之前」的 snake_case 指涉
+                keys = [s.group(0) for s in _SNAKE_RE.finditer(line) if s.start() < nm.start()]
+                if not keys:
+                    continue
+                key = keys[-1]
+                seen.setdefault((key, nm.group(2)), set()).add(nm.group(1))
+        for (key, unit), vals in sorted(seen.items()):
+            if len(vals) > 1:
+                joined = " vs ".join(sorted(f"{v}{unit}" for v in vals))
+                findings.append(Finding("V10", WARN, where,
+                    f"number drift: \"{key}\" has conflicting {unit} values ({joined}) -- "
+                    "reconcile against the source (advisory; does not block publish)"))
     return findings
 
 
@@ -163,6 +218,7 @@ def run_lint(layout: Layout, leaves: list[Leaf], schema: Schema) -> list[Finding
     all_ids = set(index.ids)
     articles = sorted({leaf.article for leaf in leaves})
     findings = _lint_docs(layout, articles, all_ids)
+    findings.extend(_lint_numbers(layout, articles))
     for leaf in leaves:
         findings.extend(_lint_material(leaf))
         findings.extend(_lint_realizes(leaf, index))
