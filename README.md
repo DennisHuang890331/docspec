@@ -1,103 +1,137 @@
+<div align="center">
+
 # docspec
+
+**跟 AI agent 一起寫長篇技術文件，產出乾淨的 Markdown 與排版完整的 PDF，過程中保持前後一致。**
+
+![Python](https://img.shields.io/badge/python-%E2%89%A53.11-blue)
+![License](https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-orange)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
+<!-- TODO: repo 公開後補 CI 徽章 https://github.com/<owner>/docspec/actions -->
 
 English: [README.en.md](README.en.md)
 
-給 AI agent 和人一起寫**文件**的 spec-driven 工具。把工程界「先把規格定清楚、再實作」的紀律搬到寫作上：讓 agent 先想清楚邏輯（這節在講什麼、根據哪些決策），再渲染成乾淨的散文給人讀。引擎只做確定性的把關，語義對錯交給不擋路的查核。
+</div>
 
-改寫自 [OpenSpec](https://github.com/Fission-AI/OpenSpec)，專門為人＋AI 共筆技術文件、wiki、規格而調整。獨立運作，不依賴 OpenSpec。
+你跟 agent 先把每一節的邏輯與決策講清楚，docspec 再把它渲染成散文，同時守住結構。文件變長時不容易自相矛盾。你只看渲染出來的成品，後台的細節交給 agent。
 
-> **狀態**：早期、單人維護、用 git 安裝（沒有 PyPI release）。需要 `uv` ＋ Python ≥ 3.11。Windows／Linux 有測，macOS 尚未實機驗證。
+## 這給誰用
 
-## 核心想法
+- 想跟 AI agent 共筆一份會持續成長的長篇技術文件或手冊，但擔心它愈寫愈不一致、前後矛盾。
+- 在維護多章節的規格或 wiki，需要全篇前後一致，改一處不會讓別處悄悄失準。
+- 最後要的是一份能交付的 PDF，排版要完整，不只是一份 Markdown。
 
-用 AI 寫文件最常見的失敗，是它一邊想邏輯一邊雕字，最後產出「讀起來順、但空洞又自相矛盾」的東西；而且你只想先看邏輯對不對，卻被迫先讀一大篇潤過的散文。
+## 看它跑起來
 
-docspec 把這兩件事拆開，各管各的：
+你主要是在 AI agent（Claude Code / Antigravity / Codex）的對話裡呼叫內建 skill，引擎在背後把關：
 
-- **後台 `corpus/`（給 agent 和引擎）**：每個章節用幾個結構化小檔，記「一句話概念＋寫作邊界＋它實現了哪些決策」。這層只在乎邏輯嚴謹、事實完整，不在乎文筆。
-- **前台 `docs/`（給人）**：把後台**盲渲染**成散文成品。**人只讀這層。**
+```text
+你： 我要寫一份 zenoh 控制平面的技術文件，先用 develop 起大綱
+AI： [develop] 建好 corpus/zenoh/intro/，記下骨架（這步不寫散文）
+        ├─ 概念：為什麼用 zenoh 當控制平面
+        └─ 決策：控制平面用 zenoh、不用 MQTT
 
-章節有穩定 id，搬資料夾或改名都不會斷引用。跨章節的連貫不靠 agent 互相偷看，而是靠一份共用的寫作守則 ＋ 確定性的組裝。
+你： 大綱可以，draft 這一節
+AI： [draft] 盲渲染成散文 → docs/zenoh/_latest.md
 
-大概長這樣——你（透過 agent）填後台的結構化小檔，docspec 渲出前台散文：
+你： publish
+AI： [publish] 所有閘門綠 → 凍結 v1 唯讀快照、升版、記 changelog
 
+你： 出成 PDF
+AI： [release] 匯出 → 看頁面圖 → 調排版旋鈕 → docs/exports/zenoh.pdf
 ```
-corpus/zenoh/intro/concept.yaml          docs/zenoh/_latest.md（渲出來、給人讀的）
-  concept: 為什麼用 zenoh 當控制平面    ──▶   ## 為什麼用 zenoh 當控制平面
-  brief:  {audience: 開發者, depth: 概念}         zenoh 以 pub/sub 取代輪詢……（依 brief
-corpus/zenoh/intro/decisions.yaml                與決策生成；只放決策說的、不自己編）
-  - statement: 控制平面用 zenoh、不用 MQTT
-```
 
-## 你怎麼用它：六個 skill
+<!-- TODO: 放一張 docs/exports/zenoh.pdf 的頁面截圖（zenoh dogfood 樣本） -->
+> 📄 **成品長這樣：**（PDF 頁面截圖待補）
 
-實際的工作流是六個內建 **skill**，裝進你的 AI agent（Claude Code / Antigravity / Codex）。你在對話裡叫它們，引擎在背後把關。skill 本身只給**判斷與態度**；機械細節（欄位、格式、流程）由 `docspec guide` 即時投影，不寫死在散文裡漂走。
+## 快速開始
 
-| skill | 做什麼 | 什麼時候用 |
-|---|---|---|
-| **develop** | 發展編輯。長出、重整章節的概念與決策大綱（受眾、範圍、深度、結構）。先有骨架，這一步不寫散文。 | 開新文件、或要重整結構 |
-| **draft** | 盲渲染散文。一次一節，只看投影給它的脈絡，不偷看別節——所以不會去引用看不到的鄰節而出錯。 | 結構定了，要把某節寫成散文 |
-| **edit** | 出版社式潤稿：逐行 → 文句 → 校對。確定性的事交引擎，要判斷的才派乾淨的子代理。 | 散文寫好、要打磨 |
-| **factcheck** | 對抗式查核。每條主張都對一手來源、攻擊大綱的缺漏與矛盾。**只標記、不改**，而且不擋發行。 | 任何時候想驗證 |
-| **publish** | 不可逆發行（你扣板機）。所有閘全綠 → 凍結唯讀快照 → 升版 → 記 changelog。 | 一版定稿了 |
-| **release** | 互動排版。把凍結的快照排成交付 PDF：匯出 → 看頁面圖 → 調格式旋鈕 → 重出，直到好看。只動呈現，不動內容。 | 要產 PDF 交付 |
-
-這是**迴圈**，不是流水線：factcheck 抓到問題，就退回 develop 或 draft。
-
-## 安裝
-
-docspec 是獨立 CLI（套件名 `dspx`、指令名 `docspec`），透過 git 安裝（PyPI 名稱已被佔用）。
+> **需要** `uv` ＋ Python ≥ 3.11。Windows / Linux 已測，macOS 尚未實機驗證。
 
 ```bash
 git clone <repo-url> && cd docspec
 uv tool install --from . docspec
-uv tool update-shell      # 把 uv 的工具 bin 加進 PATH（只需一次），然後開新終端
-docspec --version
+uv tool update-shell          # 把 uv 的工具 bin 加進 PATH（只需一次），再開新終端
+docspec init --tool claude    # 建工作目錄並把 skill 裝進你的 agent
 ```
 
-改了原始碼要重裝、吃到最新版（`--no-cache` 不可省，否則 uv 給你快取的舊 wheel）：
+裝完之後，寫作流程都在你的 agent 對話裡進行，走六個 skill：develop → draft → edit → factcheck → publish，要 PDF 再多一步 release。你不是自己去打 `docspec publish`，而是在對話裡叫 agent 執行，引擎在背後把關。其中 publish 不可逆，那個板機留在人手上——要你點頭它才會真的凍結發行。
 
-```bash
-uv tool install --from . docspec --reinstall --no-cache
-```
+你真正會親手敲的 CLI，是安裝與維護那幾個：
 
-要產 PDF 的話，多裝 export 相依，並跑一次 `docspec setup` 下載受控排版資產（TinyTeX ＋ OFL 字型，裝進使用者資料夾，不碰系統環境）：
+| 指令 | 做什麼 |
+|---|---|
+| `docspec init` | 開專案、把 skill 裝進 agent |
+| `docspec setup` | 下載 PDF 排版資產（只在要出 PDF 時） |
+| `docspec doctor` / `upgrade` / `version` | 體檢 / 更新 / 看版本 |
+
+`docspec --help` 列的就是這些給人用的指令；agent 在背後用的完整清單，要 `docspec --help-all` 才看得到。
+
+## 你用到的六個 skill
+
+skill 只給判斷與態度。欄位、格式、流程這些機械細節不寫死在 skill 裡，而是由 `docspec guide` 即時投影出來。
+
+| skill | 做什麼 | 什麼時候用 |
+|---|---|---|
+| **develop** | 長出、重整章節的概念與決策大綱（受眾、範圍、深度）。先有骨架，不寫散文。 | 開新文件、或重整結構 |
+| **draft** | 把一節寫成散文，一次只看那一節的脈絡，所以不會去引用看不到的鄰節而出錯。 | 結構定了，要寫散文 |
+| **edit** | 出版社式潤稿：逐行 → 文句 → 校對。 | 散文寫好、要打磨 |
+| **factcheck** | 對抗式查核，每條主張都對一手來源。只標記、不改，也不擋發行。 | 任何時候想驗證 |
+| **publish** | 不可逆發行：所有閘綠 → 凍結唯讀快照 → 升版 → 記 changelog。 | 一版定稿了 |
+| **release** | 互動排版：匯出 → 看頁面圖 → 調旋鈕 → 重出。只動呈現，不動內容。 | 要產 PDF |
+
+這是一個迴圈，不是流水線。factcheck 抓到問題，就退回 develop 或 draft。
+
+## 產出 PDF
+
+PDF 交付是 docspec 的重點之一。先把 export 相依裝上，再跑一次 `docspec setup`，它會下載受控的排版資產（TinyTeX ＋ OFL 字型），裝進使用者資料夾，不碰你的系統環境：
 
 ```bash
 uv tool install --from . docspec --with pdfplumber --with pypdfium2 --with pypandoc_binary
 docspec setup
 ```
 
-## 快速開始
-
-```bash
-docspec init --tool claude     # 建工作目錄，並把 skill 裝進你的 agent（省略 --tool 會互動詢問）
-```
-
-接著主要在 agent 裡走 develop → draft → edit → factcheck → publish（要 PDF 再 release）。
-
-你（人）平常其實只碰三個指令，其餘都是 agent 透過 skill 自己呼叫的：
-
-- `docspec init` — 開專案
-- `docspec publish <article>` — 定稿發行（不可逆，你扣板機）
-- `docspec export <article>` — 出 PDF
-
-`docspec --help` 只列這些給人的指令；完整清單（給 agent 的）在 `docspec --help-all`。
+接著在 agent 裡用 release skill 互動調版：匯出 → 看頁面圖 → 調排版旋鈕 → 重出，調到滿意為止。（底層的 `docspec export` 是 agent 指令，由 skill 驅動，不必你親手打。）
 
 ## 三家 agent，一套 skill
 
-`docspec skills install`（`init` 會自動跑）把同一套 SKILL.md 裝進 Claude Code、Antigravity、Codex，三家的技能目錄結構一致，所以同一套寫作守則在哪家都能用。
+`docspec init` 會把同一套 SKILL.md 裝進 Claude Code、Antigravity、Codex 三家，技能目錄結構一致，所以同一套寫作守則在哪家 agent 都能用。
 
-## 開發／貢獻
+<details>
+<summary><b>原理：它怎麼做到不矛盾（想深入再點開）</b></summary>
 
-歡迎開 issue 或 PR。開發環境、跑測試、以及 Windows＋非 ASCII 路徑為什麼要用 `uv run --no-editable`，都寫在 [CONTRIBUTING.md](CONTRIBUTING.md)。
+用 AI 寫文件最常見的失敗，是它一邊想邏輯一邊雕字，最後產出讀起來很順、卻空洞又自相矛盾的東西；而你明明只想先看邏輯對不對，卻被迫先讀一大篇潤過的散文。docspec 把這兩件事拆開：
+
+- **後台 `corpus/`（給 agent 和引擎）**：每個章節用幾個結構化小檔，記「一句話概念＋寫作邊界（brief：給誰看、寫多深）＋它實現了哪些決策」。這層只在乎邏輯嚴謹、事實完整，不管文筆。
+- **前台 `docs/`（給人）**：把後台盲渲染成散文成品——每一節獨立寫、看不到鄰節。**人只讀這層。**
+
+章節有穩定 id，搬資料夾或改名都不會斷引用。跨章節的連貫不靠 agent 互相偷看，而是靠一份共用的寫作守則加上確定性的組裝。
+
+```text
+corpus/zenoh/intro/concept.yaml          docs/zenoh/_latest.md（渲出來、給人讀的）
+  concept: 為什麼用 zenoh 當控制平面    ──▶   ## 為什麼用 zenoh 當控制平面
+  brief:  {audience: 開發者, depth: 概念}        zenoh 以 pub/sub 取代輪詢……
+corpus/zenoh/intro/decisions.yaml                （依 brief 與決策生成，只放決策說的）
+  - statement: 控制平面用 zenoh、不用 MQTT
+```
+
+引擎只做確定性的把關（結構、完整性）；內容語義對不對，交給不擋路的 factcheck。
+</details>
+
+## 為什麼用 docspec
+
+- **先審邏輯，再審文筆**：你檢查的是大綱與決策，不是一整面潤過的散文。
+- **人只讀 `docs/` 成品**，後台 `corpus/` 的細節留給 agent 和引擎。
+- **引擎只擋結構、不擋語義**：機械漂移由它確定性攔下，事實對錯靠非阻塞的查核去標記，不卡你發行。
+
+## 開發 / 貢獻
+
+歡迎開 issue 或 PR。開發環境、如何跑測試，以及 Windows 加非 ASCII 路徑為什麼要用 `uv run --no-editable`，都寫在 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 授權
 
-**PolyForm Noncommercial 1.0.0** — 任何**非商業**用途免費（個人、研究、教育、非營利、政府機關）；**商業使用需另外向作者取得授權**。詳見 [`LICENSE`](LICENSE)。這是 source-available、非商業授權，不是 OSI 定義的「開源」。
-
-隨附的第三方元件各自保留原授權：PDF 模板的 document class（`docspec-cas`）是**改自** Elsevier CAS class 的修改版，依 LPPL 1.3c 規定**重新命名**後散布（見 [`NOTICE.md`](src/dspx/assets/templates/docspec-cas/NOTICE.md)）；字型為 SIL OFL 1.1 或政府開放資料（`docspec setup` 時下載，見 [`FONT-LICENSES.md`](src/dspx/assets/templates/docspec-cas/fonts/FONT-LICENSES.md)）。
+**PolyForm Noncommercial 1.0.0**：任何非商業用途免費，商業使用需另外向作者取得授權。這是 source-available 的非商業授權，不是 OSI 定義的那種「開源」。隨附的第三方元件各自保留原授權，詳見 [`LICENSE`](LICENSE) 與根目錄的 [`NOTICE.md`](NOTICE.md)。
 
 ## 致謝
 
-docspec 站在 [OpenSpec](https://github.com/Fission-AI/OpenSpec) 的概念與原則上——感謝 OpenSpec 團隊先做出 spec-driven 的 AI agent 工作流，才有這個 prose-first 的衍生版本。
+docspec 改寫自 [OpenSpec](https://github.com/Fission-AI/OpenSpec)，獨立運作、不依賴它。感謝 OpenSpec 團隊先做出了 spec-driven 的 AI agent 工作流，才有這個 prose-first 的衍生版本。
