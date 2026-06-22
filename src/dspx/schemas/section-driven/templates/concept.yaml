@@ -1,0 +1,14 @@
+id: {id}
+title: {title}            # 人類可讀標題＝文件裡的章節標題（render 用它生 heading）；結晶時改成像樣的，別留 slug
+order: {order}
+status: draft
+concept: ""            # 一句話：這節到底在講什麼（aperture 核心）
+brief:                 # 寫作信封（draft 的世界邊界）。值用專案語言寫，鍵固定英文。
+  audience: ""         # 寫給誰
+  depth: ""            # 多深入
+  breadth: ""          # 涵蓋多廣
+  forbidden: []        # 不准寫什麼
+  layout: prose        # prose / table / list…
+must_cover: []         # 本節非提不可的點（draft 的 checklist）
+sources: []            # 純指標清單：用了哪些標準/文件（不存內容）
+# realizes: []         # 本節散文實現了哪些決策（→ decisions/history 的 id）

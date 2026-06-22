@@ -1,0 +1,60 @@
+[project]
+name = "docspec"
+version = "0.1.0"
+description = "docspec — 文件 SDD 工具（doc-driven spec development）"
+readme = "README.md"
+requires-python = ">=3.11"
+# PolyForm Noncommercial 1.0.0 — source-available, free for noncommercial use, commercial
+# use requires a separate license. NOT an OSI open-source license. See LICENSE.
+license = { file = "LICENSE" }
+classifiers = ["License :: Free for non-commercial use"]
+# platformdirs：解析每平台 data_dir（%LOCALAPPDATA%\docspec／~/.local/share/docspec／
+# ~/Library/Application Support/docspec），供 `docspec setup` 落地受控 TinyTeX＋字型、
+# export/proof 解析它們（Phase B；字型移出 wheel）。
+dependencies = ["pyyaml>=6.0", "questionary>=2.0", "platformdirs>=4.0"]
+
+[project.optional-dependencies]
+# export：md→PDF（指令 docspec export，Phase C＝docspec-cas + 受控 TinyTeX/xelatex）。
+# pandoc 端用 pypandoc_binary（含 binary 的 wheel、零系統相依）做 md→LaTeX；
+# 實際 PDF 編譯由受控 TinyTeX(xelatex) 負責（Phase B `docspec setup` 裝進 data_dir，
+# 不在此 wheel）。typst 路已退場、不再相依。
+#   pdfplumber＝export byte-lock runtime 檢查（抽 PDF 文字位置化比對）＋指令
+#   `docspec measure-fonts`（量實渲字級）；pypdfium2＝`docspec proof`（PDF→PNG）。
+#   三者都是 release 出版迴圈的 runtime（非 dev-only），故收進 export extra。
+export = ["pypandoc_binary>=1.13", "pypdf>=4.0", "pdfplumber>=0.11", "pypdfium2>=4.0"]
+
+[project.scripts]
+docspec = "dspx.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dspx"]
+# 字型（~95MB）不進 wheel：Phase B `docspec setup` 把它們裝進 data_dir/fonts
+# （dev 從源樹的 assets/templates/docspec-cas/fonts/ copy；prod 改 OFL 下載）。
+# 源樹保留這些檔供 dev setup 用，但 build wheel 時排除、避免散布巨大字型。
+exclude = ["src/dspx/assets/templates/docspec-cas/fonts/*.otf",
+           "src/dspx/assets/templates/docspec-cas/fonts/*.ttf"]
+
+[dependency-groups]
+# byte-lock 驗收測試抽回 PDF 文字用（test_export.py，缺則該測試 skip）：
+# pdfplumber 依字符 x 座標重建詞間空白（xelatex+actualtext PDF 的拉丁詞間空白
+# 在 pypdf 純運算子抽取下會遺失、把 "MUST NOT" 併成 "MUSTNOT"；pdfplumber 正確還原）。
+# pypdfium2＝docspec proof 把 export 的 PDF 逐頁渲成 PNG（供 agent 看圖調版面）；
+# 含 binary 的 wheel、零系統相依。
+dev = ["pytest>=8.0", "pdfplumber>=0.11", "pypdfium2>=4.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# 開發注意（Windows＋非 ASCII 專案路徑，如 Google Drive 中文資料夾）：
+# editable 安裝寫出的 .pth 含中文路徑，venv 的 site 模組以 cp950 解碼會炸
+# （Python 3.11；uv 以 -I 隔離模式查詢直譯器，PYTHONUTF8 無效）。
+# 開發一律用：uv run --no-editable <cmd>（不寫 .pth，根治）。詳見 README。
+
+[tool.uv]
+# non-editable 安裝預設只在 pyproject 變動時重建——原始碼（含 schema 資料檔）
+# 變動也要觸發重建，否則測試跑到舊 wheel。
+cache-keys = [{ file = "pyproject.toml" }, { file = "src/**/*" }]

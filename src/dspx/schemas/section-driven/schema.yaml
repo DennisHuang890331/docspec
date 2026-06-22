@@ -1,0 +1,345 @@
+# docspec — section-driven schema (built-in data model)
+#
+# Mechanism follows OpenSpec: one yaml declares "which artifacts exist, what fields each has, how they relate,
+# and what instruction/template each carries". The semantics are reframed as docspec's "read/write contract / aperture projection":
+#   - requires is always [] (writing is a loop; inside the loop there are zero dependencies, always writable)
+#   - the real graph = the aperture read/write contract + the RelationKinds reference graph
+#
+# This file is the data-model authority (projected via `docspec guide`); early drafts live in openspec/explore-sessions/history/ (for tracing).
+name: section-driven
+version: 1
+description: >
+  docspec leaf-section data model. A leaf section (the smallest unit of an article written as prose) is composed of a set
+  of files in one directory; docs/<article>/_latest is the prose deliverable projected from those files.
+
+# Projection: docs/<article>/_latest is a pure-function projection of the leaf-section files (run by publish)
+projection:
+  produces: docs/<article>/_latest
+  driven-by: publish
+  reads: [concept, decisions, material]   # develop / history never enter
+
+# skills × aperture (who reads / who writes; the hard projection whitelist of the instructions command)
+skills:
+  develop:
+    reads:  [concept, decisions, material, develop, history, history-md]
+    writes: [concept, decisions, material, develop, history, history-md]
+  draft:
+    reads:  [concept, decisions, material]
+    writes: [material]
+  edit:
+    reads:  [docs, concept]    # concept is for narrative alignment (align this section + the parent-chain brief)
+    writes: [docs]
+  factcheck:
+    reads:  [concept, decisions, material, history, history-md, docs]   # NOT develop.md (live scratch; gone by ready/draft)
+    writes: []
+  publish:
+    reads:  [concept, decisions, material]
+    writes: [docs]
+  release:
+    # release sits after publish, acting on the frozen snapshot: an interactive typesetting gate (export → proof to view pages → adjust the format layer only).
+    # It reads/writes no corpus artifact — content's one source = the frozen snapshot md (byte-lock); it only touches the docspec-cas template pack
+    # (the format layer), so its corpus aperture is empty. A problem content can't fix → raise an audit finding upstream (not a self-fix).
+    reads:  []
+    writes: []
+
+# Workflow narrative (guide projects it as the single agent contract; lives in schema, never drifts)
+workflow:
+  loop: >
+    Writing is a rolling loop over one section tree (corpus/<article>/): develop (think + crystallize) ⇄
+    draft (blind render) ⇄ edit (copy-prep) ⇄ factcheck (red-team) — all dependency-free, any order, no forced sequence.
+    New = drill into an empty tree; revise = re-drill the affected subtree; same flow. docs/<article>/_latest is the projected deliverable.
+  skills:
+    - id: develop
+      summary: Developmental editor. Think freely in develop.md, then crystallize into concept/decisions/material; retire rejected work into history.
+      steps:
+        - Read the forest map + roadmap first (docspec instructions develop <section>).
+        - Think in develop.md ONLY; the other four files do not exist yet.
+        - Crystallize via four-question triage → scope→concept / rulings→decisions / facts→material / rejected→history.
+        - Graduate with docspec ready <section> (a checked transaction; it drains then deletes develop.md).
+      transaction: ready
+    - id: draft
+      summary: Writer. Blind-render prose into the section's slot in docs/_latest from the aperture projection.
+      steps:
+        - Render only stale-own / not-yet-written sections; never read develop.md or history.
+        - Honor the brief as a hard contract; lead with the payload.
+      transaction: render
+    - id: edit
+      summary: Copy-prep. Line → copy → proofread on docs/_latest; narrative-align stale-inherited sections.
+      steps:
+        - Route each check — deterministic → engine (lint/check); judgment → a clean-context subagent.
+        - Touch only docs/_latest; never the outline or decisions.
+      transaction: render
+    - id: factcheck
+      summary: Adversarial red-team. The only full reader; flags findings, never fixes.
+      steps:
+        - Check every claim against a primary source; record a verdict (entailed / contradicted / unsupported).
+        - Audit the outline for MECE gaps/overlaps; detect deliverable-vs-source drift (docspec diff).
+        - Route findings via docspec audit raise (non-blocking).
+      transaction: audit
+    - id: publish
+      summary: Release gate — the only irreversible boundary; gates green → freeze a read-only snapshot + bump version.
+      steps:
+        - Run only on the human's explicit trigger.
+        - check + lint + cleanliness all green → freeze the archive snapshot, write the semver changelog row.
+      transaction: publish
+    - id: release
+      summary: Typesetting gate after publish — interactive layout of a frozen snapshot into a delivered PDF.
+      steps:
+        - docspec export (snapshot → PDF, content byte-locked) → docspec proof (PDF → page PNGs).
+        - You + the human read the pages; adjust the format layer via validated knobs first; re-export until right.
+        - Content never moves; a layout problem fixable only by changing content → raise an audit finding upstream.
+      transaction: export
+  boundaries:
+    - publish is the only irreversible boundary; the human always pulls the trigger.
+    - release touches the format layer only (template-pack params), never content — content's one source is the frozen snapshot md (export byte-lock guards it); a layout problem fixable only by changing content → raise an audit finding upstream, the human re-edits → re-publishes → re-releases; the agent never self-fixes content.
+    - Completeness gates sit at advancement (docspec ready / publish), not at write time — half-formed work is free inside the loop, it just stays "developing".
+    - Semantic judgment → audit (factcheck), never an engine gate (audit itself can hallucinate).
+    - corpus/_archive/ = retired sections (decision history): engine-invisible in active work (status/check/draft never see it); query with docspec retired, drill with docspec show <id>. It is history — never touch it in current work (unlocked, by convention, like OpenSpec's changes/archive).
+
+# Universal filing rules (cross-skill; ONLY rules the engine actually enforces — so they're contract, not stance; guide projects them)
+filing-rules:
+  - id: bind-by-id
+    rule: "Identity = concept.id, location = path. The section↔prose binding lives in concept.yaml via stable ids — never a section number, never injected into deliverable prose."
+    enforced-by: check / lint
+  - id: supersede-both-sides
+    rule: "To supersede decision B with A: set A.supersedes:B AND B.status:superseded + B.superseded-by:A. A half-linked supersede is rejected."
+    enforced-by: check
+  - id: governed-by-target
+    rule: "concept.governed-by must point only at a live concept.id of a real parent document — never a decision/history id, never a parallel sibling."
+    enforced-by: check
+  - id: crystallize-four-way
+    rule: "develop.md content distributes into exactly scope→concept / rulings→decisions / facts→material / rejected→history; genuine throwaway is deleted."
+    enforced-by: ready
+  - id: retire-via-transaction
+    rule: "Retire a decision with docspec retire, a whole section with docspec retire-section — never hand-move/delete a section folder; published archive/ is immutable (hash-netted by lint)."
+    enforced-by: retire / lint
+
+# Project-level files: not artifacts (no corpus field schema, not in the leaf-section directory), but contracts the agent must know.
+# guide projects them, closing the blind spot where the style/term authority is invisible to the agent contract. Injection mechanism is in aperture.py.
+project-files:
+  - id: writing-guide
+    file: writing-guide.md
+    meaning: >
+      Document-wide writing guide — the only cross-section coherence carrier under blind rendering (tone / structure /
+      terminology conventions / global no-go zones). The skeleton is canonical English, language-neutral (writing in English
+      still produces a deliverable in any language); the "Project conventions" section is filled in the "deliverable language",
+      and the deliverable language is a develop decision, not set at init.
+    reader: [draft, edit]      # draft follows it when blind-writing each section; edit uses it to check whole-document consistency line by line (already injected by aperture.py)
+    writer: [develop]          # only develop writes it (owns the skeleton + fills Project conventions); edit writes only docs,
+                               # and merely flags discovered global conventions for develop to extract (same as factcheck "flag, don't fix the source")
+    when: >
+      init seeds the English skeleton; develop fills Project conventions (including deliverable language, requirement-keyword
+      dictionary, banned opening phrases) when converging on the article-level tone — supersede, don't stack; edit/factcheck
+      flag new conventions discovered across the whole document for develop. Machine-checkable term identity → glossary.yaml, not here.
+    fence: >
+      Holds writing doctrine only. Term identity → glossary.yaml; versioning / layout / ops → config.yaml; section-level rules
+      longer than one screen → that section's concept.brief. The engine does not validate its content (pure projected doctrine).
+  - id: glossary
+    file: glossary.yaml
+    meaning: >
+      Project terminology authority (token consistency). bucket = treatment: module (coined terms/abbreviations → use the
+      canonical name, expand the abbreviation, may attach english on first use) / standard (external standard names → official
+      spelling verbatim, do not translate) / protocol (protocol tokens → byte-exact, code formatting, do not translate). The
+      aperture injects a **lean index** (canonical/bucket/code/aliases_forbidden); definition (a one-line canonical meaning) and
+      english are **drill-down fields** — returned on demand via `docspec show <id>` only, not injected (saves tokens), and the
+      agent writes per the definition (in its own words, don't clone; fidelity goes to factcheck, non-blocking). Plus lint Vg
+      catches violations after the fact.
+    reader: [draft, edit, factcheck]   # all three get the lean index injected; drill down for definition/english on demand via show <id>
+    writer: [develop]                  # develop adds terms while converging; structure validated by check (id unique / canonical required / bucket legal)
+    when: >
+      develop adds a term when it hits "one thing, many names" or wants to fix a canonical name (each entry requires id + canonical,
+      bucket one of three). lint Vg1 (banned word appears) / Vg2 (module code used bare) only WARN; precise judgment goes to audit,
+      no hard block. Lifecycle = live state (not a history ledger): on rename → drop the old name into the new term's aliases_forbidden
+      (Vg1 catches stragglers); when a concept is truly gone → just delete the entry (a glossary id is not referenced elsewhere, so
+      deletion leaves no dead reference; "why it was named" belongs in decisions/history).
+    fence: >
+      Holds term identity only (canonical / bucket / code / english / definition / aliases_forbidden).
+      definition/english = drill-down fields (returned by show <id> only, not injected).
+      Writing tone/format → writing-guide.md; project knobs → config.yaml.
+  - id: config
+    file: config.yaml
+    meaning: >
+      Forest-level settings + metadata (read by the engine, set by human/init, generally not edited by the agent — unlike
+      writing-guide/glossary, not injected via the aperture). Keys: schema (data model), language (interaction/deliverable
+      language default), docs_layout (flat | per-article, where deliverables are placed), audit.core/packs (factcheck attack
+      surface / regulation packs), autonomy.publish (always human, engine-enforced; the one live knob), purpose (the overall
+      goal of the whole forest/project, one or two sentences of authored metadata).
+    reader: [engine]           # read at bootstrap; not injected into any skill aperture (listed here only so the agent "knows these knobs exist")
+    writer: [init, human]      # created by init (most keys commented out, falling back to defaults), edited by hand
+    when: >
+      created by init, edited by the human as needed. autonomy.publish is locked to human (the irreversible trigger stays in
+      human hands, engine-enforced). docs_layout/language/audit affect behavior, which the agent picks up indirectly via the
+      engine/instructions, not by editing this file directly.
+    fence: >
+      Holds project knobs + forest-level metadata only. purpose = the overall goal of the whole forest (develop projects it into
+      the working context, visible via `docspec guide`); with multiple roots and no apex document, it is purpose's only home.
+      Writing doctrine → writing-guide.md; term identity → glossary.yaml.
+  - id: roadmap
+    file: corpus/<article>/roadmap.yaml (per-doc, travels with the tree) | docspec/roadmap.yaml (forest, cross-document)
+    meaning: >
+      Planned-work backlog — holds only work that is "planned, not yet done, about this forest's documents"; done items fall out
+      (it never accumulates into a big table). entry = {id, kind(gap|task), title, what, status(open|doing|done|dropped),
+      target(<section-id> | forest), depends-on(a DAG within roadmap → computes unblocked), waits-on(external prerequisite = prose,
+      not a gate), from-audit(promoted from an audit finding, one-way), priority? / note? / done-to?}. per-doc (single-document owner)
+      vs forest (cross-document, no single owner) split by target. Generated on demand (no file = no backlog).
+    reader: [develop]   # at start-of-work develop projects "this document's + the forest's open/doing"; queryable any time via the `docspec roadmap` derived view
+    writer: [develop]   # develop records planned work; start → status doing, pull into develop.md; finished → done + done-to (falls out)
+    when: >
+      develop looks at the backlog before starting work; records gap/task (target, optional depends-on). check (structure): depends-on
+      dead reference + cycle, target dead reference + filed in the right place, from-audit dead reference; lint soft WARN: Vr1 open items > 7
+      / Vr2 doing without develop.md / Vr3 done missing done-to. **Non-blocking.**
+    fence: >
+      Holds only "planned, not yet done" backlog. Does not draw the forest map (forest_view derived), does not store completed work
+      (revision_history/history), does not hold flaws in existing content (audit) — those three each have their own home.
+  - id: audit
+    file: corpus/<article>/audit.yaml (per-doc) | docspec/audit.yaml (forest, cross-document)
+    meaning: >
+      Red-team audit log of attack and response (factcheck's non-blocking findings). finding = {id, face(5 core + packs), severity,
+      status, finding, suggestion, targets(list of sections touched), sot-owner(cross-document owner of the truth), verdict?(optional
+      NLI ruling for citation factchecks: contradicted = a source refutes the claim | unsupported = no source backs it; a claim that is
+      entailed/supported raises NO finding — silence is the pass state), log(append-only raised→responded trail)}. Stored at "the lowest
+      level that can contain all sections touched": touches 1 document → that doc-root; ≥ 2 → forest (criterion = number of distinct documents).
+    reader: [develop, factcheck]   # factcheck raises/queries, develop/human triages (docspec audit list/show); not injected via the aperture
+    writer: [factcheck]            # all via command (audit raise/resolve), append-only, validated on write; the agent does not hand-edit audit.yaml
+    when: >
+      factcheck `audit raise --target` (the sections touched); routed to doc/forest by number of distinct documents, marking sot-owner
+      when cross-document. check validates id unique / face / severity / status + target dead reference + filed in the right place.
+      **Non-blocking, never blocks publish**; a finding that requires engineering work → promoted into a roadmap entry (roadmap from-audit, one-way).
+    fence: >
+      Holds only "flaws in existing content" (discovered). Planned work → roadmap, terminology → glossary. Append-only, via command, not hand-edited.
+
+# The engine recognizes only these reference arrows (closed set)
+relation-kinds: [realizes, governs, supersedes]
+
+artifacts:
+  - id: concept
+    generates: concept.yaml
+    kind: yaml
+    description: The leaf section's governance and structural contract (one-line concept + writing envelope + source pointers + references).
+    template: templates/concept.yaml
+    instruction: instructions/concept.md
+    requires: []
+    aperture:
+      read:  [develop, draft, edit, factcheck, publish]
+      write: [develop]
+      projects-into: docs
+    schema:
+      id:         { type: string,    required: true }
+      title:      { type: string,    required: true }
+      order:      { type: number,    required: true }
+      status:     { type: enum,      required: true, values: [draft, stable, deprecated] }
+      concept:    { type: string,    required: true }
+      brief:
+        type: object
+        required: false          # the whole block may be omitted = inherited; required at root is enforced by the hierarchy check
+        fields:                  # nested sub-schema → _check_fieldmap recurses over a "non-empty brief"
+          audience: { type: string, required: true }   # if you wrote a brief, fill the whole envelope (checked only when non-empty)
+          depth:    { type: string, required: true }
+          breadth:  { type: string, required: true }
+          forbidden:{ type: list }
+          layout:   { type: enum, values: [prose, table, list, diagram] }
+          kind:     { type: enum, values: [explain, how-to, reference, tutorial] }   # Diátaxis topic type — optional audit/draft hint, NOT a render gate; inherits down the tree
+      must_cover: { type: list,      required: false }
+      sources:    { type: list,      required: false }
+      realizes:   { type: "list[ref]", required: false, relation: realizes }
+      governed-by: { type: "list[ref]", required: false, relation: governs }
+
+  - id: decisions
+    generates: decisions.yaml
+    kind: yaml
+    description: This section's "live" decisions (normative + rationale); the criterion = whether the history matters → if it matters, it goes here.
+    template: templates/decisions.yaml
+    instruction: instructions/decisions.md
+    requires: []
+    aperture:
+      read:  [develop, draft, edit, factcheck, publish]
+      write: [develop]
+      projects-into: docs
+    entries: true                       # this file has a { entries: [...] } structure; schema validates each entry
+    schema:
+      id:            { type: string, required: true }
+      kind:          { type: enum,   required: true, values: [normative, rationale] }
+      status:        { type: enum,   required: true, values: [proposed, accepted, superseded, deprecated] }
+      statement:     { type: string, required: true }
+      rationale:     { type: string, required: false }
+      rejected:      { type: list,   required: false }
+      trace:         { type: object, required: false, relation: governs }
+      supersedes:    { type: ref,    required: false, relation: supersedes }
+      superseded-by: { type: ref,    required: false, relation: supersedes }
+      decided-in:    { type: string, required: false }
+
+  - id: material
+    generates: material.md
+    kind: md
+    description: Note-style chunked writing material (source excerpts / facts / framing / examples / layout hints); optional.
+    template: templates/material.md
+    instruction: instructions/material.md
+    requires: []
+    aperture:
+      read:  [draft, edit, factcheck]
+      write: [develop, draft]
+      projects-into: null
+    block-grammar:
+      heading: "## <類型>: <標題> {#m-<錨>}"
+      types:   [src, fact, framing, eg, layout]
+
+  - id: develop
+    generates: develop.md
+    kind: md
+    description: Thinking draft / workbench. develop thinks here, then crystallizes into concept/decisions/material.
+    template: templates/develop.md
+    instruction: instructions/develop.md
+    requires: []
+    aperture:
+      read:  [develop]
+      write: [develop]
+      projects-into: null
+    block-grammar:
+      free: true
+
+  - id: history
+    generates: history.yaml
+    kind: yaml
+    description: >
+      A "lean index" of retirement records (loaded every time, so kept small; written by command, queryable by id). One kind of
+      entries, keyed by id: dead decisions (kind normative/rationale) + whole-section retirements (kind section, id = that section's
+      concept.id, with an archive link). The summary lives here (a one-line statement); the prose detail of "why it was abandoned"
+      lives in the paired history.md (same id), and the detail of a whole-section retirement = the archive folder itself. The agent
+      queries via `docspec retired` (summary) / `docspec show <id>` (detail), and **never reads the raw files directly**.
+    template: templates/history.yaml
+    instruction: instructions/history.md
+    requires: []
+    aperture:
+      read:  [develop, factcheck]
+      write: [develop]
+      projects-into: null
+    entries: true
+    schema:
+      id:            { type: string, required: true }
+      kind:          { type: enum,   required: true, values: [normative, rationale, section] }
+      status:        { type: enum,   required: true, values: [superseded, deprecated, rejected, retired] }
+      statement:     { type: string, required: true }
+      retired-in:    { type: string, required: false }
+      archive:       { type: string, required: false }   # kind=section only: archive folder link (validated as resolvable at retire time)
+      supersedes:    { type: ref,    required: false, relation: supersedes }
+      superseded-by: { type: ref,    required: false, relation: supersedes }
+      decided-in:    { type: string, required: false }
+
+  - id: history-md
+    generates: history.md
+    kind: md
+    description: >
+      Prose detail of retirements (**optional**; read by the develop/factcheck agents, never read by draft, not projected by publish).
+      Each section's heading = a clean `## <id>` (bare id, no title, not parsed), recording for that dead decision "why dropped / lost to
+      whom / evidence". Corresponds by id to history.yaml (used by show); not hard-bound — given if found, an orphan section at most gets
+      a lint reminder. Whole-section retirements are not written here (their detail = the archive folder).
+    template: templates/history-md.md
+    instruction: instructions/history-md.md
+    requires: []
+    aperture:
+      read:  [develop, factcheck]
+      write: [develop]
+      projects-into: null
+    block-grammar:
+      heading: "## <id>"
+      free: true

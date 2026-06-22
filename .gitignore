@@ -1,0 +1,25 @@
+# Git
+*.log
+
+# 退役舊碼（S0/S1 模型，僅本機留作歷史參考、不上傳）
+_retired_s0s1/
+
+# Python / uv
+__pycache__/
+*.pyc
+.venv/
+dist/
+build/
+*.egg-info/
+.pytest_cache/
+
+# Local scratch / generated artifacts (never committed)
+.fontcache/
+docs/exports/
+
+# Windows
+desktop.ini
+Thumbs.db
+
+# macOS
+.DS_Store

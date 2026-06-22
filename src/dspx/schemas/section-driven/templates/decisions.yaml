@@ -1,0 +1,10 @@
+# 本節「活著的」決策。append / supersede，不就地砍（歷史重要走 history）。
+# 每條：
+#   - id: <唯一穩定 id>
+#     kind: normative | rationale
+#     status: proposed | accepted | superseded | deprecated
+#     statement: "決策本身（what）"
+#     rationale: "why（可選）"
+#     rejected: []          # 考慮過但否決的選項（可選）
+#     decided-in: "<change/session>"   # 可選
+entries: []
