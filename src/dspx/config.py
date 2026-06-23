@@ -32,13 +32,14 @@ DEFAULTS: dict = {
         "publish": "human",
     },
     # export：md→PDF 終端投影設定（指令 `docspec export`）。layout/export 層、非 schema artifact。
-    # Phase C 定版＝docspec-cas 單欄 class（改自 Elsevier cas-sc）+ 受控 TinyTeX(xelatex)，隨包模板＋字型；
-    # typst/docx 舊路已退場（理由＝期刊/論文模板全是 LaTeX，見 memory export-feature-design）。
-    #   formats＝預設輸出格式（目前僅 pdf）；template＝隨包 docspec-cas 模板，空＝用內建（保留供未來換期刊）。
+    # 現定版＝Typst 預設（docspec-typst 自帶模板 + 受控 typst binary、原生 CJK），另有 journal 軌
+    # （BYO LaTeX、emit-only：產 .tex 不自編）；舊 docspec-cas/xelatex latex 軌已退場。
+    #   formats＝預設輸出格式（目前僅 pdf）；engine＝預設 render 引擎（空＝typst）；template＝
+    #   journal 軌的 BYO 模板夾（空＝用內建 journal adapter）。
     # 子鍵採「缺鍵給預設」（command 端再 merge），故此處頂層整塊被 config 覆寫亦不致缺鍵。
     #   format＝結構化「格式旋鈕」（旋鈕 schema 見 format_config.py）：agent 只填驗證過的
-    #   值，docspec 確定性編成 LaTeX 覆寫注入 build；壞值/幻覺在驗證階段就被擋、永不進
-    #   xelatex。此處頂層留空 dict＝全用 format_config.DEFAULT_FORMAT 預設（＝現狀）。
+    #   值，壞值/幻覺在驗證階段就被擋、永不進編譯。此處頂層留空 dict＝全用
+    #   format_config.DEFAULT_FORMAT 預設（＝現狀）。
     #   專案級預設寫在這；per-article 覆寫＝`docspec export --format-config <file>`。
     "export": {
         "formats": ["pdf"],

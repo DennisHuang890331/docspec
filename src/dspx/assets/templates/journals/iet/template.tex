@@ -1,0 +1,36 @@
+%% docspec IET journal adapter — a pandoc LaTeX template (emit-only).
+%% docspec feeds the slot contract through this template to emit a .tex for the IET
+%% cta-author documentclass; it does NOT compile it (compile in Overleaf / the journal
+%% toolchain with the real cta-author.cls + hypernat.sty from the IET CTA bundle).
+%% Slot variables referenced: title, authors(.name/.affiliation/.email), abstract, keywords, body.
+\documentclass{cta-author}
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+$if(highlighting-macros)$
+$highlighting-macros$
+$endif$
+
+\begin{document}
+
+\title{$title$$if(subtitle)$: $subtitle$$endif$}
+
+\author{$for(authors)$\au{$authors.name$}$sep$ $endfor$}
+
+$if(authors)$
+\address{$for(authors)$$if(authors.affiliation)$\add{1}{$authors.affiliation$}$endif$$endfor$$for(authors)$$if(authors.email)$\email{$authors.email$}$endif$$endfor$}
+$endif$
+
+$if(abstract)$
+\begin{abstract}
+$abstract$
+\end{abstract}
+$endif$
+
+$if(keywords)$
+\keywords{$for(keywords)$$keywords$$sep$; $endfor$}
+$endif$
+
+\maketitle
+
+$body$
+
+\end{document}

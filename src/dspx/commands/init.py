@@ -60,12 +60,20 @@ _WRITING_GUIDE = """\
 9. **Density**: one idea per paragraph, 4–5 sentences max.
 10. **No metaphors / nicknames** → state responsibilities plainly.
 11. **No first-person colloquialism** → formal sentences with explicit subjects.
+12. **Read like a native** → write as a fluent native writer of the deliverable language would
+    phrase it: natural idiom, varied sentence openings and length. NEVER calque English structure
+    word-for-word — formal register is not stiff translationese. This matters most when the
+    deliverable language is not English; the rules above are expository defaults, not a license to
+    write translated-sounding prose.
 
 ## Project conventions (fill during `develop`, in the deliverable language)
 <!-- The only zone that grows. One concrete imperative per bullet; refine in place —
      supersede, don't stack near-duplicates. Machine-checkable term identity goes to
      glossary.yaml, not here. -->
 - **Deliverable language**: (e.g. zh-TW / English; which terms keep their original language)
+- **Deliverable-language naturalness**: (when the language is not English, name the translationese
+  phrasings to avoid and their natural replacements; note sentence-rhythm habits — this is the
+  concrete face of backbone rule 12)
 - **Requirement keyword dictionary**: (deliverable-language tokens for MUST / MUST NOT / SHOULD / SHOULD NOT / MAY)
 - **Banned openers / filler**: (deliverable-language list for rule 4)
 - **Global intro ownership**: (which section frames the whole document; others write no intro)

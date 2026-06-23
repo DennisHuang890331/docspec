@@ -21,6 +21,12 @@ class ModelError(Exception):
     """末節檔載入/解析失敗。"""
 
 
+# 圖片資產：放在末節的 corpus 目錄下 `assets/`（無 concept.yaml，故 leaf_dirs 掃不到、引擎不當它末節）。
+# 交付散文以 markdown `![caption](assets/<file>)` 引用；backend-neutral（Typst image() / LaTeX includegraphics 皆吃）。
+ASSET_DIR_NAME = "assets"
+IMAGE_EXTS = (".svg", ".png", ".jpg", ".jpeg", ".gif", ".pdf")
+
+
 def _load_yaml(path: Path) -> object:
     if not path.is_file():
         return None
@@ -150,12 +156,28 @@ class Leaf:
             return float(self.concept["order"])
         return 0.0
 
+    def asset_files(self) -> list[Path]:
+        """本節圖片資產（`assets/` 下的圖檔，依檔名排序）。
+
+        draft 的 aperture 投這些（知道可放哪些圖）；亦計入 source_hash（改圖→該節 stale）。
+        """
+        adir = self.dir / ASSET_DIR_NAME
+        if not adir.is_dir():
+            return []
+        return sorted(
+            (p for p in adir.iterdir()
+             if p.is_file() and p.suffix.lower() in IMAGE_EXTS),
+            key=lambda p: p.name,
+        )
+
     def source_files(self) -> list[Path]:
-        """投影輸入（staleness 看這些）：concept + decisions + material。"""
+        """投影輸入（staleness 看這些）：concept + decisions + material + 圖片資產。"""
         files = [self.dir / "concept.yaml", self.dir / "decisions.yaml"]
         if self.has_material:
             files.append(self.dir / "material.md")
-        return [f for f in files if f.is_file()]
+        files = [f for f in files if f.is_file()]
+        files.extend(self.asset_files())   # 圖片改動也算源變動 → 該節 stale
+        return files
 
     def source_hash(self) -> str:
         """投影輸入的彙總內容指紋（staleness 用）。"""

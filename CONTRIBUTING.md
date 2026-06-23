@@ -62,7 +62,7 @@ requires a separate license from the author. See the [`LICENSE`](LICENSE) file. 
 contributing, you agree your contributions are licensed under the same terms. (This is a
 *source-available, noncommercial* license — not an OSI "open source" license.)
 
-Bundled third-party components keep their own licenses: the PDF template's document class
-(`docspec-cas`) is a modified, renamed derivative of Elsevier's CAS class under LPPL 1.3c
-(see `src/dspx/assets/templates/docspec-cas/NOTICE.md`); fonts are SIL OFL / government
-open-data (downloaded at `docspec setup`; see `fonts/FONT-LICENSES.md`).
+Bundled third-party components keep their own licenses (see [`NOTICE.md`](NOTICE.md) for the
+full list): the default PDF track uses docspec's own Typst house-style template; the journal
+track bundles per-journal LaTeX adapter templates; fonts are SIL OFL / government open-data
+(downloaded at `docspec setup`; see `src/dspx/assets/fonts/FONT-LICENSES.md`).

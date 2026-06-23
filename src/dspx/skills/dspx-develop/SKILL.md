@@ -40,6 +40,13 @@ pausing is a TEST-ONLY mode.)
 
 ---
 ## The Stance
+- **Frame the whole before the parts** — every document needs an orienting OVERVIEW that states, in
+  a few plain sentences, what this document IS: what it defines, the scope boundary (what it covers
+  and explicitly does NOT), and who it is for. Home it as the **root section** (`section == article`,
+  which render uses as the document's intro) or a leading scope section — never drop the reader
+  straight into the first detailed clause. A reader who can't tell what the document is about from
+  its opening has been failed before the content starts. The overview orients; it does not dump the
+  mission's specifics (those live in their own section).
 - **Audience-first** — a section's depth and breadth are set by who reads it, never by what is
   interesting to write.
 - **Ruthless about scope** — decide what NOT to cover. An empty `forbidden` is an unfinished
@@ -80,11 +87,19 @@ not from scratch.
 - **Grow a MECE skeleton** and pressure-test it for overlap and gaps.
 - **Descend** — per section set its brief (inherit the parent, write only the diff), draft its
   one-sentence controlling idea, then split into MECE children or call it a leaf.
-- **Choose the layout** — note when a section's content should be a TABLE, LIST, or diagram rather
+- **Open with an orienting overview** — give the document a root/scope section whose brief is "frame
+  the whole": what this document defines, its boundary, its audience. Set its `concept`/`brief` like
+  any section so `draft` renders an orientation, not a dive into specifics. Without it the deliverable
+  jumps title → first detailed clause and the reader never learns what the document is.
+- **Choose the layout** — note when a section's content should be a TABLE, LIST, or **diagram** rather
   than prose. Logic, rules, and state belong in structure, not paragraphs; mark it now so `draft`
-  doesn't prose it up. Optionally also set the section's `brief.kind` (explain / how-to / reference /
-  tutorial) when its Diátaxis type is clear — `draft` honors it and `factcheck` flags type-mixing; it
-  inherits down the tree, so set it on the parent and leave children blank.
+  doesn't prose it up. When you mark a diagram, mark it as a **drawio image** (backend-neutral, renders
+  identically on both export tracks) — never TikZ or mermaid. `draft` doesn't draw it inline; it
+  **delegates to a subagent** that loads the `dspx-diagram` skill to author the `.drawio` + SVG into the
+  section's `assets/`, then embeds the SVG as an image. Optionally also set the section's `brief.kind`
+  (explain / how-to / reference / tutorial) when its Diátaxis type is clear — `draft` honors it and
+  `factcheck` flags type-mixing; it inherits down the tree, so set it on the parent and leave children blank.
+- **Write each section's one-line concept as its ROLE in the whole** — `draft` is shown the document map (every section's role) so it can frame openers and seams; that only works if each `concept` one-liner states the section's job in the argument ("define the ODD boundary and derive fleet-level safety goals"), not just a topic label. Sanity-check the organizing axis reads as a progression: each section's conclusion is the next section's premise.
 - **Capture normative choices as decisions** — the moment a choice is made, note BOTH the confirmed
   decision AND any rejected option with its *why*, so settled questions don't get re-litigated. For a
   *triggered* normative rule, prefer the EARS form in the statement ("WHEN <trigger> SHALL <response>")
@@ -95,6 +110,12 @@ not from scratch.
   truth changes); two coupled ideas in one doc get a parent that owns the coupling.
 - **Own the document's shared style** — setting the document-wide tone and conventions is a develop
   decision, like the root brief; `edit`/`factcheck` only flag a new convention, you lift it in.
+  **Fill the writing-guide's `Project conventions` zone — do NOT leave it as the empty template.**
+  When the deliverable language is not English this is mandatory, not optional: the backbone is
+  English expository doctrine, so without project conventions `draft` renders the deliverable
+  language against English-shaped rules and produces translationese. At minimum fill the
+  deliverable language, the **deliverable-language naturalness** notes (phrasings no native writer
+  would use → their natural form), the requirement-keyword dictionary, and the banned openers.
 
 ---
 ## The Brief — the cure for word salad

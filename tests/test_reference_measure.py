@@ -1,8 +1,8 @@
 """docspec reference + docspec measure-fonts (Part B new commands).
 
 Both are bootstrap-free (no project required) — mirror `version`. reference reads
-the bundled docspec-cas pack's craft reference; measure-fonts reports rendered PDF font
-sizes (soft-dep on pdfplumber).
+the active template pack's craft reference (the bundled Typst pack, or a --template
+pack); measure-fonts reports rendered PDF font sizes (soft-dep on pdfplumber).
 """
 
 from __future__ import annotations
@@ -21,44 +21,50 @@ def test_reference_registered():
     assert REGISTRY.get("measure-fonts") is mf_cmd
 
 
-def test_reference_index_lists_topics(capsys):
-    """No topic → index of the bundled pack's craft topics."""
+def test_reference_bundled_pack_is_advisory_or_lists(capsys):
+    """Bundled Typst pack → exit 0 (it ships no craft reference today → advisory;
+    if one is added later, an index is still a clean exit 0)."""
     assert ref_cmd.run([]) == 0
+
+
+def _pack_with_reference(tmp_path, body):
+    pack = tmp_path / "pack"
+    pack.mkdir()
+    (pack / "reference.md").write_text(body, encoding="utf-8")
+    return pack
+
+
+def test_reference_template_pack_lists_and_prints_topics(tmp_path, capsys):
+    """A --template pack with a reference.md → index lists its topics; a topic prints."""
+    pack = _pack_with_reference(
+        tmp_path,
+        "preamble ignored\n<!-- topic: tables -->\n# Tables\nuse a grid.\n"
+        "<!-- topic: figures -->\n# Figures\nplace assets.\n")
+    assert ref_cmd.run(["--template", str(pack)]) == 0
     out = capsys.readouterr().out
-    assert "tikz" in out
-    assert "latex-traps" in out
+    assert "tables" in out and "figures" in out
+
+    assert ref_cmd.run(["tables", "--template", str(pack)]) == 0
+    assert "use a grid." in capsys.readouterr().out
 
 
-def test_reference_tikz_prints_idiom_library(capsys):
-    assert ref_cmd.run(["tikz"]) == 0
-    out = capsys.readouterr().out
-    assert "dspxflow" in out          # the pre-loaded TikZ styles
-    assert "tikzpicture" in out
-
-
-def test_reference_latex_traps_prints_traps(capsys):
-    assert ref_cmd.run(["latex-traps"]) == 0
-    out = capsys.readouterr().out
-    assert "NFSS" in out              # Trap 1
-    assert "colortbl" in out          # Trap 2
-
-
-def test_reference_unknown_topic_lists_available_nonzero(capsys):
-    assert ref_cmd.run(["nope"]) == 2
+def test_reference_unknown_topic_lists_available_nonzero(tmp_path, capsys):
+    pack = _pack_with_reference(
+        tmp_path, "<!-- topic: tables -->\n# Tables\nuse a grid.\n")
+    assert ref_cmd.run(["nope", "--template", str(pack)]) == 2
     err = capsys.readouterr().err
-    assert "tikz" in err              # lists what's available
+    assert "tables" in err              # lists what's available
+
+
+def test_reference_template_missing_dir_errors(tmp_path, capsys):
+    assert ref_cmd.run(["--template", str(tmp_path / "nope")]) == 1
+    assert "does not exist" in capsys.readouterr().err
 
 
 def test_reference_pack_without_reference_is_advisory(tmp_path, capsys):
     """A --template pack that ships no reference.md → advisory message, exit 0."""
     pack = tmp_path / "minimal-pack"
     pack.mkdir()
-    # resolve_template_dir validates required files; build a stub pack.
-    from dspx import paths
-    for f in paths.REQUIRED_TEMPLATE_FILES:
-        (pack / f).write_text("stub", encoding="utf-8")
-    for d in paths.REQUIRED_TEMPLATE_DIRS:
-        (pack / d).mkdir(parents=True, exist_ok=True)
     assert ref_cmd.run(["--template", str(pack)]) == 0
     out = capsys.readouterr().out
     assert "craft" in out or "reference" in out.lower()

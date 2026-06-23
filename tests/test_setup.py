@@ -442,3 +442,93 @@ def test_write_lock_records_pandoc(monkeypatch, tmp_path):
     lock = json.loads(paths.tex_lock_path().read_text(encoding="utf-8"))
     assert lock["pandoc_tag"] == setup_cmd._PANDOC_MANIFEST["tag"]
     assert lock["pandoc_path"] == "/p/pandoc"
+
+
+# ── drawio（選用受控可攜版：平台 key／manifest 形狀／解壓／下載冪等／resolve）─────
+
+def test_drawio_manifest_covers_current_platform():
+    pkey = setup_cmd._pandoc_platform_key()
+    assert pkey is not None
+    assert pkey in setup_cmd._DRAWIO_MANIFEST["assets"]
+
+
+def test_drawio_manifest_entries_well_formed():
+    for pkey, (name, sha) in setup_cmd._DRAWIO_MANIFEST["assets"].items():
+        assert name.endswith((".zip", ".AppImage")), pkey
+        assert len(sha) == 64 and all(c in "0123456789abcdef" for c in sha), pkey
+    # tag 不含 'v' 前綴（URL 才補 v）
+    assert not setup_cmd._DRAWIO_MANIFEST["tag"].startswith("v")
+
+
+def _make_drawio_archive(path, pkey: str) -> None:
+    """造出對應平台的假 draw.io 可攜資產（windows/darwin=zip、linux=AppImage 單檔）。"""
+    if pkey == "windows":
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("draw.io.exe", b"DRAWIO")
+            zf.writestr("resources/app.asar", b"x")  # 誘餌：整包 app
+    elif pkey.startswith("darwin"):
+        with zipfile.ZipFile(path, "w") as zf:
+            zf.writestr("draw.io.app/Contents/MacOS/draw.io", b"DRAWIO")
+            zf.writestr("draw.io.app/Contents/Info.plist", b"x")
+    else:  # linux: AppImage 單檔
+        path.write_bytes(b"DRAWIO-APPIMAGE")
+
+
+def test_ensure_drawio_downloads_extracts_and_is_idempotent(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path / "dd")
+    pkey = setup_cmd._pandoc_platform_key()
+    asset_name, _sha = setup_cmd._DRAWIO_MANIFEST["assets"][pkey]
+    archive = tmp_path / asset_name
+    _make_drawio_archive(archive, pkey)
+    payload = archive.read_bytes()
+    sha = hashlib.sha256(payload).hexdigest()
+    monkeypatch.setattr(setup_cmd, "_DRAWIO_MANIFEST",
+                        {"tag": "30.2.4", "assets": {pkey: (asset_name, sha)}})
+    # Linux runtime 檢查不要真跑 ldconfig/apt
+    monkeypatch.setattr(setup_cmd, "_check_linux_drawio_runtime", lambda **k: None)
+
+    class _Resp:
+        def __init__(self): self._b = payload
+        def read(self, n=-1):
+            b, self._b = self._b, b""
+            return b
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(setup_cmd.urllib.request, "urlopen", lambda *a, **k: _Resp())
+
+    assert setup_cmd._ensure_drawio(force=False, no_download=False) is True
+    plat = "windows" if pkey == "windows" else ("darwin" if pkey.startswith("darwin") else "linux")
+    assert paths.drawio_managed_binary(plat).is_file()
+
+    # 第二次：已在 → 不再下載
+    def _boom(*a, **k):
+        raise AssertionError("已有 draw.io 不該重下載")
+    monkeypatch.setattr(setup_cmd.urllib.request, "urlopen", _boom)
+    assert setup_cmd._ensure_drawio(force=False, no_download=False) is True
+
+
+def test_ensure_drawio_no_download_when_absent_fails(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path / "dd")
+    monkeypatch.setattr(setup_cmd, "_check_linux_drawio_runtime", lambda **k: None)
+    assert setup_cmd._ensure_drawio(force=False, no_download=True) is False
+    assert "no draw.io in data_dir" in capsys.readouterr().err
+
+
+def test_resolve_drawio_prefers_managed(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path)
+    monkeypatch.delenv("DOCSPEC_DRAWIO", raising=False)
+    managed = paths.drawio_managed_binary()
+    managed.parent.mkdir(parents=True, exist_ok=True)
+    managed.write_text("x", encoding="utf-8")
+    assert paths.resolve_drawio() == str(managed)
+
+
+def test_write_lock_records_drawio(monkeypatch, tmp_path):
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path)
+    tlmgr = tmp_path / "tinytex" / "bin" / "plat" / "tlmgr"
+    tlmgr.parent.mkdir(parents=True)
+    tlmgr.write_text("x", encoding="utf-8")
+    setup_cmd._write_lock(tlmgr, None, ["xecjk"], "/p/pandoc", "/t/typst", "/d/drawio")
+    lock = json.loads(paths.tex_lock_path().read_text(encoding="utf-8"))
+    assert lock["drawio_tag"] == setup_cmd._DRAWIO_MANIFEST["tag"]
+    assert lock["drawio_path"] == "/d/drawio"

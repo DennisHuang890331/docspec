@@ -1,0 +1,45 @@
+%% docspec IEEE journal adapter — a pandoc LaTeX template (emit-only).
+%% docspec feeds the slot contract (title/authors/abstract/keywords/body/…) through
+%% this template to emit a .tex for the IEEEtran journal class; it does NOT compile it
+%% (compile in Overleaf / the journal toolchain with the real IEEEtran.cls).
+%% Slot variables referenced: title, authors(.name/.affiliation), abstract, keywords,
+%% date. Everything else in the contract is ignored by IEEEtran (reported as "unused").
+\documentclass[journal]{IEEEtran}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{url}
+\usepackage{textcomp}
+\usepackage[hidelinks]{hyperref}
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+$if(highlighting-macros)$
+$highlighting-macros$
+$endif$
+
+\begin{document}
+
+\title{$title$$if(subtitle)$ --- $subtitle$$endif$}
+
+$if(authors)$
+\author{$for(authors)$$authors.name$$if(authors.affiliation)$\thanks{$authors.name$ is with $authors.affiliation$.}$endif$$sep$, $endfor$}
+$endif$
+
+\maketitle
+
+$if(abstract)$
+\begin{abstract}
+$abstract$
+\end{abstract}
+$endif$
+
+$if(keywords)$
+\begin{IEEEkeywords}
+$for(keywords)$$keywords$$sep$, $endfor$
+\end{IEEEkeywords}
+$endif$
+
+$body$
+
+\end{document}

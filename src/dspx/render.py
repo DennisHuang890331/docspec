@@ -17,7 +17,13 @@ from dspx.frontmatter import parse_frontmatter, render_frontmatter
 from dspx.layout import Layout
 from dspx.model import Leaf, ancestor_brief_fingerprint, decision_index, deps_fingerprint
 
+# markdown 圖片引用 ![alt](path "optional title")：抓 path（到空白或 ) 為止）
+IMAGE_REF_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)")
+
 MARKER_RE = re.compile(r"^<!--\s*dspx:section\s+(\S+)\s*-->\s*$")
+# 分組（非末節）節點標記：與 section marker 區隔，使 parse_section_bodies 切斷前一節、
+# 忽略分組標題行（分組無散文、不記指紋、不進 lint 的 section 集合）。publish 一併剝除。
+GROUP_MARKER_RE = re.compile(r"^<!--\s*dspx:group\s+(\S+)\s*-->\s*$")
 
 
 def prose_hash(body: str) -> str:
@@ -25,8 +31,28 @@ def prose_hash(body: str) -> str:
     return hashlib.sha256(body.strip().encode("utf-8")).hexdigest()[:16]
 
 
+def find_image_refs(body: str) -> list[str]:
+    """從一段散文抽出 markdown 圖片引用的路徑（`![alt](path)`），依出現序。"""
+    return [m.group(1) for m in IMAGE_REF_RE.finditer(body)]
+
+
 def section_marker(section: str) -> str:
     return f"<!-- dspx:section {section} -->"
+
+
+def group_marker(section: str) -> str:
+    return f"<!-- dspx:group {section} -->"
+
+
+def _humanize_segment(segment: str) -> str:
+    """分組節點標題：去前綴序號（`^\\d+[-_]`）、分隔符轉空白、拉丁字首字大寫、CJK 原樣。"""
+    s = re.sub(r"^\d+[-_]", "", segment)
+    s = s.replace("-", " ").replace("_", " ").strip()
+    words = [
+        (w[:1].upper() + w[1:]) if (w[:1].isascii() and w[:1].isalpha()) else w
+        for w in s.split(" ")
+    ]
+    return " ".join(w for w in words if w)
 
 
 def _depth(article: str, section: str) -> int:
@@ -69,7 +95,14 @@ def parse_section_bodies(text: str) -> dict[str, str]:
             flush()
             current = m.group(1)
             buf = []
-        elif current is not None:
+            continue
+        if GROUP_MARKER_RE.match(line):
+            # 分組標記：切斷前一節，隨後的分組標題行歸 current=None（忽略、不算任何節的散文）
+            flush()
+            current = None
+            buf = []
+            continue
+        if current is not None:
             buf.append(line)
     flush()
     return bodies
@@ -99,8 +132,20 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str) -> dict:
     out: list[str] = [] if has_root else [f"# {article}", ""]
     hashes: dict[str, str] = {}
     drafted = 0
+    emitted_groups: set[str] = set()
     for lf in art_leaves:
         depth = _depth(article, lf.section)
+        # 補產祖先分組節點標題（文章內深度 1..depth-1），使階層連續、不跳級。
+        # 分組節點無散文、不記指紋；同一分組單次 render 只出現一次（冪等）。
+        parts = [p for p in lf.section.split("/") if p]
+        for i in range(2, len(parts)):
+            group_section = "/".join(parts[:i])
+            if group_section in emitted_groups or group_section in by_section:
+                continue  # 已產過，或本身是末節（將以自己的標題出現）→ 不另產分組標題
+            emitted_groups.add(group_section)
+            out.append(group_marker(group_section))
+            out.append("#" * i + " " + _humanize_segment(parts[i - 1]))
+            out.append("")
         heading = "#" * (depth + 1) + " " + lf.title
         body = existing_bodies.get(lf.section, "").strip()
         out.append(section_marker(lf.section))
@@ -168,8 +213,8 @@ def detect_drift(layout: Layout, article: str) -> list[dict]:
 
 
 def strip_markers(text: str) -> str:
-    """移除所有隱形 section 標記，保留內容（publish 凍結快照用）。"""
+    """移除所有隱形 section / group 標記，保留內容（publish 凍結快照用）。"""
     return "\n".join(
         line for line in text.split("\n")
-        if not MARKER_RE.match(line)
+        if not MARKER_RE.match(line) and not GROUP_MARKER_RE.match(line)
     )

@@ -37,7 +37,7 @@ skills:
     writes: [docs]
   release:
     # release sits after publish, acting on the frozen snapshot: an interactive typesetting gate (export → proof to view pages → adjust the format layer only).
-    # It reads/writes no corpus artifact — content's one source = the frozen snapshot md (byte-lock); it only touches the docspec-cas template pack
+    # It reads/writes no corpus artifact — content's one source = the frozen snapshot md (byte-lock); it only touches the template pack
     # (the format layer), so its corpus aperture is empty. A problem content can't fix → raise an audit finding upstream (not a self-fix).
     reads:  []
     writes: []

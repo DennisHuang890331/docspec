@@ -154,8 +154,38 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
         errors.extend(validate_glossary(load_glossary(layout)))
         # ── ⑧ roadmap.yaml 驗證（per-doc + forest；需 layout/leaves 脈絡）──
         errors.extend(_validate_roadmap(layout, leaves, id_set, concept_ids))
+        # ── ⑨ 圖片引用完整性（交付 _latest.md 的 ![](assets/…) 必須解析到實體圖檔）──
+        errors.extend(_validate_image_refs(layout, leaves))
 
     return CheckResult(ok=not errors, errors=errors, index=index)
+
+
+def _validate_image_refs(layout, leaves: list[Leaf]) -> list[str]:
+    """圖片引用完整性（fail-loud；backend-neutral）：交付 `_latest.md` 內每個
+    `![](assets/…)` 都必須對應到該節 `corpus/<section>/assets/` 下實際存在的圖檔。
+    斷掉＝check error，不靜默推遲到 export 或讀者。只驗本地 `assets/` 引用；
+    http(s)/相對上層/絕對路徑不在範圍。未 render（無 _latest.md）→ 無引用可驗、跳過。"""
+    from dspx.render import find_image_refs, parse_section_bodies
+
+    by_section = {lf.section: lf for lf in leaves}
+    errs: list[str] = []
+    for art in sorted({lf.article for lf in leaves}):
+        latest = layout.docs_latest(art)
+        if not latest.is_file():
+            continue
+        bodies = parse_section_bodies(latest.read_text(encoding="utf-8"))
+        for section, body in bodies.items():
+            leaf = by_section.get(section)
+            if leaf is None:
+                continue
+            available = {f"assets/{p.name}" for p in leaf.asset_files()}
+            for ref in find_image_refs(body):
+                if ref.startswith("assets/") and ref not in available:
+                    errs.append(
+                        f"{section}: image reference \"{ref}\" does not resolve to an asset in "
+                        f"corpus/{section}/assets/ (add the file, fix the path, or remove the reference)"
+                    )
+    return errs
 
 
 def _is_empty(val: object) -> bool:

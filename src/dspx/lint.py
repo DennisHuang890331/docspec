@@ -16,11 +16,18 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   Vg1/Vg2 術語一致               WARN
   Ve1 死錨點連結（export 破）     WARN  ← `](#x)` 對不上任何標題 slug → xelatex PDF 整份失敗
   Ve2 非標準 markdown（@import）  WARN  ← MPE 指令不會在 docx/PDF 渲染
+  Ve3 非 backend-neutral 圖記法     WARN  ← ```mermaid（不渲染）或 raw `{=latex}`/`{=tex}`（TikZ）
+                                          ＝非 backend-neutral；改用嵌入式 drawio 圖片
   V6（散文滲入 docs 偵測）→ 後補。
 
   export-safety（Ve）＝把「匯出時才炸的機械問題」前移成 lint 事前驗證：交付物潔淨＝
-  export-clean by construction。只收**機械 drift**（死連結、非標準語法）；mermaid 圖渲染、
-  字體、留白＝export 能力/設定，**不是作者錯、不進此處**（禁圖＝過度設計）。
+  export-clean by construction。只收**機械 drift**（死連結、非標準語法、非中立圖記法）。
+  ★Ve3 註記（隨 typst-default-dual-track 轉向更新）：交付物的圖必須是 **backend-neutral 嵌入圖片**
+  （`dspx-diagram` 的委派 subagent 把 drawio 渲成 SVG、`![](assets/…)` 嵌入；兩條 export 軌都吃）。
+  兩類機械 drift 在此 WARN：(a) ```mermaid——受控 toolchain 不渲染、只變佔位框；(b) raw `{=latex}`/
+  `{=tex}` 區塊（舊 TikZ 寫法）——LaTeX-only、預設 Typst 軌會被剝掉而消失。兩者都非 backend-neutral，
+  與 Ve2 的 @import 同類，故 WARN 前移、導向改用 drawio 圖片。字體/留白仍＝export 設定、不進此處。
+  （TikZ／mermaid→TikZ 教條已退場；diagrams travel as images。）
 """
 
 from __future__ import annotations
@@ -328,6 +335,8 @@ def _lint_roadmap(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
 _ANCHOR_LINK_RE = re.compile(r"\]\(#([^)\s]+)\)")   # markdown 內部連結 [文字](#anchor)
 _HEADING_RE = re.compile(r"^#{1,6}\s+(.*\S)\s*$")
 _IMPORT_RE = re.compile(r"(?m)^@import\b")           # MPE include 指令
+_MERMAID_FENCE_RE = re.compile(r"(?m)^\s*```+\s*mermaid\b")   # Ve3a：不渲染的 mermaid 圖記法
+_RAW_LATEX_FENCE_RE = re.compile(r"(?m)^\s*```+\s*\{=(?:latex|tex)\}")  # Ve3b：LaTeX-only raw 區塊（舊 TikZ）
 _INLINE_FMT_RE = re.compile(r"`[^`]*`|\*\*?|__?")
 _MD_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]*\)")
 _SLUG_DROP_RE = re.compile(r"[^\w.\- ]", re.UNICODE)  # 保留 \w(含 CJK)/._- 與空白；其餘剝
@@ -354,6 +363,8 @@ def _lint_export_safety(layout: Layout, articles: list[str]) -> list[Finding]:
     Ve1 死錨點連結：`](#x)` 的 x 對不上任何標題 slug → xelatex PDF 整份編譯失敗
                     （HTML 只變死連結、xelatex 嚴格擋）。
     Ve2 非標準 markdown：`@import` 等 MPE 指令 → 不會在 docx/PDF 交付物渲染。
+    Ve3 非中立圖記法：```mermaid（不渲染）或 raw `{=latex}`/`{=tex}`（LaTeX-only TikZ，預設 Typst
+                      軌會被剝掉）→ 改用 backend-neutral 嵌入圖片（dspx-diagram：drawio→SVG）。
     """
     findings: list[Finding] = []
     for article in articles:
@@ -377,6 +388,13 @@ def _lint_export_safety(layout: Layout, articles: list[str]) -> list[Finding]:
         if _IMPORT_RE.search(scan):
             findings.append(Finding("Ve2", WARN, where,
                 "contains non-standard markdown (MPE) directives like `@import` -- they won't render in the docx/PDF deliverable; remove or use standard syntax"))
+        # Ve3 掃 body（不剝 code fence——這些記法本身就是 fence）：非 backend-neutral 圖記法。
+        if _MERMAID_FENCE_RE.search(body):
+            findings.append(Finding("Ve3", WARN, where,
+                "contains a ```mermaid diagram -- mermaid does not render in the controlled toolchain (it ships as a placeholder box); author the diagram as an embedded image instead (the dspx-diagram subagent renders drawio -> SVG, embedded with `![](assets/...)`)"))
+        if _RAW_LATEX_FENCE_RE.search(body):
+            findings.append(Finding("Ve3", WARN, where,
+                "contains a raw `{=latex}`/`{=tex}` block (LaTeX-only, e.g. TikZ) -- it is not backend-neutral and the default Typst track strips it (the figure silently disappears); author the diagram as an embedded image instead (drawio -> SVG via the dspx-diagram subagent)"))
     return findings
 
 

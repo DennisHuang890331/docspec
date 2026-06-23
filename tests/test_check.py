@@ -263,3 +263,62 @@ def test_governs_cycle_fails(make_project, write_leaf):
     res = _check(home)
     assert not res.ok
     assert any("governs cycle" in e for e in res.errors)
+
+
+# ── 圖片引用完整性（Stage A：figure-embedding，需 layout）───────────────
+
+def _check_with_layout(home):
+    layout = Layout(home)
+    leaves = load_project(layout)
+    return run_check(leaves, load_schema(), layout)
+
+
+def _write_latest(home, article, section, title, body):
+    layout = Layout(home)
+    latest = layout.docs_latest(article)
+    latest.parent.mkdir(parents=True, exist_ok=True)
+    latest.write_text(
+        f"---\narticle: {article}\n---\n<!-- dspx:section {section} -->\n# {title}\n\n{body}\n",
+        encoding="utf-8")
+
+
+def _add_asset(home, section, name, data=b"\x89PNG\r\n\x1a\n_fake"):
+    leaf = home / "corpus"
+    for part in section.split("/"):
+        leaf = leaf / part
+    adir = leaf / "assets"
+    adir.mkdir(parents=True, exist_ok=True)
+    (adir / name).write_bytes(data)
+
+
+def test_broken_image_ref_fails_check(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    _write_latest(home, "a", "a/x", "X", "See ![diagram](assets/missing.svg) here.")
+    res = _check_with_layout(home)
+    assert not res.ok
+    assert any("missing.svg" in e and "does not resolve" in e for e in res.errors)
+
+
+def test_resolved_image_ref_passes_check(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    _add_asset(home, "a/x", "diagram.svg")
+    _write_latest(home, "a", "a/x", "X", "See ![diagram](assets/diagram.svg) here.")
+    res = _check_with_layout(home)
+    assert res.ok, res.errors
+
+
+def test_external_image_ref_not_validated(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    _write_latest(home, "a", "a/x", "X", "![remote](https://example.com/y.png)")
+    res = _check_with_layout(home)
+    assert res.ok, res.errors
+
+
+def test_image_ref_check_skipped_without_latest(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    res = _check_with_layout(home)   # no _latest.md rendered yet
+    assert res.ok, res.errors

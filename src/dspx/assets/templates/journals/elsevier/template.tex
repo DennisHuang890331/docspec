@@ -1,0 +1,53 @@
+%% docspec Elsevier (CAS double-column) journal adapter — a pandoc LaTeX template (emit-only).
+%% docspec feeds the slot contract through this template to emit a .tex for the Elsevier
+%% cas-dc documentclass; it does NOT compile it (compile in Overleaf / the journal toolchain
+%% with the real cas-dc.cls + cas-common.sty from the Elsevier CAS bundle).
+%% Slot variables referenced: title, shorttitle, shortauthors, authors(.name/.affiliation/.email),
+%% abstract, keywords, body. Slots the template doesn't reference are reported as "unused".
+\documentclass[a4paper,fleqn]{cas-dc}
+\usepackage[numbers]{natbib}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{array}
+\providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+$if(highlighting-macros)$
+$highlighting-macros$
+$endif$
+
+\begin{document}
+
+$if(shorttitle)$
+\shorttitle{$shorttitle$}
+$endif$
+$if(shortauthors)$
+\shortauthors{$shortauthors$}
+$endif$
+
+\title[mode=title]{$title$$if(subtitle)$: $subtitle$$endif$}
+
+$for(authors)$
+\author{$authors.name$}
+$if(authors.email)$\ead{$authors.email$}$endif$
+$if(authors.affiliation)$\affiliation{organization={$authors.affiliation$}}$endif$
+$endfor$
+
+$if(abstract)$
+\begin{abstract}
+$abstract$
+\end{abstract}
+$endif$
+
+$if(keywords)$
+\begin{keywords}
+$for(keywords)$$keywords$$sep$ \sep $endfor$
+\end{keywords}
+$endif$
+
+\maketitle
+
+$body$
+
+\bibliographystyle{cas-model2-names}
+
+\end{document}

@@ -14,10 +14,10 @@ classifiers = ["License :: Free for non-commercial use"]
 dependencies = ["pyyaml>=6.0", "questionary>=2.0", "platformdirs>=4.0"]
 
 [project.optional-dependencies]
-# export：md→PDF（指令 docspec export，Phase C＝docspec-cas + 受控 TinyTeX/xelatex）。
-# pandoc 端用 pypandoc_binary（含 binary 的 wheel、零系統相依）做 md→LaTeX；
-# 實際 PDF 編譯由受控 TinyTeX(xelatex) 負責（Phase B `docspec setup` 裝進 data_dir，
-# 不在此 wheel）。typst 路已退場、不再相依。
+# export：md→PDF（指令 docspec export）。預設 Typst 軌＝pandoc md→typst + 受控 typst
+# binary 編譯；journal 軌＝pandoc md→.tex（emit-only，使用者自編）。pandoc 端用
+# pypandoc_binary（含 binary 的 wheel、零系統相依）；typst binary 由 `docspec setup`
+# 裝進 data_dir、不在此 wheel。
 #   pdfplumber＝export byte-lock runtime 檢查（抽 PDF 文字位置化比對）＋指令
 #   `docspec measure-fonts`（量實渲字級）；pypdfium2＝`docspec proof`（PDF→PNG）。
 #   三者都是 release 出版迴圈的 runtime（非 dev-only），故收進 export extra。
@@ -32,11 +32,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/dspx"]
-# 字型（~95MB）不進 wheel：Phase B `docspec setup` 把它們裝進 data_dir/fonts
-# （dev 從源樹的 assets/templates/docspec-cas/fonts/ copy；prod 改 OFL 下載）。
-# 源樹保留這些檔供 dev setup 用，但 build wheel 時排除、避免散布巨大字型。
-exclude = ["src/dspx/assets/templates/docspec-cas/fonts/*.otf",
-           "src/dspx/assets/templates/docspec-cas/fonts/*.ttf"]
+# 字型不進 wheel：`docspec setup` 從 pinned OFL URL 下載進 data_dir/fonts
+# （或由 DOCSPEC_FONTS_SRC 指向的本地夾 copy）。repo 內不再帶字型檔，故無需 exclude。
 
 [dependency-groups]
 # byte-lock 驗收測試抽回 PDF 文字用（test_export.py，缺則該測試 skip）：

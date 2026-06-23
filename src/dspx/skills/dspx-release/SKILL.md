@@ -5,7 +5,7 @@ description: Enter release mode — the interactive typesetting gate AFTER publi
   for delivery. Unlike the content skills, it touches ONLY the format layer (the template
   pack), never a word of content, and converges over rounds with the human in every round.
 license: PolyForm-Noncommercial-1.0.0
-compatibility: Requires the docspec CLI with the export extra (pandoc + controlled TinyTeX/xelatex), pdfplumber, and pypdfium2.
+compatibility: Requires the docspec CLI with the export extra (pandoc + the bundled typst binary for the default track; the journal track additionally needs the controlled TinyTeX/xelatex), pdfplumber, and pypdfium2.
 metadata:
   author: docspec
   version: "2.0"
@@ -14,10 +14,13 @@ metadata:
 Run `docspec guide` and `docspec instructions release <section>` before acting. The mechanics —
 the export/proof commands, the validated `--format-config` knobs (their names, enums, ranges),
 the byte-lock check, where the deliverable lands — live there, projected live from the schema and
-CLI; assume they may have changed since this file was written. For pack-editing craft (TikZ idioms,
-LaTeX traps) run `docspec reference`. **This skill gives you only STANCE.** Don't restate knob
-names or guess them from memory. The engine is your backstop: a bad knob value is refused before any
-LaTeX is generated, and byte-lock refuses a PDF whose content drifted from the snapshot.
+CLI; assume they may have changed since this file was written. The format knobs and where the
+deliverable lands live in `docspec guide`; a custom journal pack supplied via `--template <dir>` may
+ship its own craft notes, readable with `docspec reference --template <dir>` (the bundled Typst pack
+ships none — all of its format control is exposed as validated knobs). **This skill gives you only
+STANCE.** Don't restate knob names or guess them from memory. The engine is your backstop: a bad knob
+value is refused before any markup is generated, and byte-lock refuses a PDF whose content drifted
+from the snapshot.
 
 ---
 You run the **interactive typesetting gate**. Publish froze the content; **release lays it out.**
@@ -39,7 +42,8 @@ humans see and judge, not something the engine gates.
 ---
 ## The Stance — the iron laws
 - **Format only — never content.** The content's one source is the frozen snapshot md. The
-  generated `doc.tex` is throwaway — never hand-edit it, never patch the PDF, never "just tweak this
+  generated render source (the `.typ`, or the journal track's `.tex`) is throwaway — never hand-edit
+  it, never patch the PDF, never "just tweak this
   sentence so it fits." If you find yourself wanting to change a word, STOP — that is the next law.
 - **A layout problem you can only fix by changing content → route upstream, don't self-fix.** A
   table too wide because the *content* has too many columns; an overlong heading; a claim that must
@@ -47,15 +51,17 @@ humans see and judge, not something the engine gates.
   `edit` → `publish` → `release`. Release reports and waits; it never reaches into content.
 - **Reach for the validated format knobs FIRST.** Express a layout change as *values* in a
   `--format-config` YAML (page/font/size/leading/table/code/…). docspec validates every value and
-  deterministically compiles it into a LaTeX override — a bad value is refused before any LaTeX
-  exists, so a hallucinated setting can never reach xelatex. This is the default tool for the loop's
-  "adjust format" step. (The exact knob set is in `docspec guide`; don't memorize it here.)
+  deterministically compiles it into a renderer override — a bad value is refused before any markup
+  exists, so a hallucinated setting can never reach the renderer (typst, or xelatex on the journal
+  track). This is the default tool for the loop's "adjust format" step. (The exact knob set is in
+  `docspec guide`; don't memorize it here.)
 - **Escape hatch, flagged-risk: hand-edit the template pack only when no knob covers it.** You may
-  edit the pack's *existing* declarative parameters (`preamble.tex`, `docspec-tables.lua`,
-  `before.tex`). This raw LaTeX is **not** validated, so prefer a knob whenever one fits; when you
-  must, change the smallest existing parameter — never author a fresh `.tex` body, never pixel-place,
-  never write a per-document one-off layout script. **The engine may refuse an export that touches a
-  bundled pack without an explicit acknowledgement** — that gate is on purpose; don't route around it.
+  edit the pack's *existing* declarative parameters — for the bundled Typst pack that is its
+  `template.typ`; for a BYO journal pack (`--template <dir>`) its own template files. This raw
+  template code is **not** validated, so prefer a knob whenever one fits; when you must, change the
+  smallest existing parameter — never author a fresh template body, never pixel-place, never write a
+  per-document one-off layout script. **The engine may refuse an export that touches a bundled pack
+  without an explicit acknowledgement** — that gate is on purpose; don't route around it.
 - **Changing the look wholesale = swap the pack (`--template`), not a pile of overrides.** A
   different visual format is a different *pack*. Read its class/sample once, author a pandoc bridge a
   single time, then every future export through that pack is deterministic. One careful bridge, then
@@ -70,7 +76,7 @@ You converge over rounds; the human is in every round.
    preview). If a dependency is missing, surface the hint — don't fake a PDF.
 2. **Proof** → renders every page to a PNG and prints the paths.
 3. **Look — together.** READ the page images (that is the whole point of proof: the engine cannot see
-   a table overprinting, a column collision, or a **mermaid placeholder box**). Walk the pages with
+   a table overprinting, a column collision, or a **broken / blank figure image**). Walk the pages with
    the human and name concrete defects.
 4. **Classify each defect** before touching anything: **format** (size, spacing, margin, rule weight,
    font) → adjust the format layer, stay in the loop; **content** (only fixable by changing
@@ -82,12 +88,16 @@ You converge over rounds; the human is in every round.
 7. **Converge** when the human says the layout is good. The snapshot is unchanged; the deliverable
    PDF is the only new thing.
 
-**Mermaid → TikZ** (a notation translation, once per diagram): pandoc cannot draw mermaid, so the
-template renders each ` ```mermaid ` block as a visible placeholder box. When you see one, run
-`docspec reference tikz` for the idiom library and pre-loaded styles, then write the *equivalent*
-diagram as a native-TikZ raw-LaTeX block in the throwaway working copy. **This is the one raw-LaTeX
-you are sanctioned to author** — it is a presentation-layer notation swap, not a content change. If
-you change what the diagram *says* (new state, renamed node) → route upstream.
+**Broken diagram → route upstream (diagrams are embedded images, authored upstream).** Diagrams are
+now backend-neutral images: a subagent loading the `dspx-diagram` skill authors a `.drawio` + SVG into
+the section's `assets/` upstream in `draft`, and the deliverable embeds the SVG. Release does NOT draw,
+re-draw, or hand-edit a diagram — there is **no sanctioned raw-LaTeX** here any more (TikZ and the
+mermaid→TikZ swap are retired). If a figure looks wrong in proof (blank box, clipped, stale, wrong
+content), that is a content/asset defect: **route it upstream** — the human takes it back through
+`draft`, where the diagram subagent re-renders the image; then re-publish and re-release. A genuinely
+format-level figure issue (the image is correct but too large / poorly placed on the page) is the only
+kind you handle here, and you handle it with the validated format knobs (image sizing), never by
+editing the picture.
 
 ---
 ## Guardrails
@@ -96,16 +106,16 @@ you change what the diagram *says* (new state, renamed node) → route upstream.
 - Read the proof images yourself every round — the defects you fix are the ones you can SEE.
 - Reach for the validated `--format-config` knobs first; keep content byte-locked.
 - Use the pack hand-edit only as an escape hatch when no knob fits, changing the smallest parameter.
-- Translate each mermaid box into an equivalent TikZ figure (`docspec reference tikz`), once per diagram.
+- Route a broken/blank/wrong diagram upstream — diagrams are images authored by the `dspx-diagram` subagent in `draft`; never redraw at release.
 - Route any content-only blocker upstream as an audit finding; let the human re-edit → re-publish.
 - Measure with `docspec measure-fonts` instead of guessing font sizes by eye.
 
 **Don't**
 - Don't change content — not a word, not a number; the snapshot is the one source and is read-only.
-- Don't hand-edit the generated `doc.tex`, patch the PDF, or build the document programmatically.
-- Don't write raw LaTeX from scratch or pixel-place — prefer the knobs; hand-edit existing pack
-  parameters only when no knob fits; swap the whole pack for a different look. (The one sanctioned
-  raw-LaTeX you author is the per-diagram mermaid → TikZ translation.)
+- Don't hand-edit the generated render source (`.typ` / `.tex`), patch the PDF, or build the document programmatically.
+- Don't write raw template code from scratch or pixel-place — prefer the knobs; hand-edit existing
+  pack parameters only when no knob fits; swap the whole pack for a different look. (Diagrams are
+  upstream-authored images now — there is no sanctioned raw-LaTeX diagram authoring at release.)
 - Don't hand-write a preamble line for something a knob already covers — that bypasses validation.
 - Don't route around the bundled-pack acknowledgement gate; it is there on purpose.
 - Don't bundle proprietary fonts; use the bundled redistributable faces (some "kai" faces corrupt

@@ -252,3 +252,101 @@ def test_non_develop_skills_have_no_roadmap(make_project, write_leaf):
     for skill in ("draft", "edit", "factcheck"):
         proj = _project(home, skill, "art")
         assert proj.roadmap is None
+
+
+# ── 圖片資產（Stage A：figure-embedding）────────────────────────────
+
+def _add_asset(home, section, name, data=b"\x89PNG\r\n\x1a\n_fake"):
+    leaf = home / "corpus"
+    for part in section.split("/"):
+        leaf = leaf / part
+    adir = leaf / "assets"
+    adir.mkdir(parents=True, exist_ok=True)
+    (adir / name).write_bytes(data)
+    return adir / name
+
+
+def test_draft_sees_image_assets_as_refs(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    _add_asset(home, "a/x", "diagram.svg")
+    _add_asset(home, "a/x", "photo.png")
+    proj = _project(home, "draft", "a/x")
+    # 投的是 backend-neutral 引用路徑、依檔名排序
+    assert proj.image_assets == ["assets/diagram.svg", "assets/photo.png"]
+
+
+def test_image_assets_only_for_draft_and_edit(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    _add_asset(home, "a/x", "d.png")
+    assert _project(home, "draft", "a/x").image_assets == ["assets/d.png"]
+    assert _project(home, "edit", "a/x").image_assets == ["assets/d.png"]
+    # factcheck/develop 不需要放圖 → 不投
+    assert _project(home, "factcheck", "a/x").image_assets == []
+    assert _project(home, "develop", "a/x").image_assets == []
+
+
+def test_no_assets_dir_means_empty(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    assert _project(home, "draft", "a/x").image_assets == []
+
+
+def test_non_image_files_in_assets_ignored(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    _add_asset(home, "a/x", "keep.svg")
+    _add_asset(home, "a/x", "notes.txt")   # 非圖片副檔名 → 忽略
+    assert _project(home, "draft", "a/x").image_assets == ["assets/keep.svg"]
+
+
+def test_draft_sees_document_map_in_order(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "art", concept={"id": "r", "title": "Root", "order": 0,
+                                      "concept": "定位總覽",
+                                      "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
+    write_leaf(home, "art/beta", concept={"id": "b", "title": "Beta", "order": 2, "concept": "界定 B"})
+    write_leaf(home, "art/alpha", concept={"id": "a", "title": "Alpha", "order": 1, "concept": "界定 A"})
+    proj = _project(home, "draft", "art/alpha")
+    secs = [n["section"] for n in proj.document_map]
+    assert secs == ["art", "art/alpha", "art/beta"]   # 依 outline order
+    by_sec = {n["section"]: n for n in proj.document_map}
+    assert by_sec["art/alpha"]["role"] == "界定 A" and by_sec["art/alpha"]["title"] == "Alpha"
+
+
+def test_document_map_is_structure_only_no_sibling_prose(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "art", concept={"id": "r", "title": "Root", "order": 0, "concept": "總覽",
+                                      "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
+    write_leaf(home, "art/x", concept={"id": "x", "title": "X", "order": 1, "concept": "X 角色"},
+               material="SIBLING_SECRET_PROSE 不該外洩",
+               decisions=[{"id": "dx", "kind": "normative", "status": "accepted",
+                           "statement": "SIBLING_DECISION_STMT"}])
+    proj = _project(home, "draft", "art")   # 從 root 看 map，含 sibling art/x
+    blob = repr(proj.document_map)
+    assert "art/x" in blob and "X 角色" in blob          # 結構（role）在
+    assert "SIBLING_SECRET_PROSE" not in blob            # 鄰節 material 不洩
+    assert "SIBLING_DECISION_STMT" not in blob           # 鄰節 decision 不洩
+
+
+def test_document_map_only_for_draft(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "art", concept={"id": "r", "title": "R", "order": 0, "concept": "總覽",
+                                      "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
+    assert _project(home, "draft", "art").document_map != []
+    assert _project(home, "edit", "art").document_map == []
+    assert _project(home, "factcheck", "art").document_map == []
+
+
+def test_image_change_marks_section_stale(make_project, write_leaf):
+    """改圖片內容 → 該節 source_hash 變（staleness）。"""
+    from dspx.model import load_project as _lp
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    asset = _add_asset(home, "a/x", "d.png", data=b"\x89PNG\r\n\x1a\nAAA")
+    layout = Layout(home)
+    before = {lf.section: lf.source_hash() for lf in _lp(layout)}["a/x"]
+    asset.write_bytes(b"\x89PNG\r\n\x1a\nBBB")   # 改圖
+    after = {lf.section: lf.source_hash() for lf in _lp(layout)}["a/x"]
+    assert before != after

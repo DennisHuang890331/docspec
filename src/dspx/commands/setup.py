@@ -184,6 +184,44 @@ _PANDOC_MANIFEST = {
 }
 
 
+# ── typst manifest（釘版受控 binary；Typst 軌＝預設 render 引擎）──────────────
+# 來源＝typst/typst release 的 standalone binary（單一靜態執行檔、無系統依賴、~22MB，
+# 比 TinyTeX 輕一個量級）。Windows＝.zip、Linux/macOS＝.tar.xz，內含 typst-<target>/typst[.exe]。
+# 平台 key 複用 _pandoc_platform_key（同樣 windows/linux-*/darwin-* 五鍵）。
+# 升級＝改 tag＋抓新 asset 的 sha256。
+_TYPST_REPO = "typst/typst"
+_TYPST_MANIFEST = {
+    "tag": "v0.15.0",
+    "assets": {
+        "windows":       ("typst-x86_64-pc-windows-msvc.zip",      "66ae7f0907b4b9afed5c7d6cb9b21e07f0f3c3d4e293ba3e0026a54d88202fe9"),
+        "linux-x86_64":  ("typst-x86_64-unknown-linux-musl.tar.xz", "59b207df01be2dab9f13e80f73d04d7ff8273ffd46b3dd1b9eef5c60f3eeabea"),
+        "linux-arm64":   ("typst-aarch64-unknown-linux-musl.tar.xz", "cdf50ffc7b8ba759ed02200632eda3d78eb8b99aacb6611f4f75684990647620"),
+        "darwin-x86_64": ("typst-x86_64-apple-darwin.tar.xz",       "30210c7c539c7954db94c063cd98b43fd0a0cad285d656dbbce2a40aee2e79be"),
+        "darwin-arm64":  ("typst-aarch64-apple-darwin.tar.xz",      "fe53838737abf93a774495952a1a797b4686e9c4a21c2d99b9fdf77f46cc3572"),
+    },
+}
+
+
+# ── drawio manifest（選用受控可攜版；D8：核心 setup 不裝、`--with-drawio` 才裝）──────
+# 來源＝jgraph/drawio-desktop release 的**可攜**資產（非安裝程式）：
+#   windows       ＝ draw.io-<tag>-windows.zip（解出整包 Electron app，draw.io.exe 直接跑）
+#   darwin-*      ＝ draw.io-{x64,arm64}-<tag>.zip（.app bundle，binary 在 .app/Contents/MacOS/draw.io）
+#   linux-*       ＝ drawio-{x86_64,arm64}-<tag>.AppImage（單檔，chmod +x 直接跑；需 X/FUSE）
+# 平台 key 複用 _pandoc_platform_key（windows/linux-*/darwin-* 五鍵）。tag 不含 'v' 前綴。
+# sha256 取自 GitHub release API 的 asset digest（已驗）。升級＝改 tag＋抓新 asset digest。
+_DRAWIO_REPO = "jgraph/drawio-desktop"
+_DRAWIO_MANIFEST = {
+    "tag": "30.2.4",
+    "assets": {
+        "windows":       ("draw.io-30.2.4-windows.zip",       "53633acf3c24927ae99e32c85bc838131719148a40487d3dfacf19042a4f240c"),
+        "linux-x86_64":  ("drawio-x86_64-30.2.4.AppImage",    "a936ff56fe92e3251b1353f42ace564abc8bcf81bc146631fab477fc4a3b6881"),
+        "linux-arm64":   ("drawio-arm64-30.2.4.AppImage",     "4d20819afb01bb3c7694da7344b5f4c742ed4d9ca77e4f7695ce9d1e69b75c42"),
+        "darwin-x86_64": ("draw.io-x64-30.2.4.zip",           "bf31463d3d37e7c6739ee9199363421ca024fdeab2c6a228c43233bfcb50c6f0"),
+        "darwin-arm64":  ("draw.io-arm64-30.2.4.zip",         "2e40b7c5b5034379a88998236fe6050224a5a5232e213c1a0393a86e8f65e5b3"),
+    },
+}
+
+
 # tlmgr 要補裝的套件（docspec-cas.cls \RequirePackage ＋ preamble \usepackage ＋ session
 # 實裝推導）。TinyTeX-1 medium scheme 多半已含，install 對已裝者 no-op。缺的才裝。
 _TEX_PACKAGES = [
@@ -679,18 +717,163 @@ def _ensure_pandoc(*, force: bool, no_download: bool) -> bool:
     return True
 
 
+def _ensure_typst(*, force: bool, no_download: bool) -> bool:
+    """把釘版 typst binary 放進 data_dir/typst（預設 render 引擎）。冪等：已在就跳過。"""
+    pkey = _pandoc_platform_key()
+    if pkey is None or pkey not in _TYPST_MANIFEST["assets"]:
+        sys.stderr.write(
+            f"docspec: the typst manifest does not cover this platform ({platform.system()}/{platform.machine()}).\n")
+        return False
+
+    exe_name = paths.typst_exe_name()
+    target = paths.typst_dir() / exe_name
+    if not force and target.is_file():
+        print(f"  typst already at {target} (skipping download)")
+        return True
+
+    if no_download:
+        sys.stderr.write("docspec: --no-download given and no typst in data_dir — aborting.\n")
+        return False
+
+    asset_name, sha = _TYPST_MANIFEST["assets"][pkey]
+    url = f"https://github.com/{_TYPST_REPO}/releases/download/{_TYPST_MANIFEST['tag']}/{asset_name}"
+    cache = paths.cache_dir()
+    pkg = cache / asset_name
+    if pkg.is_file() and hashlib.sha256(pkg.read_bytes()).hexdigest() != sha:
+        pkg.unlink(missing_ok=True)
+    if not pkg.is_file():
+        print(f"  Downloading typst: {asset_name} ({_TYPST_MANIFEST['tag']}) …")
+        if not _download(url, pkg, sha):
+            return False
+    # 解出 typst 執行檔（reuse pandoc 的通用 by-basename 解壓；tar.xz 由 tarfile 自動偵測）。
+    if not _extract_pandoc_binary(pkg, exe_name, target):
+        return False
+    print(f"  typst ready in {target}")
+    return True
+
+
+# ── drawio（選用受控可攜版；解整包/AppImage 進 data_dir/drawio）─────────────
+
+def _extract_drawio(archive: Path, pkey: str) -> bool:
+    """把 draw.io 可攜資產解到 data_dir/drawio，並回傳是否解出可用的 CLI binary。
+
+    - windows/.zip ＝ 整包 Electron app（draw.io.exe + resources/…）→ 全解進 drawio_dir。
+    - darwin/.zip  ＝ draw.io.app bundle → 全解進 drawio_dir，binary 在 .app/Contents/MacOS/draw.io。
+    - linux/.AppImage ＝ 單檔 → 複製成 drawio_dir/drawio.AppImage 並 chmod +x。
+    """
+    dest = paths.drawio_dir()
+    dest.mkdir(parents=True, exist_ok=True)
+    plat = "windows" if pkey == "windows" else ("darwin" if pkey.startswith("darwin") else "linux")
+    try:
+        if plat == "linux":
+            target = paths.drawio_managed_binary(plat)
+            shutil.copyfile(archive, target)
+            target.chmod(0o755)
+        else:
+            with zipfile.ZipFile(archive) as zf:
+                zf.extractall(dest)  # noqa: S202 — 官方 release、已驗 sha256
+            if plat == "darwin":
+                binary = paths.drawio_managed_binary(plat)
+                if binary.is_file():
+                    binary.chmod(0o755)  # zip 不保留執行位元
+    except (zipfile.BadZipFile, OSError) as exc:
+        sys.stderr.write(f"docspec: failed to extract draw.io ({archive.name}): {exc}\n")
+        return False
+    return paths.drawio_managed_binary(plat).is_file()
+
+
+def _check_linux_drawio_runtime(*, interactive: bool) -> None:
+    """Linux：draw.io（Electron）渲圖需 X/Electron 共享庫 ＋ headless 的 xvfb。
+    這些是系統套件，docspec 不能塞進 data_dir。偵測缺漏 → 依 D8 詢問是否安裝（互動時），
+    否則只印清楚指引（含 Docker 後備）。永不強制、不阻擋 binary 落地。"""
+    if platform.system() != "Linux":
+        return
+    have_xvfb = shutil.which("xvfb-run") is not None
+    libs_ok = True
+    try:
+        out = subprocess.run(["ldconfig", "-p"], capture_output=True, text=True, check=False)
+        cat = out.stdout
+        libs_ok = all(lib in cat for lib in ("libgtk-3", "libnss3", "libgbm"))
+    except OSError:
+        libs_ok = False  # ldconfig 不在 → 無法確認，當作可能缺
+    if have_xvfb and libs_ok:
+        print("  draw.io Linux runtime looks present (xvfb + GTK/NSS/GBM).")
+        return
+    apt = ("sudo apt-get install -y xvfb libgtk-3-0 libnss3 libgbm1 "
+           "libasound2t64 libnotify4")
+    print("  ⚠ draw.io on Linux needs X/Electron libraries + xvfb for headless rendering.")
+    print(f"    Missing or unconfirmed: {'xvfb ' if not have_xvfb else ''}"
+          f"{'GTK/NSS/GBM libs' if not libs_ok else ''}".strip())
+    print(f"    Install (Debian/Ubuntu):  {apt}")
+    print("    Alternative: the tomkludy/drawio-renderer Docker image (headless export REST API).")
+    if interactive and sys.stdin.isatty():
+        try:
+            import questionary
+            if questionary.confirm(
+                    "Install the X/Electron libraries now via apt-get? (needs sudo)",
+                    default=False).ask():
+                rc = subprocess.run(["sh", "-c", apt], check=False).returncode
+                if rc != 0:
+                    print("  apt-get returned non-zero — install the packages manually (above).")
+        except Exception:  # noqa: BLE001 — questionary 缺/非 TTY → 留指引即可
+            pass
+
+
+def _ensure_drawio(*, force: bool, no_download: bool, interactive: bool = False) -> bool:
+    """選用：把釘版 draw.io 可攜版放進 data_dir/drawio。冪等：已在就跳過。"""
+    pkey = _pandoc_platform_key()
+    if pkey is None or pkey not in _DRAWIO_MANIFEST["assets"]:
+        sys.stderr.write(
+            f"docspec: the draw.io manifest does not cover this platform ({platform.system()}/{platform.machine()}).\n")
+        return False
+
+    plat = "windows" if pkey == "windows" else ("darwin" if pkey.startswith("darwin") else "linux")
+    target = paths.drawio_managed_binary(plat)
+    if not force and target.is_file():
+        print(f"  draw.io already at {target} (skipping download)")
+        _check_linux_drawio_runtime(interactive=interactive)
+        return True
+
+    if no_download:
+        sys.stderr.write("docspec: --no-download given and no draw.io in data_dir — aborting.\n")
+        return False
+
+    asset_name, sha = _DRAWIO_MANIFEST["assets"][pkey]
+    url = f"https://github.com/{_DRAWIO_REPO}/releases/download/v{_DRAWIO_MANIFEST['tag']}/{asset_name}"
+    cache = paths.cache_dir()
+    pkg = cache / asset_name
+    if pkg.is_file() and hashlib.sha256(pkg.read_bytes()).hexdigest() != sha:
+        pkg.unlink(missing_ok=True)
+    if not pkg.is_file():
+        print(f"  Downloading draw.io: {asset_name} (v{_DRAWIO_MANIFEST['tag']}) …")
+        if not _download(url, pkg, sha):
+            return False
+    print(f"  Extracting draw.io → {paths.drawio_dir()}")
+    if not _extract_drawio(pkg, pkey):
+        sys.stderr.write("docspec: draw.io extraction did not yield a runnable binary.\n")
+        return False
+    print(f"  draw.io ready ({target})")
+    _check_linux_drawio_runtime(interactive=interactive)
+    return True
+
+
 # ── tex.lock（指紋；供 doctor 比對）────────────────────────────────
 
 def _write_lock(tlmgr: Path, xelatex: Path | None, packages: list[str],
-                pandoc: str | None = None) -> None:
+                pandoc: str | None = None, typst: str | None = None,
+                drawio: str | None = None) -> None:
     lock = {
         "tinytex_tag": _MANIFEST["tag"],
         "pandoc_tag": _PANDOC_MANIFEST["tag"],
+        "typst_tag": _TYPST_MANIFEST["tag"],
+        "drawio_tag": _DRAWIO_MANIFEST["tag"],
         "platform": _platform_key(),
         "tinytex_root": str(paths.tinytex_root()),
         "tlmgr_path": str(tlmgr),
         "xelatex_path": str(xelatex) if xelatex else None,
         "pandoc_path": str(pandoc) if pandoc else None,
+        "typst_path": str(typst) if typst else None,
+        "drawio_path": str(drawio) if drawio else None,  # None＝未裝（--with-drawio 才裝）
         "fonts_dir": str(paths.fonts_dir()),
         "fonts": list(paths.REQUIRED_FONT_FILES),
         "tlmgr_packages": packages,
@@ -709,6 +892,8 @@ def run(argv: list[str]) -> int:
                         help="do not download TinyTeX (use existing data_dir or dev shortcut only)")
     parser.add_argument("--no-dev-shortcut", action="store_true",
                         help="do not copy from dev /tmp/ttx (force the real download path)")
+    parser.add_argument("--with-drawio", action="store_true",
+                        help="also install the optional managed draw.io desktop binary (for diagram rendering)")
     args = parser.parse_args(argv)
 
     pkey = _platform_key()
@@ -750,13 +935,31 @@ def run(argv: list[str]) -> int:
         sys.stderr.write("docspec: pandoc install did not complete — setup aborted.\n")
         return 1
 
+    # 4.5 typst（受控 binary；Typst 軌＝預設 render 引擎，輕量、原生 CJK）
+    if not _ensure_typst(force=args.force, no_download=args.no_download):
+        sys.stderr.write("docspec: typst install did not complete — setup aborted.\n")
+        return 1
+
+    # 4.6 draw.io（選用、D8：核心不裝、--with-drawio 才裝；供 dspx-diagram subagent 渲圖）
+    if args.with_drawio:
+        if not _ensure_drawio(force=args.force, no_download=args.no_download, interactive=True):
+            sys.stderr.write("docspec: draw.io install did not complete — setup aborted.\n")
+            return 1
+
     # 5. tex.lock
     xelatex = paths.resolve_xelatex()
     pandoc = paths.resolve_pandoc()
-    _write_lock(tlmgr, xelatex, packages, pandoc)
+    typst = paths.resolve_typst()
+    drawio = paths.resolve_drawio()
+    _write_lock(tlmgr, xelatex, packages, pandoc, typst, drawio)
 
     print(f"\n✓ setup complete. tex.lock: {paths.tex_lock_path()}")
-    print(f"  xelatex: {xelatex}")
+    print(f"  typst: {typst}  (default render engine)")
+    print(f"  xelatex: {xelatex}  (LaTeX track)")
     print(f"  pandoc: {pandoc}")
+    if drawio:
+        print(f"  draw.io: {drawio}  (optional; diagram rendering)")
+    else:
+        print("  draw.io: not installed (run `docspec setup --with-drawio` to add diagram rendering)")
     print("  From now on `docspec export <article>` / `docspec proof <article>` run purely off data_dir.")
     return 0

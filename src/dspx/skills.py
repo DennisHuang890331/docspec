@@ -21,12 +21,33 @@ class SkillError(Exception):
 
 @dataclass(frozen=True)
 class Skill:
-    """一個內建 skill：權威原始檔 + 解析出的中介資料。"""
+    """一個內建 skill：權威原始檔 + 解析出的中介資料。
+
+    `kind` 區分兩類：
+      - "workflow"（預設）＝六個作者工作流 skill（develop/draft/edit/factcheck/
+        publish/release）：裝成 skill（自動載入）＋command（人顯式叫用 slash/workflow）。
+      - "support" ＝craft skill（如 dspx-diagram），由 draft/develop 委派的 subagent
+        載入、非工作流階段、不產 slash command；它隨帶 scripts/ 等輔助檔一起落地。
+    """
 
     name: str
     description: str
     body: str
     source: Path  # 權威 SKILL.md 的絕對路徑
+    kind: str = "workflow"
+
+    @property
+    def is_workflow(self) -> bool:
+        return self.kind == "workflow"
+
+    @property
+    def aux_files(self) -> list[Path]:
+        """skill 目錄內除 SKILL.md 外的所有檔（scripts/、NOTICE.md…），供 support skill 隨帶安裝。"""
+        skill_dir = self.source.parent
+        return [
+            p for p in sorted(skill_dir.rglob("*"))
+            if p.is_file() and p.name != "SKILL.md" and "__pycache__" not in p.parts
+        ]
 
     @property
     def text(self) -> str:
@@ -62,11 +83,15 @@ def _load_one(skill_dir: Path) -> Skill:
     description = meta.get("description")
     if not description:
         raise SkillError(f"skill \"{name}\" frontmatter missing description: {md}")
+    kind = str(meta.get("kind") or "workflow").strip().lower()
+    if kind not in ("workflow", "support"):
+        kind = "workflow"
     return Skill(
         name=str(name),
         description=_fold(str(description)),
         body=body.lstrip("\n"),
         source=md,
+        kind=kind,
     )
 
 

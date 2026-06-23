@@ -1,4 +1,4 @@
-# 字型授權與來源（docspec-cas export）
+# 字型授權與來源（docspec export 字型）
 
 `docspec setup` 從以下 OFL/開放來源下載字型到 `data_dir/fonts/`（每來源的 zip
 sha256 釘在 `src/dspx/commands/setup.py` 的 `_FONT_MANIFEST`，下載後 byte 級驗證）。

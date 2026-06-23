@@ -82,6 +82,8 @@ def run(argv: list[str]) -> int:
             "forest": proj.forest,
             "roadmap": proj.roadmap,
             "projectPurpose": proj.project_purpose,
+            "imageAssets": proj.image_assets,
+            "documentMap": proj.document_map,
         }, ensure_ascii=False, indent=2))
         return 0
 
@@ -133,6 +135,19 @@ def run(argv: list[str]) -> int:
                 print("  Other backlog:")
                 for e in other:
                     _r(e, f"  ({e.get('status')})")
+        print()
+
+    if proj.document_map:
+        print("── Document map (the whole article's sections in order — frame THIS section's role in the whole; do NOT read/name siblings' prose) ──")
+        for n in proj.document_map:
+            marker = " ◀ you are here" if n.get("section") == proj.section else ""
+            print(f"  [{n.get('order')}] {n.get('section')}  —  {n.get('role') or ''}{marker}")
+        print()
+
+    if proj.image_assets:
+        print("── Image assets (place ONLY these; reference as ![caption](<ref>) — never invent a path) ──")
+        for ref in proj.image_assets:
+            print(f"  {ref}")
         print()
 
     if proj.parent_briefs:

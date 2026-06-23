@@ -6,6 +6,7 @@ from dspx.commands import skills_cmd as skills_cmd
 from dspx.frontmatter import parse_frontmatter
 from dspx.skills import available_skills
 
+# 六個作者工作流 skill（裝成 skill＋command）
 _EXPECTED = {
     "dspx-develop",
     "dspx-draft",
@@ -14,13 +15,41 @@ _EXPECTED = {
     "dspx-publish",
     "dspx-release",
 }
+# support skill（subagent 載入、隨帶 scripts/、不產 command）
+_SUPPORT = {"dspx-diagram"}
 
 
 def test_available_skills_finds_all():
     names = {s.name for s in available_skills()}
-    assert names == _EXPECTED
+    assert names == _EXPECTED | _SUPPORT
     for s in available_skills():
         assert s.description  # 每個都有非空 description
+
+
+def test_workflow_vs_support_kind():
+    by_name = {s.name: s for s in available_skills()}
+    for name in _EXPECTED:
+        assert by_name[name].is_workflow, f"{name} should be a workflow skill"
+    for name in _SUPPORT:
+        assert not by_name[name].is_workflow, f"{name} should be a support skill"
+        assert by_name[name].kind == "support"
+
+
+def test_support_skill_ships_vendored_scripts():
+    diagram = next(s for s in available_skills() if s.name == "dspx-diagram")
+    aux_names = {p.name for p in diagram.aux_files}
+    assert {"validate.py", "encode_drawio_url.py", "NOTICE.md"} <= aux_names
+
+
+def test_install_support_skill_copies_scripts_no_command(tmp_path, monkeypatch):
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / ".codexhome"))
+    assert skills_cmd.run(["install", "--tool", "claude", "--path", str(tmp_path)]) == 0
+    skill_dir = tmp_path / ".claude" / "skills" / "dspx-diagram"
+    assert (skill_dir / "SKILL.md").is_file()
+    assert (skill_dir / "scripts" / "validate.py").is_file()
+    assert (skill_dir / "scripts" / "encode_drawio_url.py").is_file()
+    # support skill 不產 slash command
+    assert not (tmp_path / ".claude" / "commands" / "dspx" / "diagram.md").exists()
 
 
 def test_skills_list_returns_zero_and_lists_all(capsys):

@@ -17,6 +17,9 @@ build/
 .fontcache/
 docs/exports/
 
+# Agent worktrees / harness-local (machine-local, never committed)
+.claude/
+
 # Windows
 desktop.ini
 Thumbs.db

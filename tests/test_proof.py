@@ -3,7 +3,7 @@
 驗：頁數對、檔案產出、確定性（同 PDF 重渲產同檔）、版本/latest 對齊 export、
 找不到 PDF 的明確提示、pypdfium2 缺的 soft-dep 降級。
 
-PDF 來源＝export 的真產物（需 pandoc + 受控 TinyTeX(xelatex)，缺則 skip 重型測試）。
+PDF 來源＝export 的真產物（預設 Typst 軌，需 pandoc + 受控 typst + 字型，缺則 skip 重型測試）。
 不需要外部相依的測試（解析、降級、缺 PDF）一律可跑。
 """
 
@@ -17,8 +17,8 @@ from dspx.commands import proof as proof_cmd
 from dspx.layout import Layout
 
 _HAVE_PANDOC = export_cmd._pandoc_path() is not None
-# xelatex ＋ 受控字型皆備才能真 build PDF（字型已移出 wheel；未 setup → skip）。
-_HAVE_XELATEX = export_cmd._xelatex_path() is not None and paths.resolve_fonts_dir() is not None
+# 受控 typst ＋ 受控字型皆備才能真 build PDF（皆移出 wheel；未 setup → skip）。
+_HAVE_PDF = paths.resolve_typst() is not None and paths.resolve_fonts_dir() is not None
 _HAVE_PDFIUM = proof_cmd._have_pypdfium2()
 
 _SNAP = """# 校樣文件
@@ -46,7 +46,7 @@ def _setup(make_project, *, version: str = "1.0.0", article: str = "g"):
 
 
 def _export(layout, monkeypatch, home, *, latest: bool = False, article: str = "g"):
-    """跑真 export 產一份 PDF（需 pandoc+xelatex）。回 PDF 路徑。"""
+    """跑真 export 產一份 PDF（預設 Typst 軌，需 pandoc+typst+字型）。回 PDF 路徑。"""
     monkeypatch.chdir(home.parent)
     if latest:
         p = layout.docs_latest(article)
@@ -60,7 +60,7 @@ def _export(layout, monkeypatch, home, *, latest: bool = False, article: str = "
 
 # ── 渲圖：頁數對、檔案產出 ────────────────────────────────────────
 
-@pytest.mark.skipif(not (_HAVE_PANDOC and _HAVE_XELATEX), reason="proof 重型測試需要 pandoc+xelatex")
+@pytest.mark.skipif(not (_HAVE_PANDOC and _HAVE_PDF), reason="proof 重型測試需要 pandoc+typst+字型")
 @pytest.mark.skipif(not _HAVE_PDFIUM, reason="proof 需要 pypdfium2")
 def test_proof_renders_pages(make_project, monkeypatch, capsys):
     home, layout = _setup(make_project)
@@ -88,7 +88,7 @@ def test_proof_renders_pages(make_project, monkeypatch, capsys):
         doc.close()
 
 
-@pytest.mark.skipif(not (_HAVE_PANDOC and _HAVE_XELATEX), reason="proof 重型測試需要 pandoc+xelatex")
+@pytest.mark.skipif(not (_HAVE_PANDOC and _HAVE_PDF), reason="proof 重型測試需要 pandoc+typst+字型")
 @pytest.mark.skipif(not _HAVE_PDFIUM, reason="proof 需要 pypdfium2")
 def test_proof_deterministic(make_project, monkeypatch):
     """同 PDF 重渲 → 同 PNG bytes（確定性）；重渲清空舊頁、不累積。"""
@@ -105,7 +105,7 @@ def test_proof_deterministic(make_project, monkeypatch):
         assert first[name] == second[name], f"同 PDF 重渲 {name} 不一致"
 
 
-@pytest.mark.skipif(not (_HAVE_PANDOC and _HAVE_XELATEX), reason="proof 重型測試需要 pandoc+xelatex")
+@pytest.mark.skipif(not (_HAVE_PANDOC and _HAVE_PDF), reason="proof 重型測試需要 pandoc+typst+字型")
 @pytest.mark.skipif(not _HAVE_PDFIUM, reason="proof 需要 pypdfium2")
 def test_proof_output_never_in_archive(make_project, monkeypatch):
     home, layout = _setup(make_project)
@@ -116,7 +116,7 @@ def test_proof_output_never_in_archive(make_project, monkeypatch):
     assert "archive" not in out_dir.parts
 
 
-@pytest.mark.skipif(not (_HAVE_PANDOC and _HAVE_XELATEX), reason="proof 重型測試需要 pandoc+xelatex")
+@pytest.mark.skipif(not (_HAVE_PANDOC and _HAVE_PDF), reason="proof 重型測試需要 pandoc+typst+字型")
 @pytest.mark.skipif(not _HAVE_PDFIUM, reason="proof 需要 pypdfium2")
 def test_proof_latest(make_project, monkeypatch):
     home, layout = _setup(make_project)

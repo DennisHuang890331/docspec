@@ -76,6 +76,21 @@ _TABLE_SIZE_RANGE = (8.0, 14.0, "pt")     # 窄表內文字級（寬表＝此值
 _BASE_SIZE_RANGE = (10.0, 18.0, "pt")
 _LEADING_RANGE = (1.1, 1.6, "")
 
+# 標題字級階梯：由 base_size 確定性衍生的倍率（section / subsection / subsubsection），
+# 取代過去寫死的 17/15/14pt（那是內文 12pt 時代的值；內文升 14.5 後最深階 14 < 內文＝倒置）。
+# 倍率單調遞減保證 section > subsection > subsubsection；最深階 > base_size 的不變量由 validate
+# 把關（heading_scale 過低會破壞：base × 1.10 × hs > base 需 hs > 1/1.10 ≈ 0.909）。
+_HEADING_MULTIPLIERS = (1.45, 1.25, 1.10)
+_HEADING_LEADING = 1.2   # 標題 baselineskip = size × 此比
+
+
+def _heading_sizes(base_size: float, heading_scale: float) -> list[tuple[float, float]]:
+    r"""衍生標題字級階梯 [(size, baselineskip), …]＝base_size × 各倍率 × heading_scale。"""
+    return [
+        (base_size * m * heading_scale, base_size * m * heading_scale * _HEADING_LEADING)
+        for m in _HEADING_MULTIPLIERS
+    ]
+
 # 內文字級錨點：base_size 預設＝此值時，post-\maketitle 字級階梯與舊 before.tex 硬寫值
 # byte-identical（normalsize 14.5/18.3、small 13/16、footnotesize 12/14.5）。其餘 base_size
 # 等比例縮放整個階梯。★這是 C4 修正的核心：字級階梯必須在 \maketitle **之後**重定義
@@ -189,6 +204,17 @@ def validate_format_config(raw: Any, *, warn=None) -> dict:
     f["heading_scale"] = _check_number(
         "font", "heading_scale", f["heading_scale"], *_HEADING_SCALE_RANGE)
 
+    # ── 標題字級階梯不變量（防幻覺閘門的呈現層版本）：最深階仍須嚴格 > 內文。
+    #    單調遞減由固定倍率保證；只有 heading_scale 過低會使最深階 ≤ base_size。
+    deepest = _heading_sizes(f["base_size"], f["heading_scale"])[-1][0]
+    if deepest <= f["base_size"]:
+        need = 1.0 / _HEADING_MULTIPLIERS[-1]
+        raise FormatConfigError(
+            f"heading ladder inverts: deepest heading {deepest:.2f}pt <= body "
+            f"{f['base_size']:g}pt. font.heading_scale={f['heading_scale']:g} is too low "
+            f"for font.base_size={f['base_size']:g} (need heading_scale > {need:.3f})."
+        )
+
     # ── table ──
     t = out["table"]
     t["style"] = _check_enum("table", "style", t["style"], _TABLE_STYLES)
@@ -261,20 +287,22 @@ def compile_format_config(knobs: dict) -> str:
     lines.append(_cjk_font_decl("setCJKmainfont", f["cjk_body"], bold="fallback"))
     lines.append(_cjk_font_decl("setCJKsansfont", f["cjk_heading"], bold="fake"))
 
-    # ── 標題字級倍率 heading_scale（×preamble 基準 section 17 / ssection 15 / sssection 14pt）──
-    # cas 的 \sectionfont 等是 plain \def，preamble 已 \def 覆蓋；此處在 preamble *之後*再 \def
-    # 即生效。scale==1.0（預設）→ 不發任何東西＝byte-identical。
+    # ── 標題字級階梯（由 base_size 衍生 × heading_scale；無條件發射）──
+    # cas 的 \sectionfont 等是 plain \def（heading 時才讀、跨 \maketitle 存活），preamble 已 \def；
+    # 此處在 preamble *之後* 再 \def 即生效。一律發射＝format_config 成為標題字級唯一真相來源、
+    # 且不變量（最深階 > 內文，已於 validate 把關）在預設路徑也保證生效。
     hs = f["heading_scale"]
-    if abs(hs - 1.0) > 1e-9:
-        lines.append(f"% heading_scale = {hs:g}")
-        lines.append(
-            f"\\def\\sectionfont{{\\sffamily\\fontsize{{{17 * hs:g}pt}}{{{20 * hs:g}pt}}\\bfseries}}")
-        lines.append(
-            f"\\def\\ssectionfont{{\\sffamily\\fontsize{{{15 * hs:g}pt}}{{{18 * hs:g}pt}}"
-            "\\bfseries\\selectfont}")
-        lines.append(
-            f"\\def\\sssectionfont{{\\sffamily\\fontsize{{{14 * hs:g}pt}}{{{16 * hs:g}pt}}"
-            "\\fontseries{b}\\fontshape{it}\\selectfont}")
+    sec, ssec, sssec = _heading_sizes(f["base_size"], hs)
+    lines.append(
+        f"% heading ladder = base_size {f['base_size']:g}pt × {_HEADING_MULTIPLIERS} × heading_scale {hs:g}")
+    lines.append(
+        f"\\def\\sectionfont{{\\sffamily\\fontsize{{{sec[0]:.2f}pt}}{{{sec[1]:.2f}pt}}\\bfseries}}")
+    lines.append(
+        f"\\def\\ssectionfont{{\\sffamily\\fontsize{{{ssec[0]:.2f}pt}}{{{ssec[1]:.2f}pt}}"
+        "\\bfseries\\selectfont}")
+    lines.append(
+        f"\\def\\sssectionfont{{\\sffamily\\fontsize{{{sssec[0]:.2f}pt}}{{{sssec[1]:.2f}pt}}"
+        "\\fontseries{b}\\fontshape{it}\\selectfont}")
 
     # ── 行高 leading（base_size 字級階梯不在這裡：見下方說明）──
     # ★字級階梯（normalsize/small/footnotesize）**不**在 preamble 發——upstream cas-sc 在 \maketitle
@@ -350,6 +378,40 @@ def compile_postmaketitle_fonts(knobs: dict) -> str:
 def pandoc_highlight_style(knobs: dict) -> str:
     """回 pandoc `--syntax-highlighting=<style>` 要用的 style（已驗證、必在 enum 內）。"""
     return knobs["code"]["highlight"]
+
+
+# ── Typst 軌：已驗證旋鈕 → pandoc -V 模板變數（docspec-typst template 讀）─────────
+
+# Typst 軌目前由旋鈕控的子集（其餘＝模板統一預設）。font 字型旋鈕在 Typst 軌**不適用**
+# （house 已統一成思源宋體＋Source Serif 4、見模板）；table 樣式/版心/heading_scale → Typst
+# 參數化是後續 follow-up。
+_TYPST_KNOB_FOLLOWUPS = ("table.style/zebra/size", "page margin/preset", "font.heading_scale",
+                         "font.cjk_body/cjk_heading (moot: Typst house font is unified)")
+
+
+def compile_typst_vars(knobs: dict) -> list[str]:
+    r"""把**已驗證**旋鈕編成 pandoc `-V` 變數，餵給 docspec-typst 模板。
+
+    目前映射 Typst 軌支援的子集：
+      - font.base_size → `fontsize`（內文字級 pt；模板 `#set text(size:)`）。
+      - font.leading   → `leading`（LaTeX linespread 1.1–1.6 近似成 typst `par(leading:)` em）。
+    code.highlight 走 pandoc CLI `--syntax-highlighting`（與 LaTeX 軌同，不在此）。
+    其餘旋鈕（見 _TYPST_KNOB_FOLLOWUPS）目前用模板統一預設、不由旋鈕控。
+
+    ★Typst 軌 house body＝模板的 `$if(fontsize)$…$else$<TYPST 預設>$endif$` fallback（單欄 A4
+    適中字級）：base_size 的**專案預設**＝LaTeX cas-sc 的 14.5pt 錨點（_BODY_SIZE_ANCHOR），那是
+    為雙欄期刊 LaTeX 版心挑的、在 Typst 單欄 A4 上過大。故當 base_size 維持該 LaTeX 錨點預設時，
+    這裡**不**發 fontsize、讓 Typst 模板用自己的 house 預設；使用者一旦把 base_size 調成別的值
+    （真的想控 Typst 內文字級），就照常發。標題階梯是 em 相對、隨內文縮放，層級恆正確。
+    """
+    f = knobs["font"]
+    # linespread（baseline 倍率）→ typst leading（行間 gap）的工程近似：1.45→0.95em、1.1→0.6em、1.6→1.1em。
+    leading_em = max(0.5, f["leading"] - 0.5)
+    out: list[str] = ["-V", f"leading={leading_em:g}em"]
+    # base_size 仍是 LaTeX 錨點預設 → 交給 Typst 模板 house 預設（單欄 A4 不過大）；否則照旋鈕值發。
+    if f["base_size"] != _BODY_SIZE_ANCHOR:
+        out += ["-V", f"fontsize={f['base_size']:g}pt"]
+    return out
 
 
 def pandoc_table_metavars(knobs: dict) -> list[str]:

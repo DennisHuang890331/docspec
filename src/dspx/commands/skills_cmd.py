@@ -100,6 +100,18 @@ def _write(path: Path, content: str, *, force: bool, results: list[str]) -> None
     results.append(f"  + {verb}: {rel}")
 
 
+def _copy(src: Path, dst: Path, *, force: bool, results: list[str]) -> None:
+    """Copy a vendored aux file (script / NOTICE) verbatim, honoring skip/force."""
+    import shutil
+    if dst.exists() and not force:
+        results.append(f"  = exists, skipped: {dst} (use --force to overwrite)")
+        return
+    verb = "overwrote" if dst.exists() else "created"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(src, dst)
+    results.append(f"  + {verb}: {dst}")
+
+
 def _install(root: Path, tools: tuple[str, ...], force: bool) -> list[str]:
     skills = available_skills()
     if not skills:
@@ -109,25 +121,32 @@ def _install(root: Path, tools: tuple[str, ...], force: bool) -> list[str]:
     for tool in _TOOLS:
         if tool not in tools:
             continue
-        # 1) skill（自動載入 / Agent Skills 規格位置）
+        # 1) skill（自動載入 / Agent Skills 規格位置）。support skill（如 dspx-diagram）
+        #    隨帶其 scripts/ 等輔助檔一起落地——subagent 載入後要能跑 vendored scripts。
         results.append(f"[{tool}] skill → {_SKILLS_DIR[tool]}/skills/<name>/SKILL.md")
         for s in skills:
-            _write(_skill_path(root, tool, s), s.text, force=force, results=results)
-        # 2) command（原生 slash/workflow 叫用位置；照 OpenSpec delivery='both'）
+            skill_md = _skill_path(root, tool, s)
+            _write(skill_md, s.text, force=force, results=results)
+            for aux in s.aux_files:
+                rel = aux.relative_to(s.source.parent)
+                _copy(aux, skill_md.parent / rel, force=force, results=results)
+        # 2) command（原生 slash/workflow 叫用位置；照 OpenSpec delivery='both'）。
+        #    只給 workflow skill 產 command——support skill 由 subagent 載入、非人顯式叫用的階段。
+        workflow_skills = [s for s in skills if s.is_workflow]
         if tool == "claude":
             results.append("[claude] command → .claude/commands/dspx/<id>.md (slash /dspx:<id>)")
-            for s in skills:
+            for s in workflow_skills:
                 _write(_claude_command_path(root, s),
                        _claude_command_body(s), force=force, results=results)
         elif tool == "antigravity":
             results.append("[antigravity] command → .agent/workflows/<name>.md (native invocation)")
-            for s in skills:
+            for s in workflow_skills:
                 _write(_antigravity_workflow_path(root, s),
                        _antigravity_workflow_body(s), force=force, results=results)
         elif tool == "codex":
             results.append(
                 f"[codex] command → {_codex_home()}/prompts/dspx-<id>.md (⚠️ global; slash /dspx-<id>)")
-            for s in skills:
+            for s in workflow_skills:
                 _write(_codex_prompt_path(s),
                        _codex_prompt_body(s), force=force, results=results)
         # 3) hook（凍結區守門；擋改 archive/。Claude 已驗證格式，其餘見 README/說明）

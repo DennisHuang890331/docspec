@@ -1,7 +1,8 @@
 """docspec export：byte-lock（內容只動呈現）、soft-dep 降級、輸出路徑、凍結快照輸入。
 
-Phase C 定版＝docspec-cas 單欄 class（改自 Elsevier cas-sc）+ 受控 TinyTeX(xelatex)（typst/docx 路已退場）。
-軟相依：pandoc（系統或 pypandoc_binary）＋ xelatex（受控 TinyTeX；DOCSPEC_TINYTEX/dev /tmp/ttx）。
+預設 render 軌＝Typst（受控 typst binary + docspec-typst 模板；LaTeX/docspec-cas 軌已退場）。
+journal 軌＝BYO emit-only（pandoc --template=<journal> → .tex，不編譯）。
+軟相依：pandoc（系統或 pypandoc_binary）＋ typst（受控；DOCSPEC_TYPST/系統 PATH）＋受控字型。
 缺工具的轉檔斷言 skip。byte-lock 證明＝抽回 PDF 文字後與源快照做 **content-token 多重集** 比對
 （NFC＋只留拉丁詞/個別 CJK 字/數字），對表格重排穩健、又能抓出任何內容增刪。
 """
@@ -15,9 +16,9 @@ from dspx.commands import export as export_cmd
 from dspx.layout import Layout
 
 _HAVE_PANDOC = export_cmd._pandoc_path() is not None
-# 受控 TinyTeX(xelatex) ＋ 受控字型（data_dir/fonts 或 dev 後備）皆備才跑 PDF build。
-# 字型已移出 wheel：fresh 環境未跑 `docspec setup` 時 skip（非 fail）。
-_HAVE_XELATEX = export_cmd._xelatex_path() is not None and paths.resolve_fonts_dir() is not None
+# 受控 typst ＋ 受控字型（data_dir/fonts）皆備才跑真 PDF build（預設 Typst 軌）。
+# 字型/typst 已移出 wheel：fresh 環境未跑 `docspec setup` 時 skip（非 fail）。
+_HAVE_PDF = paths.resolve_typst() is not None and paths.resolve_fonts_dir() is not None
 pytestmark = pytest.mark.skipif(not _HAVE_PANDOC, reason="export 需要 pandoc")
 
 # 中文＋英文＋數字＋表格的定稿快照（含 byte-lock 驗收關鍵 token；首行 H1＝文件標題）
@@ -49,12 +50,12 @@ def _setup(make_project, body: str = _SNAP, *, version: str = "1.0.0", article: 
     return home, layout
 
 
-# ── 標題抽取（H1 → \title，移出正文）──────────────────────────────
+# ── 標題抽取（H1 → 標題 slot，移出正文）──────────────────────────────
 
 def test_split_title_body_extracts_h1():
     title, body = export_cmd._split_title_body(_SNAP, fallback_title="g")
     assert title == "概覽文件"
-    # H1 行不再出現在正文（避免與 before.tex \title 重複）
+    # H1 行不再出現在正文（避免與模板的標題 slot 重複）
     assert "# 概覽文件" not in body
     # 其餘內容保留
     assert "限流保護後端" in body and "## 細節" in body
@@ -70,12 +71,12 @@ def test_split_title_body_strips_frontmatter_and_falls_back():
 # ── byte-lock（PDF）───────────────────────────────────────────────
 
 def test_export_pdf_byte_lock_cjk(make_project, monkeypatch):
-    if not _HAVE_XELATEX:
-        pytest.skip("PDF 需要受控 TinyTeX(xelatex)")
+    if not _HAVE_PDF:
+        pytest.skip("PDF 需要受控 typst＋字型（docspec setup）")
     pdfplumber = pytest.importorskip("pdfplumber")
     home, layout = _setup(make_project)
     monkeypatch.chdir(home.parent)
-    assert export_cmd.run(["g", "--format", "pdf"]) == 0
+    assert export_cmd.run(["g", "--format", "pdf"]) == 0   # 預設 Typst 軌
     out = layout.docs_export("g", "1.0.0", "pdf")
     assert out.is_file()
     with pdfplumber.open(str(out)) as pdf:
@@ -92,23 +93,20 @@ def test_export_pdf_byte_lock_cjk(make_project, monkeypatch):
 
 # ── soft-dep 降級 ─────────────────────────────────────────────────
 
-def test_export_degrades_when_xelatex_missing(make_project, monkeypatch, capsys):
+def test_export_latex_engine_retired(make_project, monkeypatch, capsys):
+    # LaTeX/xelatex 軌（docspec-cas LPPL 包）已退場 → 明確報錯、回 1、導向 typst/journal
     home, layout = _setup(make_project)
     monkeypatch.chdir(home.parent)
-    monkeypatch.setattr(export_cmd, "_xelatex_path", lambda: None)
-    # 缺 xelatex → 不 crash、回 1、印安裝指引、不留半成品 PDF
-    assert export_cmd.run(["g", "--format", "pdf"]) == 1
+    assert export_cmd.run(["g", "--format", "pdf", "--engine", "latex"]) == 1
     assert not layout.docs_export("g", "1.0.0", "pdf").is_file()
     err = capsys.readouterr().err
-    # 模型 A：缺排版引擎 → 明確叫跑 `docspec setup`（一次性下載受控引擎＋字型）
-    assert "TinyTeX" in err and "docspec setup" in err
+    assert "retired" in err and "--engine typst" in err
 
 
 def test_export_degrades_when_fonts_missing(make_project, monkeypatch, capsys):
     home, layout = _setup(make_project)
     monkeypatch.chdir(home.parent)
-    # 引擎在、但受控字型缺 → 模型 A 明確叫跑 `docspec setup`、回 1、不留半成品
-    monkeypatch.setattr(export_cmd, "_xelatex_path", lambda: paths.Path("xelatex"))
+    # 受控字型缺（Typst 軌）→ 模型 A 明確叫跑 `docspec setup`、回 1、不留半成品
     monkeypatch.setattr(export_cmd, "_pandoc_path", lambda: "pandoc")
     monkeypatch.setattr(paths, "resolve_fonts_dir", lambda *a, **k: None)
     assert export_cmd.run(["g", "--format", "pdf"]) == 1
@@ -142,8 +140,8 @@ def test_pandoc_from_disables_citations():
 # ── 輸出路徑：絕不在 archive 下 ───────────────────────────────────
 
 def test_export_output_never_in_archive(make_project, monkeypatch):
-    if not _HAVE_XELATEX:
-        pytest.skip("PDF 需要受控 TinyTeX(xelatex)")
+    if not _HAVE_PDF:
+        pytest.skip("PDF 需要受控 typst＋字型（docspec setup）")
     home, layout = _setup(make_project)
     monkeypatch.chdir(home.parent)
     export_cmd.run(["g", "--format", "pdf"])
@@ -213,6 +211,28 @@ def test_lint_ve2_mpe_import(make_project):
     assert [f for f in findings if f.rule == "Ve2"]
 
 
+def test_lint_ve3_mermaid_flagged(make_project):
+    from dspx.lint import _lint_export_safety
+    home = make_project()
+    layout = Layout(home, "per-article")
+    _write_latest(layout, "g",
+        "# 文件\n\n## 圖\n\n```mermaid\nflowchart TB\n  A --> B\n```\n\n內容。\n")
+    findings = _lint_export_safety(layout, ["g"])
+    ve3 = [f for f in findings if f.rule == "Ve3"]
+    assert len(ve3) == 1 and "embedded image" in ve3[0].detail
+
+
+def test_lint_ve3_raw_latex_tikz_flagged(make_project):
+    from dspx.lint import _lint_export_safety
+    home = make_project()
+    layout = Layout(home, "per-article")
+    # raw `{=latex}` (舊 TikZ 寫法) 現在非 backend-neutral → Ve3 應 flag（預設 Typst 軌會剝掉）
+    _write_latest(layout, "g",
+        "# 文件\n\n## 圖\n\n```{=latex}\n\\begin{center}\\begin{tikzpicture}\\node{A};\\end{tikzpicture}\\end{center}\n```\n\n內容。\n")
+    ve3 = [f for f in _lint_export_safety(layout, ["g"]) if f.rule == "Ve3"]
+    assert len(ve3) == 1 and "backend-neutral" in ve3[0].detail
+
+
 def test_lint_ve_clean_doc_no_findings(make_project):
     from dspx.lint import _lint_export_safety
     home = make_project()
@@ -223,8 +243,8 @@ def test_lint_ve_clean_doc_no_findings(make_project):
 
 
 def test_export_latest_preview(make_project, monkeypatch):
-    if not _HAVE_XELATEX:
-        pytest.skip("PDF 需要受控 TinyTeX(xelatex)")
+    if not _HAVE_PDF:
+        pytest.skip("PDF 需要受控 typst＋字型（docspec setup）")
     home, layout = _setup(make_project)
     latest = layout.docs_latest("g")
     latest.parent.mkdir(parents=True, exist_ok=True)
@@ -234,117 +254,134 @@ def test_export_latest_preview(make_project, monkeypatch):
     assert layout.docs_export("g", "latest", "pdf").is_file()
 
 
-# ── mermaid 區塊 → 可見佔位框（lua filter；不再 dump 成原始碼）────────────
+# ── 圖片資產：export 把被引用的 assets/<file> copy 進 build dir（嵌圖才渲得出）──────
 
-def _pandoc_to_latex(body_md: str) -> str:
-    """跑真 pandoc＋隨包 docspec-tables.lua，回產出的 LaTeX 片段（不需 xelatex）。
-
-    驗 lua filter 的 CodeBlock(mermaid) handler：mermaid → tcolorbox 佔位框、
-    一般 code block 不被攔（維持 pandoc Shaded/verbatim 行為）。
-    """
-    import shutil
-    import subprocess
-    import tempfile
-    from pathlib import Path
-
-    pandoc = export_cmd._pandoc_path()
-    tdir = export_cmd._template_dir()
-    assert tdir is not None, "找不到隨包 docspec-cas 模板"
-    with tempfile.TemporaryDirectory(prefix="dspx_lua_") as td:
-        build = Path(td)
-        shutil.copy2(tdir / "docspec-tables.lua", build / "docspec-tables.lua")
-        (build / "doc.md").write_text(body_md, encoding="utf-8")
-        out = subprocess.run(
-            [pandoc, "doc.md", "-f", export_cmd._PANDOC_FROM, "-t", "latex",
-             "--syntax-highlighting=tango",
-             "--lua-filter=docspec-tables.lua", "-o", "doc.tex"],
-            cwd=str(build), check=True, capture_output=True, text=True,
-        )
-        _ = out
-        return (build / "doc.tex").read_text(encoding="utf-8")
+def _setup_with_asset(make_project, write_leaf):
+    """建一個帶圖片資產的最小專案：corpus 末節 + assets/diagram.svg + 引用它的快照。"""
+    home = make_project()
+    write_leaf(home, "art/intro", concept={"concept": "art/intro"})
+    leaf = home / "corpus" / "art" / "intro"
+    (leaf / "assets").mkdir(exist_ok=True)
+    (leaf / "assets" / "diagram.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"></svg>', encoding="utf-8")
+    layout = Layout(home, "per-article")
+    snap = layout.docs_snapshot("art", "1.0.0")
+    snap.parent.mkdir(parents=True, exist_ok=True)
+    snap.write_text("# 標題\n\n內文。\n\n![圖](assets/diagram.svg)\n", encoding="utf-8")
+    return home, layout
 
 
-def test_mermaid_block_becomes_visible_placeholder():
-    """mermaid code block → tcolorbox 佔位框（含標籤＋\\footnotesize 收原始碼），
-    不再整塊 dump 成原始碼 verbatim。"""
-    md = (
-        "## 圖\n\n"
-        "```mermaid\n"
-        "stateDiagram-v2\n"
-        "    [*] --> 離線\n"
-        "    離線 --> 上線: 連線成功\n"
-        "```\n"
-    )
-    tex = _pandoc_to_latex(md)
-    # 渲成佔位框（tcolorbox）＋醒目標籤，而非 pandoc 預設的 Shaded/Highlighting/verbatim。
-    assert "\\begin{tcolorbox}" in tex
-    assert "Mermaid 圖" in tex and "release 時由 agent 轉 TikZ" in tex
-    # mermaid 原始碼仍可見（收在框內 Verbatim 小字、供 agent 翻譯時讀）
-    assert "stateDiagram-v2" in tex
-    # 沒有被當成語法高亮 code（pandoc 的 Highlighting/Shaded 環境）
-    assert "Highlighting" not in tex
+def test_collect_referenced_assets_maps_refs(make_project, write_leaf, monkeypatch):
+    home, layout = _setup_with_asset(make_project, write_leaf)
+    monkeypatch.chdir(home.parent)
+    body = "![圖](assets/diagram.svg)\n\n![缺](assets/missing.svg)\n"
+    found = export_cmd._collect_referenced_assets(layout, "art", body)
+    assert "assets/diagram.svg" in found and found["assets/diagram.svg"].is_file()
+    assert "assets/missing.svg" not in found  # 不存在的不收（check ⑨ 會擋斷引用）
 
 
-def test_non_mermaid_codeblock_unaffected():
-    """一般語言 code block 不被 mermaid handler 攔——維持 pandoc 既有渲染
-    （Shaded/Highlighting 語法高亮），絕不變成佔位框。"""
-    md = (
-        "## 程式\n\n"
-        "```python\n"
-        "def f(x):\n"
-        "    return x + 1\n"
-        "```\n"
-    )
-    tex = _pandoc_to_latex(md)
-    # python code 走 pandoc 既有路徑：有語法高亮環境、無 mermaid 佔位框
-    assert "tcolorbox" not in tex
-    assert "Mermaid 圖" not in tex
-    assert ("Highlighting" in tex) or ("Shaded" in tex) or ("verbatim" in tex.lower())
+def test_copy_assets_into_build(tmp_path):
+    src = tmp_path / "src.svg"
+    src.write_text("<svg/>", encoding="utf-8")
+    build = tmp_path / "build"
+    build.mkdir()
+    export_cmd._copy_assets_into(build, {"assets/x.svg": src})
+    assert (build / "assets" / "x.svg").is_file()
+
+
+def test_typst_export_embeds_image(make_project, write_leaf, monkeypatch):
+    if paths.resolve_typst() is None:
+        pytest.skip("Typst 軌嵌圖端到端需要受控 typst（docspec setup）")
+    if paths.resolve_fonts_dir() is None:
+        pytest.skip("Typst 軌需要受控字型")
+    home, layout = _setup_with_asset(make_project, write_leaf)
+    monkeypatch.chdir(home.parent)
+    # 若圖沒被 copy 進 build，typst compile 會找不到圖而失敗 → rc!=0
+    assert export_cmd.run(["art", "--engine", "typst"]) == 0
+    assert layout.docs_export("art", "1.0.0", "pdf").is_file()
+
+
+# ── journal 軌（BYO LaTeX、emit-only：pandoc --template=<journal> → .tex，不編譯）──────
+
+def test_journal_emit_ieee(make_project, monkeypatch, tmp_path):
+    home, layout = _setup(make_project)
+    slots = tmp_path / "slots.yaml"
+    slots.write_text(
+        "authors:\n  - name: Ada\n    affiliation: Lab\nabstract: An abstract.\n"
+        "keywords:\n  - alpha\n  - beta\n", encoding="utf-8")
+    monkeypatch.chdir(home.parent)
+    assert export_cmd.run(["g", "--engine", "journal", "--journal", "ieee",
+                           "--slots", str(slots)]) == 0
+    out = layout.docs_export("g", "1.0.0", "tex")
+    assert out.is_file()
+    tex = out.read_text(encoding="utf-8")
+    assert "\\documentclass[journal]{IEEEtran}" in tex
+    assert "概覽文件" in tex                       # title slot (derived from H1)
+    assert "An abstract." in tex                     # abstract slot
+    assert "alpha, beta" in tex                       # keywords list joined
+    assert "Ada" in tex                               # author
+    # 不應產出 PDF（emit-only）
+    assert not layout.docs_export("g", "1.0.0", "pdf").is_file()
+
+
+def test_journal_implied_by_journal_flag(make_project, monkeypatch):
+    home, layout = _setup(make_project)
+    monkeypatch.chdir(home.parent)
+    # 給 --journal 但不給 --engine → 隱含 journal 軌
+    assert export_cmd.run(["g", "--journal", "elsevier"]) == 0
+    tex = layout.docs_export("g", "1.0.0", "tex").read_text(encoding="utf-8")
+    assert "{cas-dc}" in tex
+
+
+def test_journal_iet_adapter(make_project, monkeypatch):
+    home, layout = _setup(make_project)
+    monkeypatch.chdir(home.parent)
+    assert export_cmd.run(["g", "--journal", "iet"]) == 0
+    tex = layout.docs_export("g", "1.0.0", "tex").read_text(encoding="utf-8")
+    assert "{cta-author}" in tex
+
+
+def test_journal_table_filter_avoids_longtable(make_project, monkeypatch):
+    """兩欄期刊 class 拒 longtable → journal 軌的 Lua filter 必須把表格改寫成 tabular。"""
+    home, layout = _setup(make_project)  # _SNAP 內含一個 markdown 表格
+    monkeypatch.chdir(home.parent)
+    assert export_cmd.run(["g", "--journal", "ieee"]) == 0
+    tex = layout.docs_export("g", "1.0.0", "tex").read_text(encoding="utf-8")
+    assert "\\begin{longtable}" not in tex   # 環境（非 \usepackage{longtable}）不該出現
+    assert "\\begin{tabular}" in tex
+
+
+def test_journal_unknown_slot_value_fails(make_project, monkeypatch, tmp_path):
+    home, layout = _setup(make_project)
+    slots = tmp_path / "slots.yaml"
+    slots.write_text("bogus_slot: x\n", encoding="utf-8")
+    monkeypatch.chdir(home.parent)
+    rc = export_cmd.run(["g", "--engine", "journal", "--journal", "ieee", "--slots", str(slots)])
+    assert rc == 1
+    assert not layout.docs_export("g", "1.0.0", "tex").is_file()
+
+
+def test_journal_missing_template_errors(make_project, monkeypatch):
+    home, _ = _setup(make_project)
+    monkeypatch.chdir(home.parent)
+    # engine journal 但沒給 --journal/--template → 報錯非零
+    assert export_cmd.run(["g", "--engine", "journal"]) == 1
+
+
+def test_journal_byo_template_dir(make_project, monkeypatch, tmp_path):
+    home, layout = _setup(make_project)
+    pack = tmp_path / "myjournal"
+    pack.mkdir()
+    (pack / "template.tex").write_text(
+        "\\documentclass{article}\n\\title{$title$}\n\\begin{document}\n"
+        "\\maketitle\n$body$\n\\end{document}\n", encoding="utf-8")
+    monkeypatch.chdir(home.parent)
+    assert export_cmd.run(["g", "--engine", "journal", "--template", str(pack)]) == 0
+    tex = layout.docs_export("g", "1.0.0", "tex").read_text(encoding="utf-8")
+    assert "\\documentclass{article}" in tex and "概覽文件" in tex
 
 
 # ── #1 --template / --fonts 旗標：解析、覆寫生效、缺檔報錯 ─────────────
-
-def _copy_bundled_template(dst):
-    """把內建 docspec-cas 模板包整夾 copy 到 dst（供 --template 覆寫測試當「使用者模板包」）。"""
-    import shutil
-    src = paths.bundled_template_dir()
-    assert src is not None
-    shutil.copytree(str(src), str(dst))
-    return dst
-
-
-def test_resolve_template_override_used_when_given(tmp_path):
-    # 給合法的使用者模板包夾（複製內建、結構齊全）→ 解析回該夾、不退回內建
-    user_tpl = _copy_bundled_template(tmp_path / "myjournal")
-    got = paths.resolve_template_dir(str(user_tpl))
-    assert got == user_tpl
-    # 不給 → 退回內建
-    assert paths.resolve_template_dir(None) == paths.bundled_template_dir()
-
-
-def test_resolve_template_override_missing_dir_errors(tmp_path):
-    with pytest.raises(paths.AssetError) as ei:
-        paths.resolve_template_dir(str(tmp_path / "nope"))
-    assert "does not exist" in str(ei.value)
-
-
-def test_resolve_template_override_missing_file_errors(tmp_path):
-    # 結構不完整（缺 preamble.tex）→ AssetError 列出缺檔
-    user_tpl = _copy_bundled_template(tmp_path / "broken")
-    (user_tpl / "preamble.tex").unlink()
-    with pytest.raises(paths.AssetError) as ei:
-        paths.resolve_template_dir(str(user_tpl))
-    assert "preamble.tex" in str(ei.value)
-
-
-def test_resolve_template_override_missing_pandoc_data_dir_errors(tmp_path):
-    import shutil
-    user_tpl = _copy_bundled_template(tmp_path / "nodata")
-    shutil.rmtree(str(user_tpl / "pandoc-data"))
-    with pytest.raises(paths.AssetError) as ei:
-        paths.resolve_template_dir(str(user_tpl))
-    assert "pandoc-data" in str(ei.value)
-
 
 def _make_fonts_dir(dst):
     """造一個含全部必要字型檔名的夾（內容為空 stub；只測解析/覆寫，不真渲染）。"""
@@ -374,22 +411,20 @@ def test_resolve_fonts_override_missing_font_errors(tmp_path):
 
 
 def test_export_template_flag_missing_dir_errors(make_project, monkeypatch, capsys):
-    """export --template 指不存在的夾 → 清楚報錯、非零、不 crash（不需 xelatex/pandoc）。"""
+    """export --template 指不存在的夾（隱含 journal 軌）→ 清楚報錯、非零、不 crash。"""
     home, _ = _setup(make_project)
     monkeypatch.chdir(home.parent)
     monkeypatch.setattr(export_cmd, "_pandoc_path", lambda: "pandoc")
-    monkeypatch.setattr(export_cmd, "_xelatex_path", lambda: paths.Path("xelatex"))
-    rc = export_cmd.run(["g", "--format", "pdf", "--template", str(home / "missing_tpl")])
+    rc = export_cmd.run(["g", "--template", str(home / "missing_tpl")])
     assert rc == 1
-    assert "does not exist" in capsys.readouterr().err
+    assert "journal template not found" in capsys.readouterr().err
 
 
 def test_export_fonts_flag_missing_font_errors(make_project, monkeypatch, capsys, tmp_path):
-    """export --fonts 指缺字型的夾 → 清楚報錯、非零、不 crash。"""
+    """export --fonts 指缺字型的夾（Typst 軌）→ 清楚報錯、非零、不 crash。"""
     home, _ = _setup(make_project)
     monkeypatch.chdir(home.parent)
     monkeypatch.setattr(export_cmd, "_pandoc_path", lambda: "pandoc")
-    monkeypatch.setattr(export_cmd, "_xelatex_path", lambda: paths.Path("xelatex"))
     partial = _make_fonts_dir(tmp_path / "partial")
     (partial / paths.REQUIRED_FONT_FILES[0]).unlink()
     rc = export_cmd.run(["g", "--format", "pdf", "--fonts", str(partial)])
@@ -399,9 +434,9 @@ def test_export_fonts_flag_missing_font_errors(make_project, monkeypatch, capsys
 
 
 def test_export_fonts_flag_overrides_build(make_project, monkeypatch):
-    """--fonts 真的把使用者字型夾餵進 build：攔 _build_pdf 斷言 fonts_src＝給的夾。"""
-    if not _HAVE_XELATEX:
-        pytest.skip("PDF 需要受控 TinyTeX(xelatex)")
+    """--fonts 真的把使用者字型夾餵進 build（Typst 軌）：攔 _build_pdf_typst 斷言 fonts_src＝給的夾。"""
+    if not _HAVE_PDF:
+        pytest.skip("PDF 需要受控 typst＋字型（docspec setup）")
     home, layout = _setup(make_project)
     monkeypatch.chdir(home.parent)
     # 用真字型夾複製出一份當「使用者字型夾」，確保 build 能成
@@ -412,18 +447,15 @@ def test_export_fonts_flag_overrides_build(make_project, monkeypatch):
     shutil.copytree(str(real_fonts), str(user_fonts))
 
     seen = {}
-    orig = export_cmd._build_pdf
+    orig = export_cmd._build_pdf_typst
 
-    def spy(pandoc, xelatex, template_dir, fonts_src, title, body_md, out, **kw):
+    def spy(pandoc, typst, typst_template, fonts_src, title, body_md, out, **kw):
         seen["fonts_src"] = fonts_src
-        seen["template_dir"] = template_dir
-        return orig(pandoc, xelatex, template_dir, fonts_src, title, body_md, out, **kw)
+        return orig(pandoc, typst, typst_template, fonts_src, title, body_md, out, **kw)
 
-    monkeypatch.setattr(export_cmd, "_build_pdf", spy)
+    monkeypatch.setattr(export_cmd, "_build_pdf_typst", spy)
     assert export_cmd.run(["g", "--format", "pdf", "--fonts", str(user_fonts)]) == 0
     assert seen["fonts_src"] == user_fonts
-    # 沒給 --template → 仍用內建
-    assert seen["template_dir"] == paths.bundled_template_dir()
 
 
 # ── #3 export runtime byte-lock 驗證 ──────────────────────────────────
@@ -543,8 +575,8 @@ def test_verify_byte_lock_soft_dep_when_pdfplumber_missing(monkeypatch, capsys):
 
 def test_export_no_verify_skips_check(make_project, monkeypatch):
     """--no-verify → 不呼叫 _verify_byte_lock（即使一致也跳過）。"""
-    if not _HAVE_XELATEX:
-        pytest.skip("PDF 需要受控 TinyTeX(xelatex)")
+    if not _HAVE_PDF:
+        pytest.skip("PDF 需要受控 typst＋字型（docspec setup）")
     home, layout = _setup(make_project)
     monkeypatch.chdir(home.parent)
     called = {"n": 0}
@@ -557,8 +589,8 @@ def test_export_no_verify_skips_check(make_project, monkeypatch):
 
 def test_export_verify_red_returns_nonzero(make_project, monkeypatch):
     """預設驗：_verify_byte_lock 回非零（內容被動到）→ export 回非零。"""
-    if not _HAVE_XELATEX:
-        pytest.skip("PDF 需要受控 TinyTeX(xelatex)")
+    if not _HAVE_PDF:
+        pytest.skip("PDF 需要受控 typst＋字型（docspec setup）")
     home, layout = _setup(make_project)
     monkeypatch.chdir(home.parent)
     monkeypatch.setattr(export_cmd, "_verify_byte_lock", lambda *a, **k: 1)
@@ -568,10 +600,10 @@ def test_export_verify_red_returns_nonzero(make_project, monkeypatch):
 # ── C2 逃生口 gate：內建模板包竄改偵測 ────────────────────────────────
 
 def _stub_pack(tmp_path):
+    # 模型化現行內建包＝Typst pack（單一 template.typ；docspec-cas 的 preamble/before.tex 已退場）。
     pack = tmp_path / "pack"
     pack.mkdir()
-    (pack / "preamble.tex").write_text("base content", encoding="utf-8")
-    (pack / "before.tex").write_text("title block", encoding="utf-8")
+    (pack / "template.typ").write_text("base content", encoding="utf-8")
     (pack / "fonts").mkdir()
     (pack / "fonts" / "x.ttf").write_text("not hashed", encoding="utf-8")
     import json
@@ -587,21 +619,21 @@ def test_pack_integrity_clean_passes(tmp_path):
 
 def test_pack_integrity_tampered_refused(tmp_path, capsys):
     pack = _stub_pack(tmp_path)
-    (pack / "preamble.tex").write_text("HAND EDITED", encoding="utf-8")
+    (pack / "template.typ").write_text("HAND EDITED", encoding="utf-8")
     assert export_cmd._check_pack_integrity(pack, is_bundled=True, allow=False) == 1
     err = capsys.readouterr().err
-    assert "preamble.tex" in err and "hand-edited" in err
+    assert "template.typ" in err and "hand-edited" in err
 
 
 def test_pack_integrity_allow_overrides(tmp_path):
     pack = _stub_pack(tmp_path)
-    (pack / "preamble.tex").write_text("HAND EDITED", encoding="utf-8")
+    (pack / "template.typ").write_text("HAND EDITED", encoding="utf-8")
     assert export_cmd._check_pack_integrity(pack, is_bundled=True, allow=True) == 0
 
 
 def test_pack_integrity_user_template_skips_gate(tmp_path):
     pack = _stub_pack(tmp_path)
-    (pack / "preamble.tex").write_text("HAND EDITED", encoding="utf-8")
+    (pack / "template.typ").write_text("HAND EDITED", encoding="utf-8")
     # --template 自有包（is_bundled=False）：合法替換、不設限
     assert export_cmd._check_pack_integrity(pack, is_bundled=False, allow=False) == 0
 
@@ -620,12 +652,56 @@ def test_pack_integrity_no_baseline_passes(tmp_path, capsys):
     assert "integrity baseline" in capsys.readouterr().err
 
 
-def test_bundled_pack_matches_its_shipped_baseline():
-    """★關鍵：隨 wheel 出貨的內建包，其 live 內容必須對得上自帶的 .pack-hashes.json
-    （否則一安裝就被 gate 擋；也抓 wheel 漏帶 dotfile / 基線過期）。"""
-    pack = paths.bundled_template_dir()
+def test_bundled_typst_pack_matches_its_shipped_baseline():
+    """★關鍵：Typst 內建包（template.typ）live 內容必須對得上自帶的 .pack-hashes.json。
+    改了 template.typ 要重跑 tools/gen_pack_hashes.py。"""
+    pack = paths.bundled_typst_template_dir()
     assert pack is not None
     baseline = paths.read_pack_baseline(pack)
-    assert baseline is not None, "wheel 未帶 .pack-hashes.json（dotfile 被打包工具吃掉？）"
+    assert baseline is not None, "Typst pack 未帶 .pack-hashes.json（dotfile 被打包工具吃掉？）"
     live = paths.pack_content_hashes(pack)
-    assert live == baseline, "內建包內容與基線不符——改了包要重跑 tools/gen_pack_hashes.py"
+    assert live == baseline, "Typst 內建包內容與基線不符——改了 template.typ 要重跑 tools/gen_pack_hashes.py"
+
+
+# ── Typst 軌（Stage B：typst-default-dual-track-rendering）─────────────
+
+_HAVE_TYPST = paths.resolve_typst() is not None
+
+
+def test_strip_raw_latex_removes_tikz_blocks():
+    md = "前文\n\n```{=latex}\n\\begin{tikzpicture}調度層\\end{tikzpicture}\n```\n\n後文"
+    out = export_cmd._strip_raw_latex(md)
+    assert "tikzpicture" not in out and "調度層" not in out
+    assert "前文" in out and "後文" in out
+
+
+def test_bundled_typst_template_exists():
+    d = paths.bundled_typst_template_dir()
+    assert d is not None and (d / "template.typ").is_file()
+
+
+def test_resolve_typst_honors_env(monkeypatch, tmp_path):
+    fake = tmp_path / ("typst.exe" if paths.os.name == "nt" else "typst")
+    fake.write_text("", encoding="utf-8")
+    monkeypatch.setenv("DOCSPEC_TYPST", str(fake))
+    assert paths.resolve_typst() == str(fake)
+
+
+def test_export_typst_degrades_when_typst_missing(make_project, monkeypatch, capsys):
+    home, _ = _setup(make_project)
+    monkeypatch.chdir(home.parent)
+    monkeypatch.setattr(export_cmd._pandoc_path.__module__ + ".paths", paths, raising=False)
+    monkeypatch.setattr(paths, "resolve_typst", lambda: None)
+    monkeypatch.setattr(paths, "resolve_fonts_dir", lambda *a, **k: paths.Path("fonts"))
+    assert export_cmd.run(["g", "--engine", "typst"]) == 1
+    assert "typst not found" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(not _HAVE_TYPST, reason="Typst 軌端到端需要 typst binary（設 DOCSPEC_TYPST）")
+def test_export_typst_produces_pdf(make_project, monkeypatch):
+    if paths.resolve_fonts_dir() is None:
+        pytest.skip("需要受控字型（docspec setup）")
+    home, layout = _setup(make_project)
+    monkeypatch.chdir(home.parent)
+    assert export_cmd.run(["g", "--engine", "typst"]) == 0
+    assert layout.docs_export("g", "1.0.0", "pdf").is_file()

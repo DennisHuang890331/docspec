@@ -16,7 +16,7 @@ import yaml
 from dspx.forest import forest_view
 from dspx.glossary import load_glossary
 from dspx.layout import Layout
-from dspx.model import Leaf, decision_index, realized_statements
+from dspx.model import ASSET_DIR_NAME, Leaf, decision_index, realized_statements
 from dspx.schema import Schema
 
 # draft 讀 concept 的准投欄位（治理欄 realizes 不投）
@@ -45,6 +45,8 @@ class Projection:
     forest: dict | None = None                    # 森林地圖（derive；只投 develop）：documents/hierarchy/parallel
     roadmap: list | None = None                   # 待辦 backlog（derive；只投 develop）：本文件＋forest 的 open/doing entry
     project_purpose: str | None = None            # config.purpose（森林整體目標；只投 develop 開工脈絡）
+    image_assets: list = field(default_factory=list)  # 本節可用圖片（draft 放圖只能用這些；ref 形如 assets/<file>）
+    document_map: list = field(default_factory=list)  # 本文件章節骨架（draft 看整篇架構：每節 section/title/order/role；只結構、不含 sibling 散文）
 
 # 注入寫作守則的 skill（連貫靠它替代跨節脈絡）
 _GUIDE_SKILLS = ("draft", "edit")
@@ -52,6 +54,10 @@ _GUIDE_SKILLS = ("draft", "edit")
 _GLOSSARY_SKILLS = ("draft", "edit", "factcheck")
 # 需要看到「本節 realizes 的共享真相」的 skill：draft 要渲染它、factcheck 要核對它
 _REALIZED_SKILLS = ("draft", "factcheck")
+# 需要知道「本節可放哪些圖」的 skill：draft 放圖、edit 核對引用不斷
+_ASSET_SKILLS = ("draft", "edit")
+# 需要看到「整篇章節骨架」的 skill：draft 寫角色開場（structure-visible / prose-blind）
+_DOCUMENT_MAP_SKILLS = ("draft",)
 # 需要祖先鏈 normative 決策當「繼承一致性」核對料的 skill（純供料、非阻塞；P3-lite）
 _INHERITANCE_SKILLS = ("factcheck",)
 
@@ -206,6 +212,31 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
     # 只投 statement（與自己的決策同紀律）；是「該實現的真相」非「偷看鄰節散文」。
     if skill in _REALIZED_SKILLS:
         proj.realized = realized_statements(leaf, decision_index(leaves))
+
+    # ── 本節圖片資產（draft 放圖只能用這些、edit 核引用；ref 形如 assets/<file>，backend-neutral）──
+    if skill in _ASSET_SKILLS:
+        proj.image_assets = [f"{ASSET_DIR_NAME}/{p.name}" for p in leaf.asset_files()]
+
+    # ── 整篇章節骨架（draft：structure-visible / prose-blind）──
+    # 投本文件每節的 section/title/order/role（concept 一句話），依 outline 順序；
+    # 只含結構，絕不含 sibling 的散文/decisions/material——draft 用它寫「角色開場」、不指名鄰節。
+    if skill in _DOCUMENT_MAP_SKILLS:
+        article = leaf.article
+        art_leaves = [lf for lf in leaves
+                      if lf.article == article and lf.concept is not None]
+        order_by_section = {lf.section: lf.order for lf in art_leaves}
+
+        def _okey(sec: str) -> list:
+            parts = [p for p in sec.split("/") if p]
+            return [(order_by_section.get("/".join(parts[:i]), 0.0), parts[i - 1])
+                    for i in range(1, len(parts) + 1)]
+
+        art_leaves.sort(key=lambda lf: _okey(lf.section))
+        proj.document_map = [
+            {"section": lf.section, "title": lf.title, "order": lf.order,
+             "role": (lf.concept.get("concept") or "")}
+            for lf in art_leaves
+        ]
 
     # ── 寫作守則（專案級、一份；draft/edit 注入，連貫靠它）──
     if skill in _GUIDE_SKILLS and layout.writing_guide.is_file():

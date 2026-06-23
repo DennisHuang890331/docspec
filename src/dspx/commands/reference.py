@@ -1,16 +1,16 @@
 """docspec reference [topic] — print the active template pack's craft reference.
 
-Craft knowledge (TikZ idioms, known LaTeX traps) is not a *rule* the engine can
-enforce — it ships with the template pack as a per-pack reference member and is
-surfaced on demand. The release skill points here when the agent hits a mermaid
-box or a LaTeX trap, instead of carrying a stale copy in its prose.
+Craft knowledge (engine-specific idioms, known traps) is not a *rule* the engine
+can enforce — it ships with a template pack as a per-pack reference member and is
+surfaced on demand, instead of carrying a stale copy in skill prose.
 
-Pack-agnostic: reads `reference.md` from the active pack (the bundled `docspec-cas`,
+Pack-agnostic: reads `reference.md` from the active pack (the bundled Typst pack,
 or a `--template <dir>` pack), splits it into topic sections by
 `<!-- topic: NAME -->` markers, and prints one. No topic → an index of the
 topics the active pack ships. A pack with no `reference.md` is fine (advisory,
-not a gate): it just has no craft reference. Read-only, offline; no project
-required — mirrors `version`/`measure-fonts` (no bootstrap).
+not a gate): it just has no craft reference (the bundled Typst pack currently
+ships none). Read-only, offline; no project required — mirrors
+`version`/`measure-fonts` (no bootstrap).
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from pathlib import Path
 from dspx import paths
 
 NAME = "reference"
-HELP = "Print the active template pack's craft reference (TikZ idioms / LaTeX traps; consult during release when you hit a box)"
+HELP = "Print the active template pack's craft reference (engine idioms / traps; consult during release when you hit a box)"
 
 _REFERENCE_FILE = "reference.md"
 _TOPIC_RE = re.compile(r"^<!--\s*topic:\s*([A-Za-z0-9_-]+)\s*-->\s*$", re.MULTILINE)
@@ -59,18 +59,20 @@ def run(argv: list[str]) -> int:
     parser.add_argument("topic", nargs="?", default=None,
                         help="the craft topic to print (omit = list this pack's available topics)")
     parser.add_argument("--template", default=None, metavar="DIR",
-                        help="read the reference file from the given template pack instead (same as export --template)")
+                        help="read the reference file from the given template pack directory instead of the bundled pack")
     args = parser.parse_args(argv)
 
-    try:
-        pack = paths.resolve_template_dir(args.template)
-    except paths.AssetError as exc:
-        sys.stderr.write(f"docspec: {exc}\n")
-        return 1
-    if pack is None:
-        sys.stderr.write(
-            "docspec: template pack not found — the install may be incomplete or the --template path is wrong.\n")
-        return 1
+    if args.template is not None:
+        pack = Path(args.template)
+        if not pack.is_dir():
+            sys.stderr.write(f"docspec: --template directory does not exist: {pack}\n")
+            return 1
+    else:
+        pack = paths.bundled_typst_template_dir()
+        if pack is None:
+            sys.stderr.write(
+                "docspec: bundled template pack not found — the install may be incomplete.\n")
+            return 1
 
     ref = pack / _REFERENCE_FILE
     if not ref.is_file():

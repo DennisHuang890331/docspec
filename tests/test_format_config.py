@@ -171,16 +171,24 @@ def test_pandoc_highlight_style_passthrough():
 
 # ── C3：標題字級倍率 + 表格 metavars ──────────────────────────────────
 
-def test_compile_heading_scale_default_emits_nothing():
+def test_compile_heading_default_emits_derived_ladder():
     tex = compile_format_config(validate_format_config({}))
-    assert "\\def\\sectionfont" not in tex          # scale 1.0＝不發＝byte-identical
+    # 預設不再「不發」：標題階梯由 base_size 14.5 衍生（×1.45/1.25/1.10）無條件發射、全 > 內文
+    assert "\\def\\sectionfont" in tex
+    assert "\\fontsize{21.02pt}" in tex             # 14.5×1.45
+    assert "\\def\\ssectionfont" in tex and "\\def\\sssectionfont" in tex
 
 
-def test_compile_heading_scale_nondefault_redefines_section_fonts():
+def test_compile_heading_scale_multiplies_derived_ladder():
     tex = compile_format_config(validate_format_config({"font": {"heading_scale": 1.2}}))
     assert "\\def\\sectionfont" in tex
-    assert "\\fontsize{20.4pt}" in tex              # 17×1.2＝20.4
-    assert "\\def\\ssectionfont" in tex and "\\def\\sssectionfont" in tex
+    assert "\\fontsize{25.23pt}" in tex             # 14.5×1.45×1.2
+
+
+def test_validate_rejects_inverting_heading_scale():
+    # heading_scale 在範圍 (0.8–1.6) 內但過低，使最深標題階 ≤ 內文 → 不變量擋下
+    with pytest.raises(FormatConfigError):
+        validate_format_config({"font": {"heading_scale": 0.85}})
 
 
 def test_pandoc_table_metavars_default_is_status_quo():
@@ -208,97 +216,42 @@ def _setup(make_project, version="1.0.0", article="g"):
 
 
 def test_export_rejects_bad_format_config_file(make_project, monkeypatch, capsys, tmp_path):
-    """--format-config 含壞值 → export 非零、印清楚錯誤、不產 PDF、不呼叫 _build_pdf。"""
+    """--format-config 含壞值 → export 非零、印清楚錯誤、不產 PDF（驗證在編譯前發生，
+    與引擎無關）。"""
     home, layout = _setup(make_project)
     monkeypatch.chdir(home.parent)
-    monkeypatch.setattr(export_cmd, "_pandoc_path", lambda: "pandoc")
-    monkeypatch.setattr(export_cmd, "_xelatex_path", lambda: paths.Path("xelatex"))
-    called = {"n": 0}
-    monkeypatch.setattr(export_cmd, "_build_pdf",
-                        lambda *a, **k: called.__setitem__("n", called["n"] + 1))
     fc = tmp_path / "bad.yaml"
     fc.write_text("font:\n  base_size: 99\n", encoding="utf-8")
     rc = export_cmd.run(["g", "--format", "pdf", "--format-config", str(fc)])
     assert rc == 1
-    assert called["n"] == 0                                # 壞值 → 連 build 都沒進
+    assert not layout.docs_export("g", "1.0.0", "pdf").is_file()   # 壞值 → 沒產 PDF
     err = capsys.readouterr().err
-    assert "base_size" in err and "no LaTeX/PDF produced" in err
+    assert "base_size" in err and "no PDF produced" in err
 
 
 def test_export_rejects_missing_format_config_file(make_project, monkeypatch, capsys):
     home, layout = _setup(make_project)
     monkeypatch.chdir(home.parent)
-    monkeypatch.setattr(export_cmd, "_pandoc_path", lambda: "pandoc")
-    monkeypatch.setattr(export_cmd, "_xelatex_path", lambda: paths.Path("xelatex"))
     rc = export_cmd.run(["g", "--format", "pdf", "--format-config", str(home / "nope.yaml")])
     assert rc == 1
     assert "does not exist" in capsys.readouterr().err
 
 
-def test_export_valid_format_config_compiles_and_injects(make_project, monkeypatch, tmp_path):
-    """合法旋鈕：export 編出覆寫並餵進 _build_pdf（攔 _build_pdf 斷言 override 含旋鈕、
-    highlight 帶對）。不需真 xelatex（攔截 build）。"""
-    home, layout = _setup(make_project)
-    monkeypatch.chdir(home.parent)
-    monkeypatch.setattr(export_cmd, "_pandoc_path", lambda: "pandoc")
-    monkeypatch.setattr(export_cmd, "_xelatex_path", lambda: paths.Path("xelatex"))
-    # 模板/字型解析放行（不真 build）
-    monkeypatch.setattr(paths, "resolve_template_dir", lambda *a, **k: paths.Path("tpl"))
-    monkeypatch.setattr(paths, "resolve_fonts_dir", lambda *a, **k: paths.Path("fnt"))
-    seen = {}
+# ── Typst 軌旋鈕映射（Stage B 2.4）────────────────────────────────
 
-    def spy(pandoc, xelatex, template_dir, fonts_src, title, body_md, out,
-            format_override="", highlight_style="tango", **k):
-        seen["override"] = format_override
-        seen["highlight"] = highlight_style
-
-    monkeypatch.setattr(export_cmd, "_build_pdf", spy)
-    fc = tmp_path / "good.yaml"
-    fc.write_text("font:\n  cjk_body: SourceHanSerifTC\ncode:\n  highlight: kate\n",
-                  encoding="utf-8")
-    rc = export_cmd.run(["g", "--format", "pdf", "--format-config", str(fc), "--no-verify"])
-    assert rc == 0
-    assert "\\setCJKmainfont{SourceHanSerifTC-Regular}" in seen["override"]
-    assert seen["highlight"] == "kate"
+def test_compile_typst_vars_maps_base_size_and_leading():
+    from dspx.format_config import compile_typst_vars, validate_format_config
+    v = compile_typst_vars(validate_format_config({"font": {"base_size": 12.0, "leading": 1.3}}))
+    assert "-V" in v and "fontsize=12pt" in v
+    assert any(x == "leading=0.8em" for x in v)   # 1.3 - 0.5 = 0.8
 
 
-def test_export_no_format_config_uses_default_override(make_project, monkeypatch):
-    """不給 --format-config、config 無 format → 注入的是預設旋鈕覆寫（＝現狀），highlight=tango。"""
-    home, layout = _setup(make_project)
-    monkeypatch.chdir(home.parent)
-    monkeypatch.setattr(export_cmd, "_pandoc_path", lambda: "pandoc")
-    monkeypatch.setattr(export_cmd, "_xelatex_path", lambda: paths.Path("xelatex"))
-    monkeypatch.setattr(paths, "resolve_template_dir", lambda *a, **k: paths.Path("tpl"))
-    monkeypatch.setattr(paths, "resolve_fonts_dir", lambda *a, **k: paths.Path("fnt"))
-    seen = {}
-
-    def spy(*a, format_override="", highlight_style="tango", **k):
-        seen["override"] = format_override
-        seen["highlight"] = highlight_style
-
-    monkeypatch.setattr(export_cmd, "_build_pdf", spy)
-    rc = export_cmd.run(["g", "--format", "pdf", "--no-verify"])
-    assert rc == 0
-    assert "\\setCJKmainfont{TW-Sung-98_1}" in seen["override"]   # C5 定版預設＝宋體內文
-    assert seen["highlight"] == "tango"
-
-
-def test_export_project_config_format_default(make_project, monkeypatch):
-    """config 的 export.format 區塊＝專案級預設旋鈕，無 --format-config 時生效。"""
-    home = make_project(
-        "language: zh-TW\ndocs_layout: per-article\n"
-        "export:\n  format:\n    font:\n      cjk_body: SourceHanSansTC\n")
-    layout = Layout(home, "per-article")
-    snap = layout.docs_snapshot("g", "1.0.0")
-    snap.parent.mkdir(parents=True, exist_ok=True)
-    snap.write_text("# 標題\n\n中文。\n", encoding="utf-8")
-    monkeypatch.chdir(home.parent)
-    monkeypatch.setattr(export_cmd, "_pandoc_path", lambda: "pandoc")
-    monkeypatch.setattr(export_cmd, "_xelatex_path", lambda: paths.Path("xelatex"))
-    monkeypatch.setattr(paths, "resolve_template_dir", lambda *a, **k: paths.Path("tpl"))
-    monkeypatch.setattr(paths, "resolve_fonts_dir", lambda *a, **k: paths.Path("fnt"))
-    seen = {}
-    monkeypatch.setattr(export_cmd, "_build_pdf",
-                        lambda *a, format_override="", **k: seen.__setitem__("o", format_override))
-    assert export_cmd.run(["g", "--format", "pdf", "--no-verify"]) == 0
-    assert "\\setCJKmainfont{SourceHanSansTC-Regular}" in seen["o"]   # 專案預設生效
+def test_compile_typst_vars_default_uses_typst_house_body():
+    """預設 base_size＝LaTeX cas-sc 錨點(14.5pt，雙欄期刊用、Typst 單欄 A4 過大)→ 不發 fontsize，
+    交給 docspec-typst 模板自己的 house 預設（單欄適中字級）。使用者調 base_size 才覆寫。"""
+    from dspx.format_config import compile_typst_vars, validate_format_config
+    v = compile_typst_vars(validate_format_config({}))
+    assert not any(x.startswith("fontsize=") for x in v)   # 預設不發 → Typst house 預設生效
+    # 明確調過 base_size 才發（且非錨點值）
+    v2 = compile_typst_vars(validate_format_config({"font": {"base_size": 11.0}}))
+    assert "fontsize=11pt" in v2

@@ -12,7 +12,7 @@ r"""docspec doctor — 唯一排版環境診斷入口（唯讀、離線、不改
   5. pandoc：受控 pandoc 命中否（缺 → FAIL：`docspec setup`）。
 
 選配：
-  --deep         實編一頁中文最小檔（docspec-cas recipe），驗文字層乾淨（抓 cid:0/壞字型）。
+  --deep         實編一頁中文最小檔（預設 Typst 軌），驗文字層乾淨（抓 cid:0/壞字型）。
   --check-latest 才連網查新版（GitHub TinyTeX release）；結果寫 update-cache.json（TTL 7 天）；
                  離線/查無 → 靜默零噪音、不開背景執行緒。
 """
@@ -119,34 +119,31 @@ _DEEP_DOC = (
 
 
 def _check_deep() -> _Check:
-    """實編一頁中文最小檔（docspec-cas recipe），檢查文字層乾淨（無 cid: 缺字標記）。"""
+    """實編一頁中文最小檔（預設 Typst 軌），檢查文字層乾淨（無 cid: 缺字標記）。"""
     pandoc = paths.resolve_pandoc()
     if pandoc is None:
         return _Check(_WARN, "deep test (real compile)", "pandoc missing, skipping real compile",
                       "docspec setup")
-    try:
-        xelatex = paths.resolve_xelatex()
-    except Exception:
-        xelatex = None
-    if xelatex is None:
-        return _Check(_WARN, "deep test (real compile)", "TinyTeX missing, skipping real compile", "docspec setup")
-    template_dir = _template_dir()
-    if template_dir is None:
-        return _Check(_WARN, "deep test (real compile)", "bundled docspec-cas template not found, skipping real compile", None)
+    typst = paths.resolve_typst()
+    if typst is None:
+        return _Check(_WARN, "deep test (real compile)", "typst missing, skipping real compile", "docspec setup")
+    typst_template = paths.bundled_typst_template_dir()
+    if typst_template is None or not (typst_template / "template.typ").is_file():
+        return _Check(_WARN, "deep test (real compile)", "bundled Typst template not found, skipping real compile", None)
     try:
         fonts_src = paths.resolve_fonts_dir()
     except Exception:
         fonts_src = None
     if fonts_src is None:
-        return _Check(_WARN, "deep test (real compile)", "fonts missing, skipping real compile", "docspec upgrade")
+        return _Check(_WARN, "deep test (real compile)", "fonts missing, skipping real compile", "docspec setup")
 
     try:
-        from dspx.commands.export import _build_pdf
+        from dspx.commands.export import _build_pdf_typst
         import tempfile
         with tempfile.TemporaryDirectory(prefix="dspx_doctor_") as td:
             out = Path(td) / "probe.pdf"
-            _build_pdf(pandoc, xelatex, template_dir, fonts_src,
-                       "排版環境健檢", _DEEP_DOC, out)
+            _build_pdf_typst(pandoc, typst, typst_template / "template.typ", fonts_src,
+                             "排版環境健檢", _DEEP_DOC, out)
             bad = _pdf_text_layer_problem(out)
     except Exception as exc:  # noqa: BLE001 — 實編失敗＝環境壞，FAIL 但不 crash
         return _Check(_FAIL, "deep test (real compile)", f"single-page Chinese minimal file failed to compile: {exc}",
@@ -155,15 +152,6 @@ def _check_deep() -> _Check:
         return _Check(_FAIL, "deep test (real compile)",
                       f"PDF text layer has broken/missing-glyph markers: {bad}", "docspec upgrade")
     return _Check(_OK, "deep test (real compile)", "single-page Chinese minimal file compiled, text layer clean")
-
-
-def _template_dir() -> Path | None:
-    try:
-        from importlib.resources import files
-        p = Path(str(files("dspx").joinpath("assets", "templates", "docspec-cas")))
-        return p if p.is_dir() else None
-    except Exception:
-        return None
 
 
 def _pdf_text_layer_problem(pdf: Path) -> str | None:
