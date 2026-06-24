@@ -59,9 +59,10 @@ def decision_index(leaves: list) -> dict:
 
 
 def realized_statements(leaf, dindex: dict) -> list:
-    """本節 realizes 的決策（撈來源 statement）；跨文件。
+    """本節 realizes 的決策（撈來源 statement＋status）；跨文件。
 
-    紀律：realizes 應指向真相最源頭（權威方的決策），故一跳即足。
+    紀律：realizes 應指向真相最源頭（權威方的決策），故一跳即足。status 一併帶回——
+    supersede/deprecate 只改 status 不改 statement，下游須據此轉 stale（見 deps_fingerprint）。
     """
     out = []
     if leaf.concept is None:
@@ -70,45 +71,108 @@ def realized_statements(leaf, dindex: dict) -> list:
         rec = dindex.get(str(rid))
         if rec is not None:
             out.append({"id": str(rid), "statement": rec["statement"],
-                        "from_section": rec["section"], "kind": rec["kind"]})
+                        "from_section": rec["section"], "kind": rec["kind"],
+                        "status": rec.get("status")})
     return out
 
 
 def deps_fingerprint(leaf, dindex: dict) -> str:
     """本節對「上游被 realizes 決策」的依賴指紋。
 
-    只 hash statement（＝aperture 真正投給 draft 的東西）：改 rationale 不動 statement
-    就不觸發下游重渲染。無 realizes → 空字串。
+    hash statement **＋ status**：改 rationale 不動 statement 仍不觸發下游；但 supersede/deprecate
+    改 status＝決策死了，下游必須轉 stale-upstream 重渲（否則 draft 繼續渲染死真相、status 卻報
+    synced＝false-green，違 draft「只給 active 決策」契約）。無 realizes → 空字串。
     """
-    items = sorted((r["id"], r["statement"]) for r in realized_statements(leaf, dindex))
+    items = sorted((r["id"], r["statement"], r.get("status"))
+                   for r in realized_statements(leaf, dindex))
     if not items:
         return ""
     h = hashlib.sha256()
-    for rid, stmt in items:
-        h.update(json.dumps({"id": rid, "stmt": stmt}, ensure_ascii=False).encode("utf-8"))
+    for rid, stmt, status in items:
+        h.update(json.dumps({"id": rid, "stmt": stmt, "status": status},
+                            ensure_ascii=False).encode("utf-8"))
         h.update(b"\0")
     return h.hexdigest()[:16]
 
 
-def ancestor_brief_fingerprint(section: str, by_section: dict) -> str:
+def _path_parents(section: str, by_section: dict) -> list:
+    """路徑父鏈（不含自己），由淺到深；只回有 leaf 的祖先。"""
+    parts = section.split("/")
+    out = []
+    for depth in range(1, len(parts)):
+        anc = by_section.get("/".join(parts[:depth]))
+        if anc is not None:
+            out.append(anc)
+    return out
+
+
+def ancestor_leaves(section: str, by_section: dict, concept_by_id: dict) -> list:
+    """祖先集＝對「路徑父邊 ∪ governed-by 邊」做遞移閉包。
+
+    回傳 [(ancestor_leaf, is_governed)]，依「先路徑父鏈、再跨樹治理」順序：路徑父鏈優先且
+    淺→深，確保無 governed-by 的單樹 path-only 行為逐欄等價（單樹回歸不變式）。visited 防環去重。
+    aperture（繼承投影）與 model（staleness 指紋）共用本函式＝祖先集定義單一來源、不漂移。
+    """
+    result: list = []
+    visited: set = {section}      # 自己不算祖先（self-governed 環自保）
+
+    def collect(leaf, is_governed: bool) -> None:
+        if leaf.section in visited:
+            return
+        visited.add(leaf.section)
+        result.append((leaf, is_governed))
+
+    self_leaf = by_section.get(section)
+    queue: list = [self_leaf] if self_leaf is not None else []
+    for anc in _path_parents(section, by_section):
+        collect(anc, False)
+        queue.append(anc)
+
+    i = 0
+    while i < len(queue):
+        leaf = queue[i]
+        i += 1
+        if not leaf.concept:
+            continue
+        for target_id in (leaf.concept.get("governed-by") or []):
+            gov = concept_by_id.get(str(target_id))
+            if gov is None or gov.section in visited:
+                continue
+            collect(gov, True)
+            queue.append(gov)
+            for anc in _path_parents(gov.section, by_section):
+                if anc.section not in visited:
+                    collect(anc, True)
+                    queue.append(anc)
+    return result
+
+
+def _concept_by_id(by_section: dict) -> dict:
+    return {lf.concept["id"]: lf for lf in by_section.values()
+            if lf.concept and lf.concept.get("id")}
+
+
+def ancestor_brief_fingerprint(section: str, by_section: dict,
+                               concept_by_id: dict | None = None) -> str:
     """祖先節（不含自己）的 brief/concept 指紋。
 
-    用於分辨 staleness 兩種：自己的檔沒變、但某祖先的 brief/concept 變了 →
-    子節的 fingerprint 跟著變 → status 標 stale-inherited（交給 edit 做敘事性對齊）。
-    父 brief 一改，所有子孫的 fingerprint 都變＝天然傳播，不需額外傳播碼。
+    祖先集＝路徑父鏈 ∪ governed-by 鏈（與 aperture 同一定義）。自己的檔沒變、但某祖先（含跨樹
+    治理父）的 brief/concept 變了 → 子節 fingerprint 跟著變 → status 標 stale（交給 edit 對齊）。
+    父 brief 一改，所有子孫（含被治理的跨樹子）的 fingerprint 都變＝天然傳播。
+    無 governed-by 的單樹節：祖先集＝純路徑父鏈、雜湊內容與順序皆與擴展前等價（回歸不變式）。
     """
-    parts = [p for p in section.split("/") if p]
+    if concept_by_id is None:
+        concept_by_id = _concept_by_id(by_section)
     h = hashlib.sha256()
-    for i in range(1, len(parts)):                 # 只取祖先前綴，不含自己
-        anc = "/".join(parts[:i])
-        leaf = by_section.get(anc)
-        if leaf is not None and leaf.concept is not None:
-            inherited = {
-                "concept": leaf.concept.get("concept"),
-                "brief": leaf.concept.get("brief"),
-            }
-            h.update(json.dumps(inherited, sort_keys=True, ensure_ascii=False).encode("utf-8"))
-            h.update(b"\0")
+    for anc, _is_governed in ancestor_leaves(section, by_section, concept_by_id):
+        if anc.concept is None:
+            continue
+        inherited = {
+            "concept": anc.concept.get("concept"),
+            "brief": anc.concept.get("brief"),
+        }
+        h.update(json.dumps(inherited, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+        h.update(b"\0")
     return h.hexdigest()[:16]
 
 
@@ -190,20 +254,42 @@ class Leaf:
         return h.hexdigest()[:16]
 
 
-def _entries(raw: object, path: Path) -> list[dict]:
-    """取 {entries: [...]} 結構的 entries；容錯。"""
+def keyed_list(raw: object, path: Path, key: str, *, error: type = ModelError) -> list[dict]:
+    """從 `{<key>: [...]}` 結構取該 list；對「誤名頂層 key」**fail-loud**（不靜默當空）。
+
+    這是 decisions/history（key=entries）、audit（findings）、roadmap（entries）、glossary（terms）
+    四個 loader 共用的契約：一個**有內容**的頂層 mapping 卻缺正確 key（例如 audit.yaml 誤寫成
+    `entries:` 而非 `findings:`），不可靜默解析成 0 條——那會讓 `check`/`ready`/publish 對結構壞掉的
+    檔 false-green（與已修的 `_entries` 同類）。真正空（`raw=None`/空檔/`{<key>: []}`）仍合法。
+    - raw is None / 空 dict → []（合法空）
+    - 非 mapping → raise（頂層型別錯）
+    - 有內容但缺 key → raise（附「did you mean '<key>:'?」hint）
+    - key 在但非 list → raise
+    回過濾掉非-dict 項的 list。"""
     if raw is None:
         return []
     if not isinstance(raw, dict):
-        raise ModelError(f"{path} top level must be a mapping (with entries)")
-    entries = raw.get("entries") or []
-    if not isinstance(entries, list):
-        raise ModelError(f"{path} entries must be a list")
-    out: list[dict] = []
-    for e in entries:
-        if not isinstance(e, dict):
-            raise ModelError(f"{path} entries item must be a mapping: {e!r}")
-        out.append(e)
+        raise error(f"{path} top level must be a mapping (with '{key}:')")
+    if key not in raw and raw:
+        wrong = ", ".join(sorted(repr(k) for k in raw))
+        raise error(
+            f"{path} top-level mapping has key(s) {{{wrong}}} but no '{key}:' list "
+            f"— did you mean '{key}:'?")
+    items = raw.get(key) or []
+    if not isinstance(items, list):
+        raise error(f"{path} '{key}' must be a list")
+    return [it for it in items if isinstance(it, dict)]
+
+
+def _entries(raw: object, path: Path) -> list[dict]:
+    """取 {entries: [...]} 結構的 entries（decisions/history）；誤名頂層 key fail-loud。"""
+    out = keyed_list(raw, path, "entries")
+    # entries 項若非 dict，keyed_list 已過濾；這裡維持原本「非 dict 即 raise」的嚴格度
+    raw_items = raw.get("entries") if isinstance(raw, dict) else None
+    if isinstance(raw_items, list):
+        for e in raw_items:
+            if not isinstance(e, dict):
+                raise ModelError(f"{path} entries item must be a mapping: {e!r}")
     return out
 
 

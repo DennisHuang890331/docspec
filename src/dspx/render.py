@@ -13,9 +13,56 @@ from __future__ import annotations
 import hashlib
 import re
 
-from dspx.frontmatter import parse_frontmatter, render_frontmatter
+import yaml
+
+from dspx.frontmatter import FrontmatterError, parse_frontmatter, render_frontmatter
 from dspx.layout import Layout
 from dspx.model import Leaf, ancestor_brief_fingerprint, decision_index, deps_fingerprint
+
+
+def read_ledger(layout: Layout, article: str) -> dict:
+    """讀某文章的指紋帳本（各節 own/anc/deps/prose）。
+
+    來源優先序：① 隱藏 sidecar `docs/<article>/.sections.yaml`（現行格式）；② 舊格式 fallback
+    ＝`_latest.md` frontmatter 的 `sections`（自動相容；下次 render 會把它搬進 sidecar＝遷移）。
+    都沒有 → {}。"""
+    import sys
+    ledger = layout.docs_ledger(article)
+    if ledger.is_file():
+        try:
+            data = yaml.safe_load(ledger.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as exc:
+            # 壞掉的 sidecar（如 Drive/OneDrive sync 衝突截斷）：**可見警告、非靜默**——
+            # 否則 drift 偵測會默默失效（手改交付物不再被抓）。下次 render 會重生帳本。
+            sys.stderr.write(
+                f"docspec: ⚠ ledger sidecar {ledger} is malformed ({exc}); "
+                "drift detection is degraded until the next `docspec render`.\n")
+            return {}
+        sections = data.get("sections") if isinstance(data, dict) else None
+        return dict(sections) if isinstance(sections, dict) else {}
+    # 舊格式 fallback：frontmatter 內的 sections（遷移前的舊交付物）
+    latest = layout.docs_latest(article)
+    if latest.is_file():
+        try:
+            meta, _ = parse_frontmatter(latest.read_text(encoding="utf-8"))
+        except FrontmatterError as exc:
+            # 人手改 `_latest.md` 把 frontmatter 改壞時，別讓 status/diff/check 噴 traceback。
+            sys.stderr.write(
+                f"docspec: ⚠ {latest} frontmatter is malformed ({exc}); treating as no ledger.\n")
+            return {}
+        sections = meta.get("sections")
+        return dict(sections) if isinstance(sections, dict) else {}
+    return {}
+
+
+def write_ledger(layout: Layout, article: str, hashes: dict) -> None:
+    """把指紋帳本寫進隱藏 sidecar（機器簿記，與人讀的 `_latest.md` 分離）。"""
+    ledger = layout.docs_ledger(article)
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    ledger.write_text(
+        yaml.safe_dump({"article": article, "sections": hashes},
+                       allow_unicode=True, sort_keys=False),
+        encoding="utf-8")
 
 # markdown 圖片引用 ![alt](path "optional title")：抓 path（到空白或 ) 為止）
 IMAGE_REF_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)")
@@ -44,8 +91,14 @@ def group_marker(section: str) -> str:
     return f"<!-- dspx:group {section} -->"
 
 
+# 標題層級上限＝四級（中文期刊規範 GB/T 3179：編號到 1.1.1.1 為極限）。markdown 標題＝`#`×(depth+1)，
+# 上限 5（經 --shift-heading-level-by=-1 後＝typst L4＝四級，模板地板）。更深：render clamp 到此（防靜默
+# 吐 `#######`＝CommonMark 字面文字、破版），且由 `docspec check` 結構不變式 fail-loud 擋下（見 check._check_hierarchy）。
+MAX_HEADING_LEVEL = 5
+
+
 def _humanize_segment(segment: str) -> str:
-    """分組節點標題：去前綴序號（`^\\d+[-_]`）、分隔符轉空白、拉丁字首字大寫、CJK 原樣。"""
+    """分組節點標題 fallback：去前綴序號（`^\\d+[-_]`）、分隔符轉空白、拉丁字首字大寫、CJK 原樣。"""
     s = re.sub(r"^\d+[-_]", "", segment)
     s = s.replace("-", " ").replace("_", " ").strip()
     words = [
@@ -53,6 +106,38 @@ def _humanize_segment(segment: str) -> str:
         for w in s.split(" ")
     ]
     return " ".join(w for w in words if w)
+
+
+def _group_meta(layout: Layout, group_section: str) -> dict:
+    """讀分組節點可選 `group.yaml`（`title`／`order`）；缺檔／壞檔 → {}（向後相容）。"""
+    try:
+        gy = layout.section_dir(group_section) / "group.yaml"
+        if gy.is_file():
+            data = yaml.safe_load(gy.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                return data
+    except (OSError, yaml.YAMLError):
+        pass
+    return {}
+
+
+def _group_title(layout: Layout, group_section: str, segment: str) -> str:
+    """分組節點標題：優先取該節點目錄可選 `group.yaml` 的 `title`（在地化，治中文文件冒英文 slug 標題）；
+    缺檔／壞檔／無 title → fallback 回路徑末段 humanize（向後相容，既有專案 render 不變）。"""
+    title = _group_meta(layout, group_section).get("title")
+    if isinstance(title, str) and title.strip():
+        return title.strip()
+    return _humanize_segment(segment)
+
+
+def _group_order(layout: Layout, group_section: str) -> float | None:
+    """分組節點可選排序鍵：`group.yaml` 的 `order`（數值）；缺/非數值 → None（維持預設 0.0）。"""
+    order = _group_meta(layout, group_section).get("order")
+    if isinstance(order, bool):   # bool 是 int 子類，排除
+        return None
+    if isinstance(order, (int, float)):
+        return float(order)
+    return None
 
 
 def _depth(article: str, section: str) -> int:
@@ -119,6 +204,17 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str) -> dict:
     order_by_section = {
         lf.section: lf.order for lf in art_leaves if lf.concept is not None
     }
+    # 分組節點（無 concept）排序：讀其 group.yaml 的可選 order；缺則維持預設 0.0（既有行為）。
+    # 治「concept-less 分組節點固定 order=0.0 排到有序兄弟最前」（B8）。
+    for lf in art_leaves:
+        parts = [p for p in lf.section.split("/") if p]
+        for i in range(2, len(parts)):
+            gs = "/".join(parts[:i])
+            if gs in order_by_section:
+                continue   # 本身是 leaf（concept.order 優先）或已處理
+            go = _group_order(layout, gs)
+            if go is not None:
+                order_by_section[gs] = go
     art_leaves.sort(key=lambda lf: _order_key(article, lf.section, order_by_section))
 
     latest = layout.docs_latest(article)
@@ -129,7 +225,9 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str) -> dict:
     # 根節（section==article）＝文章標題＋全域導言；存在就由它當 `#`，
     # 否則退回印一行純標題（導言由人/文類決定，render 不強制生）。
     has_root = any(lf.section == article for lf in art_leaves)
-    out: list[str] = [] if has_root else [f"# {article}", ""]
+    # 無 root section→封面標題用 corpus/<article>/group.yaml 的 title（缺則 humanize slug）
+    #   ＝治「CJK 文件封面標題冒拼音/英文 slug」（A1）；與分組節點在地化標題同一機制。
+    out: list[str] = [] if has_root else [f"# {_group_title(layout, article, article)}", ""]
     hashes: dict[str, str] = {}
     drafted = 0
     emitted_groups: set[str] = set()
@@ -144,9 +242,11 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str) -> dict:
                 continue  # 已產過，或本身是末節（將以自己的標題出現）→ 不另產分組標題
             emitted_groups.add(group_section)
             out.append(group_marker(group_section))
-            out.append("#" * i + " " + _humanize_segment(parts[i - 1]))
+            # 分組標題：group.yaml title 優先（在地化）、缺則 humanize；層級 clamp 至上限（防 #######）
+            out.append("#" * min(i, MAX_HEADING_LEVEL) + " " + _group_title(layout, group_section, parts[i - 1]))
             out.append("")
-        heading = "#" * (depth + 1) + " " + lf.title
+        # 末節標題：層級＝depth+1，clamp 至上限（過深由 check fail-loud 擋；clamp 只防靜默破版）
+        heading = "#" * min(depth + 1, MAX_HEADING_LEVEL) + " " + lf.title
         body = existing_bodies.get(lf.section, "").strip()
         out.append(section_marker(lf.section))
         out.append(heading)
@@ -176,9 +276,13 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str) -> dict:
         if existing not in (None, "", 0):
             version = existing
 
-    meta = {"article": article, "version": version, "sections": hashes}
+    # 指紋帳本搬進隱藏 sidecar（ISSUE-3）；`_latest.md` frontmatter 只留輕量 article/version
+    # ——交付物開頭不再被巨大指紋表佔據。舊交付物若 frontmatter 仍帶 sections，這次 render 後
+    # 即遷出（frontmatter 不再寫 sections、改寫 sidecar）。
+    meta = {"article": article, "version": version}
     latest.parent.mkdir(parents=True, exist_ok=True)
     latest.write_text(render_frontmatter(meta, "\n".join(out)), encoding="utf-8")
+    write_ledger(layout, article, hashes)
 
     return {
         "sections": [lf.section for lf in art_leaves],
@@ -197,8 +301,7 @@ def detect_drift(layout: Layout, article: str) -> list[dict]:
     if not latest.is_file():
         return []
     text = latest.read_text(encoding="utf-8")
-    meta, _ = parse_frontmatter(text)
-    recorded = meta.get("sections") or {}
+    recorded = read_ledger(layout, article)   # sidecar 優先、舊 frontmatter fallback
     bodies = parse_section_bodies(text)
     drift = []
     for section, body in bodies.items():

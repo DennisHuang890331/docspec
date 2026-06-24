@@ -132,7 +132,7 @@ def test_governed_by_adds_no_semantic_gate(make_project, write_leaf, monkeypatch
     """t2 的 concept 語義上「牴觸」其 governed-by 父 t1，但結構（死引用/環）合法
     → run_check 仍綠（引擎只做結構檢查、不判語義、不新增硬閘）。"""
     home = make_project()
-    full_brief = {"audience": "人", "depth": "gate", "breadth": "全", "forbidden": "無"}
+    full_brief = {"audience": "人", "depth": "gate", "breadth": "全", "forbidden": ["無"]}
     write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1,
                                     "status": "draft",
                                     "concept": "一律使用公制單位", "brief": full_brief})
@@ -155,3 +155,103 @@ def test_governed_by_adds_no_semantic_gate(make_project, write_leaf, monkeypatch
     from dspx.commands import ready as ready_cmd
     assert ready_cmd.run(["t2"]) == 0
     assert not (home / "corpus" / "t2" / "develop.md").exists()
+
+
+# ── change `multi-document-governance-robustness`：治理感知 staleness + 守門 + 投影 ──
+
+def test_governed_by_deprecated_concept_rejected(make_project, write_leaf):
+    """M3：governed-by 指向 deprecated concept → check ERROR（退場概念不可被繼承）。"""
+    home = make_project()
+    write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1,
+                                    "status": "deprecated", "concept": "退場", "brief": {"範圍": "一"}})
+    write_leaf(home, "t2", concept={"id": "c-t2", "title": "T2", "order": 1,
+                                    "status": "draft", "concept": "二", "brief": {"範圍": "二"},
+                                    "governed-by": ["c-t1"]})
+    result = run_check(_leaves(home), load_schema(), Layout(home))
+    assert not result.ok
+    assert any("deprecated" in e for e in result.errors)
+
+
+def test_governed_by_live_concept_not_flagged_deprecated(make_project, write_leaf):
+    """M3 反例：governed-by 指存活 concept → 無 deprecated 報錯。"""
+    home = _two_tree_governed(make_project, write_leaf)   # t1 status=draft（存活）
+    result = run_check(_leaves(home), load_schema(), Layout(home))
+    assert not any("deprecated" in e for e in result.errors)
+
+
+def test_governed_parent_brief_change_restales_child(make_project, write_leaf):
+    """M1：跨樹治理父 brief 變 → 被 governed 子節 anc 指紋變（staleness 傳播）。"""
+    from dspx.model import ancestor_brief_fingerprint
+    home = _two_tree_governed(make_project, write_leaf)
+    by1 = {lf.section: lf for lf in _leaves(home)}
+    fp1 = ancestor_brief_fingerprint("t2", by1)
+    write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1,
+                                    "status": "draft", "concept": "T1 主旨", "brief": {"範圍": "一改"}})
+    by2 = {lf.section: lf for lf in _leaves(home)}
+    assert ancestor_brief_fingerprint("t2", by2) != fp1
+
+
+def test_single_tree_fingerprint_ignores_unrelated_tree(make_project, write_leaf):
+    """M1 回歸：無 governed-by 的單樹節，anc 指紋不受他樹變動影響（單樹等價不變式）。"""
+    from dspx.model import ancestor_brief_fingerprint
+    home = make_project()
+    write_leaf(home, "doc", concept={"id": "r", "title": "Doc", "order": 1, "status": "draft",
+                                     "concept": "root", "brief": {"a": "1"}})
+    write_leaf(home, "doc/sec", concept={"id": "s", "title": "Sec", "order": 1, "status": "draft",
+                                         "concept": "sec", "brief": {"b": "2"}})
+    write_leaf(home, "other", concept={"id": "o", "title": "Other", "order": 1, "status": "draft",
+                                       "concept": "o", "brief": {"c": "3"}})
+    by1 = {lf.section: lf for lf in _leaves(home)}
+    fp1 = ancestor_brief_fingerprint("doc/sec", by1)
+    write_leaf(home, "other", concept={"id": "o", "title": "Other", "order": 1, "status": "draft",
+                                       "concept": "o改", "brief": {"c": "9"}})
+    by2 = {lf.section: lf for lf in _leaves(home)}
+    assert ancestor_brief_fingerprint("doc/sec", by2) == fp1
+
+
+def test_realizes_superseded_changes_deps_fingerprint(make_project, write_leaf):
+    """M2：被 realizes 的決策 supersede（只改 status）→ 消費節 deps 指紋變（觸發 stale-upstream）。"""
+    from dspx.model import deps_fingerprint, decision_index
+    home = make_project()
+    write_leaf(home, "auth", concept={"id": "c-auth", "title": "Auth", "order": 1, "status": "draft",
+                                      "concept": "權威", "brief": {"a": "1"}},
+               decisions=[{"id": "d1", "kind": "normative", "status": "accepted",
+                           "statement": "X 是唯一真相"}])
+    write_leaf(home, "consumer", concept={"id": "c-con", "title": "Con", "order": 1, "status": "draft",
+                                          "concept": "消費", "brief": {"a": "2"}, "realizes": ["d1"]})
+    leaves1 = _leaves(home)
+    con1 = next(lf for lf in leaves1 if lf.section == "consumer")
+    fp1 = deps_fingerprint(con1, decision_index(leaves1))
+    write_leaf(home, "auth", concept={"id": "c-auth", "title": "Auth", "order": 1, "status": "draft",
+                                      "concept": "權威", "brief": {"a": "1"}},
+               decisions=[{"id": "d1", "kind": "normative", "status": "superseded",
+                           "statement": "X 是唯一真相"}])
+    leaves2 = _leaves(home)
+    con2 = next(lf for lf in leaves2 if lf.section == "consumer")
+    fp2 = deps_fingerprint(con2, decision_index(leaves2))
+    assert fp1 and fp2 and fp1 != fp2
+
+
+def test_draft_gets_governed_parent_normative(make_project, write_leaf):
+    """M4 跨樹：draft 投影含 governed-by 父的 active normative ruling（落筆遵守、供料非 gate）。"""
+    home = make_project()
+    write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1, "status": "draft",
+                                    "concept": "權威", "brief": {"a": "1"}},
+               decisions=[{"id": "d-gov", "kind": "normative", "status": "accepted",
+                           "statement": "父 ruling"}])
+    write_leaf(home, "t2", concept={"id": "c-t2", "title": "T2", "order": 1, "status": "draft",
+                                    "concept": "子", "brief": {"a": "2"}, "governed-by": ["c-t1"]})
+    proj = _project(home, "draft", "t2")
+    assert any(d["id"] == "d-gov" for a in proj.ancestor_normative for d in a["decisions"])
+
+
+def test_factcheck_coverage_contract_projected(make_project, write_leaf):
+    """W3：factcheck 投影前景化 must_cover + layout/kind；draft 不投。"""
+    home = make_project()
+    write_leaf(home, "doc/sec", concept={"id": "c1", "title": "Sec", "order": 1, "status": "draft",
+        "concept": "x", "must_cover": ["項目甲", "項目乙"],
+        "brief": {"audience": "a", "depth": "d", "breadth": "b", "layout": "prose", "kind": "reference"}})
+    cc = _project(home, "factcheck", "doc/sec").coverage_contract
+    assert cc and cc["must_cover"] == ["項目甲", "項目乙"]
+    assert cc["layout"] == "prose" and cc["kind"] == "reference"
+    assert _project(home, "draft", "doc/sec").coverage_contract is None

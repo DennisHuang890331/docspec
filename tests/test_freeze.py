@@ -119,12 +119,13 @@ def test_claude_install_writes_freeze_hook(tmp_path):
     data = json.loads(settings.read_text(encoding="utf-8"))
     pre = data["hooks"]["PreToolUse"]
     cmds = [h["command"] for e in pre for h in e["hooks"]]
-    assert "docspec hook guard" in cmds
+    # C4 portability：docspec 可能被解析成絕對路徑（避免 hook 在 PATH 未更新的 shell 找不到）
+    assert any(c.endswith("hook guard") for c in cmds)
     # 冪等：再裝一次不重複
     _install(tmp_path, ("claude",), force=True)
     data2 = json.loads(settings.read_text(encoding="utf-8"))
     guards = [h for e in data2["hooks"]["PreToolUse"] for h in e["hooks"]
-              if h["command"] == "docspec hook guard"]
+              if str(h["command"]).endswith("hook guard")]
     assert len(guards) == 1
 
 

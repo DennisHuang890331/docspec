@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass, field
 
 from dspx.model import Leaf
+from dspx.render import MAX_HEADING_LEVEL, _depth
 from dspx.schema import Schema
 
 # 佔位字（必填字串若整值是這些＝視同未填）：TODO/TBD/FIXME 整詞，或 <…>/{…} 整值包起來
@@ -99,6 +100,9 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
     id_set = set(seen)
     # governed-by 嚴格守門：目標必須是「活的 concept id」（不能放行 decision/history id）。
     concept_ids = {the_id for the_id, rec in seen.items() if rec.kind == "concept"}
+    # 退場 concept（status=deprecated）不可被繼承——被治理子會默默錨在已宣告退場的真相上（M3）。
+    deprecated_concept_ids = {the_id for the_id, rec in seen.items()
+                              if rec.kind == "concept" and rec.status == "deprecated"}
 
     # ── ② 死引用 ──
     def check_ref(section: str, where: str, target: object) -> None:
@@ -122,6 +126,11 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
                 if str(t) not in concept_ids:
                     errors.append(
                         f"{sec}: concept.governed-by points to a non-concept or nonexistent id \"{t}\""
+                    )
+                elif str(t) in deprecated_concept_ids:
+                    errors.append(
+                        f"{sec}: concept.governed-by points to a deprecated concept \"{t}\" "
+                        f"(a retired concept cannot be inherited — repoint to a live concept or drop the governance)"
                     )
         for e in leaf.decisions:
             eid = e.get("id", "?")
@@ -174,17 +183,43 @@ def _validate_image_refs(layout, leaves: list[Leaf]) -> list[str]:
         if not latest.is_file():
             continue
         bodies = parse_section_bodies(latest.read_text(encoding="utf-8"))
+        # 交付物以**扁平** `assets/<name>` 引用，但實體檔住各節 assets/。若兩節各有同 basename
+        # 的 asset 且都被引用，扁平命名空間無法區分 → export 收集時會默默用後出現那節的檔（嵌錯圖、
+        # 過所有閘）。在此（有 section marker、逐節）偵測撞名並 fail-loud，治在源頭。
+        ref_sources: dict[str, set[str]] = {}   # `assets/<name>` → {解析到的源節}
         for section, body in bodies.items():
             leaf = by_section.get(section)
             if leaf is None:
                 continue
             available = {f"assets/{p.name}" for p in leaf.asset_files()}
+            asset_refs = 0
             for ref in find_image_refs(body):
-                if ref.startswith("assets/") and ref not in available:
+                if not ref.startswith("assets/"):
+                    continue
+                asset_refs += 1
+                if ref not in available:
                     errs.append(
                         f"{section}: image reference \"{ref}\" does not resolve to an asset in "
                         f"corpus/{section}/assets/ (add the file, fix the path, or remove the reference)"
                     )
+                else:
+                    ref_sources.setdefault(ref, set()).add(section)
+            # diagram-intent：節自己宣告 brief.layout=diagram 卻零張圖 ref＝宣告版面 vs 交付物的機械
+            # 落差（吃封閉 enum；不解析 decision 文字＝那是語義、留 audit/skill，鐵律1）。
+            brief = leaf.concept.get("brief")
+            if isinstance(brief, dict) and brief.get("layout") == "diagram" and asset_refs == 0:
+                errs.append(
+                    f"{section}: declared brief.layout=diagram but the deliverable embeds no image "
+                    f"— embed the diagram with ![](assets/<file>) or change the layout"
+                )
+        for ref, srcs in sorted(ref_sources.items()):
+            if len(srcs) > 1:
+                errs.append(
+                    f"{art}: image reference \"{ref}\" is owned by multiple sections "
+                    f"({', '.join(sorted(srcs))}); the flat deliverable namespace cannot tell them "
+                    f"apart and export would embed the wrong one — rename one section's asset so each "
+                    f"`assets/<file>` basename is unique within the article"
+                )
     return errs
 
 
@@ -213,10 +248,17 @@ def _type_ok(val: object, typ: str | None) -> bool:
     return True  # 未知 type：不判
 
 
-def _check_fieldmap(obj: dict, fieldmap: dict, where: str) -> list[str]:
+def _check_fieldmap(obj: dict, fieldmap: dict, where: str, closed: bool = False) -> list[str]:
     """依 schema 欄位定義驗：必填空但在/佔位字、型別、enum、巢狀 object 遞迴。
-    （結構完整性，非語義；required 的「空但在」是 P0 修正的核心。）"""
+    （結構完整性，非語義；required 的「空但在」是 P0 修正的核心。）
+    closed=True（fieldmap 已完全列舉）：對 schema 未宣告的未知 key 報 ERROR
+    （捕捉發明/打錯的 key——如 brief.diagram——同 dead-ref 一類的機械 drift，鐵律1）。"""
     errs: list[str] = []
+    if closed and isinstance(obj, dict):
+        unknown = [k for k in obj if k not in (fieldmap or {})]
+        for k in sorted(unknown):
+            errs.append(f"{where}: unknown field \"{k}\" not in schema "
+                        f"(allowed: {', '.join(sorted(fieldmap or {}))})")
     for fname, spec in (fieldmap or {}).items():
         if not isinstance(spec, dict):
             continue
@@ -243,7 +285,8 @@ def _check_fieldmap(obj: dict, fieldmap: dict, where: str) -> list[str]:
         # ⑤ 巢狀 object sub-schema → 遞迴（如 brief）。**只在非空時遞迴**：
         #    brief:{} ＝整塊省略（＝繼承），不觸發子欄必填；寫了非空 brief 才要求填滿信封。
         if typ == "object" and isinstance(spec.get("fields"), dict) and isinstance(val, dict) and val:
-            errs.extend(_check_fieldmap(val, spec["fields"], f"{where}.{fname}"))
+            errs.extend(_check_fieldmap(val, spec["fields"], f"{where}.{fname}",
+                                        closed=bool(spec.get("closed"))))
     return errs
 
 
@@ -257,15 +300,17 @@ def run_file_check(leaf: Leaf, schema: Schema) -> list[str]:
     history_art = schema.by_id("history")
     if leaf.concept is not None and concept_art and concept_art.schema:
         errs.extend(_check_fieldmap(leaf.concept, concept_art.schema,
-                                    f"{leaf.section}/concept.yaml"))
+                                    f"{leaf.section}/concept.yaml", closed=concept_art.closed))
     if decisions_art and decisions_art.schema:
         for e in leaf.decisions:
             errs.extend(_check_fieldmap(e, decisions_art.schema,
-                                        f"{leaf.section}/decisions[{e.get('id','?')}]"))
+                                        f"{leaf.section}/decisions[{e.get('id','?')}]",
+                                        closed=decisions_art.closed))
     if history_art and history_art.schema:
         for e in leaf.history:
             errs.extend(_check_fieldmap(e, history_art.schema,
-                                        f"{leaf.section}/history[{e.get('id','?')}]"))
+                                        f"{leaf.section}/history[{e.get('id','?')}]",
+                                        closed=history_art.closed))
     return errs
 
 
@@ -438,7 +483,9 @@ def _check_hierarchy(leaves: list[Leaf]) -> list[str]:
     """結構性層級不變量（確定性，複用 section 路徑＋全專案 id index）：
     (a) root-brief 完整——只有 article root（section 無 '/'）必填 audience/depth/breadth；
     (b) 兄弟 order 唯一——同父群組 order 不可撞號（否則 TOC 排序不確定）；
-    (c) supersede 一致性——A.supersedes B ⟹ B.status∈{superseded,deprecated} 且 B.superseded-by==A。
+    (c) supersede 一致性——A.supersedes B ⟹ B.status∈{superseded,deprecated} 且 B.superseded-by==A；
+    (d) 標題深度上界——末節映出的標題層級（depth+1）不得超過 MAX_HEADING_LEVEL（四級）；
+        更深 render 會吐 `#######`＝CommonMark 字面文字、靜默破版。與 render 共用同一 `_depth`。
     語義（子是否真的窄於父等）不在此——那是 audit。"""
     errs: list[str] = []
     required_brief = ("audience", "depth", "breadth")
@@ -453,6 +500,11 @@ def _check_hierarchy(leaves: list[Leaf]) -> list[str]:
         if leaf.concept is None:
             continue
         sec = leaf.section
+        # (d) 標題深度上界（四級＝1.1.1.1；更深→#######=字面文字、破版）；與 render 同一 _depth 定義
+        level = _depth(leaf.article, sec) + 1
+        if level > MAX_HEADING_LEVEL:
+            errs.append(f"{sec}: section nests too deep -> heading level {level} exceeds the H{MAX_HEADING_LEVEL} cap "
+                        f"(deepest allowed is level {MAX_HEADING_LEVEL}, 四級/1.1.1.1). Flatten the section tree.")
         # (a) root-brief 完整（root＝section 無 '/'；子節省略＝繼承，不查）
         if "/" not in sec:
             brief = leaf.concept.get("brief")

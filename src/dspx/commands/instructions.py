@@ -33,6 +33,22 @@ NAME = "instructions"
 HELP = "aperture projection: the readable files + writing guidance for <skill> at <section>"
 
 
+def _contract_lines(f: dict, indent: str = "  ") -> list[str]:
+    """一欄一行的契約投影：name type required/optional [= enum 值] [→ relation]；巢狀遞迴。"""
+    req = "required" if f.get("required") else "optional"
+    bits = [f"{indent}{f['name']:<14} {f['type']:<9} {req}"]
+    if f.get("values"):
+        bits.append(f"= {' | '.join(map(str, f['values']))}")
+    if f.get("relation"):
+        bits.append(f"→ {f['relation']}")
+    if f.get("type") == "object":
+        bits.append("(closed)" if f.get("closed") else "(open)")
+    lines = ["  ".join(bits)]
+    for sub in f.get("fields", []):
+        lines.extend(_contract_lines(sub, indent + "  "))
+    return lines
+
+
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec instructions", description=HELP)
     parser.add_argument("skill", help="develop / draft / edit / factcheck / publish / release")
@@ -62,11 +78,15 @@ def run(argv: list[str]) -> int:
 
     # Fill in {id}/{title}/{order} in the writes templates (at crystallization the agent just fills in the content)
     # + attach the "required-fields list" so the agent knows the full definition (2.4)
-    from dspx.schema import required_field_names
+    from dspx.schema import field_contract, required_field_names, yaml_skeleton
     for w in proj.writes:
         w["template"] = _fill_template(w.get("template"), args.section, layout)
         art = schema.by_id(w.get("id", ""))
         w["requiredFields"] = required_field_names(art.schema) if art and art.schema else []
+        w["fieldContract"] = field_contract(art.schema) if art and art.schema else []
+        w["entriesContainer"] = bool(art.entries) if art else False
+        w["closed"] = bool(art.closed) if art else False
+        w["yamlSkeleton"] = yaml_skeleton(art) if art else None
 
     if args.as_json:
         print(json.dumps({
@@ -84,6 +104,7 @@ def run(argv: list[str]) -> int:
             "projectPurpose": proj.project_purpose,
             "imageAssets": proj.image_assets,
             "documentMap": proj.document_map,
+            "coverageContract": proj.coverage_contract,
         }, ensure_ascii=False, indent=2))
         return 0
 
@@ -165,6 +186,15 @@ def run(argv: list[str]) -> int:
         print(f"\n[{art_id}]\n{content}")
     print()
 
+    if proj.coverage_contract:
+        cc = proj.coverage_contract
+        print("── Coverage contract (this section's completeness + form contract — rule each item entailed/unsupported; flag a rendered form that fights the declared layout) ──")
+        if cc.get("layout") or cc.get("kind"):
+            print(f"  form: layout={cc.get('layout') or '—'}  kind={cc.get('kind') or '—'}")
+        for item in cc.get("must_cover", []):
+            print(f"  must cover: {item}")
+        print()
+
     if proj.ancestor_normative:
         print("── Ancestor-chain normative decisions (check inheritance consistency: this section must not contradict / overstep; non-blocking finding) ──")
         for a in proj.ancestor_normative:
@@ -184,6 +214,15 @@ def run(argv: list[str]) -> int:
             print(f"\n● {w['id']} → {w['generates']}")
             if w.get("requiredFields"):
                 print(f"  Required: {', '.join(w['requiredFields'])}")
+            if w.get("entriesContainer"):
+                print("  Container: file top level MUST be { entries: [ … ] } (not a bare list / other key)")
+            for f in w.get("fieldContract") or []:
+                for line in _contract_lines(f):
+                    print(line)
+            if w.get("yamlSkeleton"):
+                print("  Skeleton (paste, then fill):")
+                for ln in str(w["yamlSkeleton"]).splitlines():
+                    print(f"    {ln}")
             if w.get("instruction"):
                 print(w["instruction"])
 

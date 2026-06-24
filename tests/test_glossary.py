@@ -70,4 +70,23 @@ def test_lint_vg1_forbidden_alias(make_project, write_leaf, monkeypatch):
     findings = run_lint(layout, load_project(layout), load_schema())
     rules = {f.rule for f in findings}
     assert "Vg1" in rules     # 同物異名「安全監控系統」
-    assert "Vg2" in rules     # 縮寫 RMM 裸用
+    assert "Vg2" in rules     # 縮寫 RMM 裸用、且 canonical 從未出現 → 報
+
+
+def test_lint_vg2_suppressed_when_canonical_localized(make_project, write_leaf, monkeypatch):
+    """canonical 已在文中出現（首用已在地化）→ 後續裸用縮寫不再每次誤報 Vg2。"""
+    from dspx.commands import render as render_cmd
+    home = make_project()
+    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
+    _set_glossary(home, [{"id": "rmm", "canonical": "風險估測與異常監測系統",
+                          "bucket": "module", "code": "RMM"}])
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])
+    latest = home.parent / "docs" / "g" / "_latest.md"
+    # canonical 首次展開後、再裸用 RMM 當 shorthand
+    latest.write_text(latest.read_text("utf-8").replace("## X\n",
+                      "## X\n\n本節由風險估測與異常監測系統（RMM）負責；後續 RMM 偵測異常。\n"),
+                      encoding="utf-8")
+    layout = Layout(home)
+    findings = run_lint(layout, load_project(layout), load_schema())
+    assert "Vg2" not in {f.rule for f in findings}   # 已在地化 → 不誤報

@@ -15,6 +15,45 @@ from dspx import paths
 from dspx.commands import setup as setup_cmd
 
 
+# ── setup.run()：TinyTeX 改 optional（--with-latex 才裝）─────────────
+
+def _stub_setup_run(monkeypatch, tmp_path):
+    """把所有 _ensure_* 換成記錄呼叫的 stub，避免真下載；回傳 calls list。"""
+    calls: list[str] = []
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(setup_cmd, "_platform_key", lambda: "windows")
+    monkeypatch.setattr(setup_cmd, "_ensure_fonts", lambda **k: calls.append("fonts") or True)
+    monkeypatch.setattr(setup_cmd, "_ensure_pandoc", lambda **k: calls.append("pandoc") or True)
+    monkeypatch.setattr(setup_cmd, "_ensure_typst", lambda **k: calls.append("typst") or True)
+    monkeypatch.setattr(setup_cmd, "_ensure_tinytex", lambda *a, **k: calls.append("tinytex") or True)
+    monkeypatch.setattr(setup_cmd, "_ensure_packages", lambda tlmgr: calls.append("pkgs") or (True, []))
+    monkeypatch.setattr(setup_cmd, "_ensure_drawio", lambda **k: calls.append("drawio") or True)
+    monkeypatch.setattr(paths, "tlmgr_path", lambda root: tmp_path / "tlmgr")
+    monkeypatch.setattr(paths, "resolve_xelatex", lambda: tmp_path / "xelatex")
+    monkeypatch.setattr(paths, "resolve_pandoc", lambda: tmp_path / "pandoc")
+    monkeypatch.setattr(paths, "resolve_typst", lambda: tmp_path / "typst")
+    monkeypatch.setattr(paths, "resolve_drawio", lambda: None)
+    monkeypatch.setattr(setup_cmd, "_write_lock", lambda *a, **k: calls.append("lock"))
+    return calls
+
+
+def test_setup_core_does_not_install_tinytex(monkeypatch, tmp_path, capsys):
+    """核心 setup（無旗標）只裝 fonts+pandoc+typst，不碰 TinyTeX/tlmgr/drawio。"""
+    calls = _stub_setup_run(monkeypatch, tmp_path)
+    assert setup_cmd.run([]) == 0
+    assert "tinytex" not in calls and "pkgs" not in calls and "drawio" not in calls
+    assert {"fonts", "pandoc", "typst"} <= set(calls)
+    out = capsys.readouterr().out
+    assert "setup --with-latex" in out   # 提示可選安裝
+
+
+def test_setup_with_latex_installs_tinytex(monkeypatch, tmp_path):
+    """--with-latex 才裝 TinyTeX + tlmgr 套件。"""
+    calls = _stub_setup_run(monkeypatch, tmp_path)
+    assert setup_cmd.run(["--with-latex"]) == 0
+    assert "tinytex" in calls and "pkgs" in calls
+
+
 # ── paths 解析 ────────────────────────────────────────────────────
 
 def test_data_dir_subpaths_consistent(monkeypatch, tmp_path):
@@ -525,6 +564,7 @@ def test_resolve_drawio_prefers_managed(monkeypatch, tmp_path):
 
 def test_write_lock_records_drawio(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(setup_cmd, "_drawio_version", lambda b: "30.2.4")
     tlmgr = tmp_path / "tinytex" / "bin" / "plat" / "tlmgr"
     tlmgr.parent.mkdir(parents=True)
     tlmgr.write_text("x", encoding="utf-8")
@@ -532,3 +572,55 @@ def test_write_lock_records_drawio(monkeypatch, tmp_path):
     lock = json.loads(paths.tex_lock_path().read_text(encoding="utf-8"))
     assert lock["drawio_tag"] == setup_cmd._DRAWIO_MANIFEST["tag"]
     assert lock["drawio_path"] == "/d/drawio"
+    assert lock["drawio_installed_version"] == "30.2.4"   # C1：記實際自報版本
+
+
+# ── drawio 版本擔保（C1：不只信檔案存在；舊版殘檔會拒 -x -f）─────────────
+
+def test_drawio_version_strips_electron_env(monkeypatch):
+    seen: dict = {}
+
+    def fake_run(cmd, **kw):
+        seen["env"] = kw.get("env", {})
+
+        class R:
+            stdout = "30.2.4\n"
+            stderr = ""
+        return R()
+
+    monkeypatch.setenv("ELECTRON_RUN_AS_NODE", "1")
+    monkeypatch.setattr(setup_cmd.subprocess, "run", fake_run)
+    assert setup_cmd._drawio_version("draw.io") == "30.2.4"
+    assert "ELECTRON_RUN_AS_NODE" not in seen["env"]   # 必須剝掉，否則 Electron 當 node 跑
+
+
+def test_ensure_drawio_redownloads_on_version_mismatch(monkeypatch, tmp_path):
+    target = tmp_path / "drawio" / "draw.io.exe"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"old v24 binary")
+    monkeypatch.setattr(setup_cmd, "_pandoc_platform_key", lambda: "windows")
+    monkeypatch.setattr(paths, "drawio_managed_binary", lambda plat=None: target)
+    monkeypatch.setattr(setup_cmd, "_drawio_version", lambda b: "24.16.0")  # ≠ pinned 30.2.4
+    monkeypatch.setattr(setup_cmd, "_check_linux_drawio_runtime", lambda **k: None)
+    monkeypatch.setattr(paths, "cache_dir", lambda: tmp_path / "cache")
+    (tmp_path / "cache").mkdir()
+    dl: list = []
+    monkeypatch.setattr(setup_cmd, "_download", lambda url, pkg, sha: dl.append(url) or True)
+    monkeypatch.setattr(setup_cmd, "_extract_drawio", lambda pkg, pkey: True)
+    assert setup_cmd._ensure_drawio(force=False, no_download=False) is True
+    assert dl, "version mismatch must trigger a re-download, not skip on file presence"
+
+
+def test_ensure_drawio_skips_when_version_matches(monkeypatch, tmp_path):
+    target = tmp_path / "drawio" / "draw.io.exe"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"good binary")
+    monkeypatch.setattr(setup_cmd, "_pandoc_platform_key", lambda: "windows")
+    monkeypatch.setattr(paths, "drawio_managed_binary", lambda plat=None: target)
+    monkeypatch.setattr(setup_cmd, "_drawio_version",
+                        lambda b: setup_cmd._DRAWIO_MANIFEST["tag"])
+    monkeypatch.setattr(setup_cmd, "_check_linux_drawio_runtime", lambda **k: None)
+    dl: list = []
+    monkeypatch.setattr(setup_cmd, "_download", lambda *a: dl.append(a) or True)
+    assert setup_cmd._ensure_drawio(force=False, no_download=False) is True
+    assert not dl, "matching version must skip download"

@@ -37,13 +37,14 @@ def run(argv: list[str]) -> int:
                         help="do not download TinyTeX (use existing data_dir or dev shortcut only)")
     parser.add_argument("--no-dev-shortcut", action="store_true",
                         help="do not copy from dev /tmp/ttx (force the real download path)")
+    parser.add_argument("--with-latex", action="store_true",
+                        help="also install/align the optional TinyTeX (xelatex) track even if not present")
     args = parser.parse_args(argv)
 
     pkey = setup_cmd._platform_key()
     if pkey is None:
         sys.stderr.write(
-            f"docspec: unsupported platform ({platform.system()}/{platform.machine()})"
-            " — not covered by the TinyTeX manifest.\n")
+            f"docspec: unsupported platform ({platform.system()}/{platform.machine()}).\n")
         return 1
 
     try:
@@ -54,40 +55,51 @@ def run(argv: list[str]) -> int:
 
     print(f"docspec upgrade (platform={pkey}) → aligning the asset layer in data_dir: {dd}")
 
-    # 1+2. TinyTeX（冪等：已裝齊跳過；程式帶新 _MANIFEST tag → 由 setup 邏輯判定重抓）
-    if not setup_cmd._ensure_tinytex(
-        pkey, force=args.force, no_download=args.no_download,
-        use_dev_shortcut=not args.no_dev_shortcut,
-    ):
-        sys.stderr.write("docspec: TinyTeX alignment did not complete — upgrade aborted.\n")
-        return 1
-    tlmgr = paths.tlmgr_path(paths.tinytex_root())
-    if tlmgr is None:
-        sys.stderr.write("docspec: TinyTeX is in place but tlmgr was not found — the install may be incomplete.\n")
-        return 1
-
-    # 3. tlmgr 套件（補當前 _TEX_PACKAGES 缺的）
-    ok, packages = setup_cmd._ensure_packages(tlmgr)
-    if not ok:
-        sys.stderr.write("docspec: tlmgr package alignment did not complete (possibly offline/mirror issue) — upgrade aborted.\n")
-        return 1
-
-    # 4. 字型（補當前 REQUIRED_FONT_FILES 缺的）
+    # 核心資產（永遠對齊）＝字型 + pandoc + typst（預設 render 引擎）。
+    # 1. 字型（補當前 REQUIRED_FONT_FILES 缺的）
     if not setup_cmd._ensure_fonts(force=args.force):
         return 1
-
-    # 5. pandoc（補當前 _PANDOC_MANIFEST 期望；程式帶新 tag → 重抓）
+    # 2. pandoc（補當前 _PANDOC_MANIFEST 期望；程式帶新 tag → 重抓）
     if not setup_cmd._ensure_pandoc(force=args.force, no_download=args.no_download):
         sys.stderr.write("docspec: pandoc alignment did not complete — upgrade aborted.\n")
         return 1
+    # 3. typst（補當前 _TYPST_MANIFEST 期望；之前 upgrade 漏對齊 typst＝bug）
+    if not setup_cmd._ensure_typst(force=args.force, no_download=args.no_download):
+        sys.stderr.write("docspec: typst alignment did not complete — upgrade aborted.\n")
+        return 1
 
-    # 6. 重寫 tex.lock 指紋（資產層對齊後更新；doctor 之後比對的就是這份）
-    xelatex = paths.resolve_xelatex()
+    # 4. 選用 LaTeX 軌（TinyTeX）：只在「已裝」或 --with-latex 時對齊；不主動硬塞數百 MB。
+    tlmgr = paths.tlmgr_path(paths.tinytex_root())
+    xelatex = None
+    packages: list[str] = []
+    if tlmgr is not None or args.with_latex:
+        if not setup_cmd._ensure_tinytex(
+            pkey, force=args.force, no_download=args.no_download,
+            use_dev_shortcut=not args.no_dev_shortcut,
+        ):
+            sys.stderr.write("docspec: TinyTeX alignment did not complete — upgrade aborted.\n")
+            return 1
+        tlmgr = paths.tlmgr_path(paths.tinytex_root())
+        if tlmgr is None:
+            sys.stderr.write("docspec: TinyTeX is in place but tlmgr was not found — the install may be incomplete.\n")
+            return 1
+        ok, packages = setup_cmd._ensure_packages(tlmgr)
+        if not ok:
+            sys.stderr.write("docspec: tlmgr package alignment did not complete (possibly offline/mirror issue) — upgrade aborted.\n")
+            return 1
+        xelatex = paths.resolve_xelatex()
+    else:
+        tlmgr = None
+
+    # 5. 重寫 tex.lock 指紋（含 typst/drawio：之前漏傳會把它們的路徑抹掉＝bug）
     pandoc = paths.resolve_pandoc()
-    setup_cmd._write_lock(tlmgr, xelatex, packages, pandoc)
+    typst = paths.resolve_typst()
+    drawio = paths.resolve_drawio()
+    setup_cmd._write_lock(tlmgr, xelatex, packages, pandoc, typst, drawio)
 
     print(f"\n✓ upgrade complete (asset layer aligned). tex.lock: {paths.tex_lock_path()}")
-    print(f"  xelatex: {xelatex}")
+    print(f"  typst: {typst}  (default render engine)")
     print(f"  pandoc: {pandoc}")
+    print(f"  xelatex: {xelatex if xelatex else 'not installed (optional; --with-latex to add)'}")
     print(f"\n{_PROGRAM_UPDATE_HINT}")
     return 0

@@ -7,7 +7,6 @@ import json
 
 from dspx.check import run_check, run_file_check
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.frontmatter import FrontmatterError, read_frontmatter
 from dspx.layout import Layout
 from dspx.model import Leaf, ancestor_brief_fingerprint, decision_index, deps_fingerprint
 from dspx.schema import Schema
@@ -35,16 +34,25 @@ def section_state(leaf: Leaf, schema: Schema, check_ok: bool) -> str:
 
 
 def _docs_hashes(layout: Layout, article: str) -> dict[str, str]:
-    """讀 docs/<article>/_latest.md frontmatter 記錄的各節投影源 hash。"""
-    path = layout.docs_latest(article)
-    if not path.is_file():
-        return {}
-    try:
-        data, _ = read_frontmatter(path)
-    except FrontmatterError:
-        return {}
-    sections = data.get("sections") or {}
-    return dict(sections) if isinstance(sections, dict) else {}
+    """讀 render 記的各節投影源 hash（指紋帳本）。現行存隱藏 sidecar
+    `docs/<article>/.sections.yaml`；舊交付物 fallback 讀 `_latest.md` frontmatter（ISSUE-3）。"""
+    from dspx.render import read_ledger
+    return read_ledger(layout, article)
+
+
+def develop_only_sections(layout: Layout, leaf_sections: set[str]) -> list[str]:
+    """已建 `develop.md` 但尚未結晶成 concept（＝非 leaf）的章節 id；排序、排除封存區。
+    `status` 與 `list` 共用此 model-liveness 判準——否則 develop-only 節在 status 可見、
+    在 list 卻消失（甚至 list 誤報「Corpus is empty」）。"""
+    out: list[str] = []
+    if layout.corpus_dir.is_dir():
+        for dev in sorted(layout.corpus_dir.rglob("develop.md")):
+            if layout.is_archived_path(dev.parent):
+                continue                       # 封存區（_archive/）對引擎隱形
+            sec = layout.section_id(dev.parent)
+            if sec not in leaf_sections:
+                out.append(sec)
+    return out
 
 
 def _leaf_row(layout: Layout, leaf: Leaf, schema: Schema, check_ok: bool,
@@ -122,22 +130,17 @@ def run(argv: list[str]) -> int:
 
     # develop-only 章節（已建 develop.md、尚未結晶成 concept/decisions）——讓它們可見且不誤報 ready
     leaf_sections = {lf.section for lf in leaves}
-    if layout.corpus_dir.is_dir():
-        for dev in sorted(layout.corpus_dir.rglob("develop.md")):
-            if layout.is_archived_path(dev.parent):
-                continue                       # 封存區（_archive/）對引擎隱形
-            sec = layout.section_id(dev.parent)
-            if sec in leaf_sections:
-                continue                       # 已結晶＝leaf，上面已列
-            if args.section and sec != args.section:
-                continue
-            rows.append({
-                "section": sec, "state": "developing", "sync": "uncrystallized",
-                "files": {"concept": False, "decisions": False,
-                          "material": (dev.parent / "material.md").is_file(),
-                          "develop": True, "history": False, "draft": False},
-                "drifted": False,
-            })
+    for sec in develop_only_sections(layout, leaf_sections):
+        if args.section and sec != args.section:
+            continue
+        devdir = layout.section_dir(sec)
+        rows.append({
+            "section": sec, "state": "developing", "sync": "uncrystallized",
+            "files": {"concept": False, "decisions": False,
+                      "material": (devdir / "material.md").is_file(),
+                      "develop": True, "history": False, "draft": False},
+            "drifted": False,
+        })
 
     if args.as_json:
         print(json.dumps({"checkOk": check_ok, "sections": rows},

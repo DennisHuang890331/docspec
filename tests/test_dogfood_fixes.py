@@ -54,8 +54,8 @@ def test_publish_writes_changelog(make_project, write_leaf, monkeypatch):
     # 精瘦 markdown 表：表頭 + 一列（版本/日期/級別/說明）
     assert "| 版本 | 日期 | 級別 | 說明 |" in text
     today = _dt.date.today().isoformat()
-    # 預設 level=patch、無前版 → 1.0.0
-    assert f"| 1.0.0 | {today} | Patch | 首次發行 |" in text
+    # 預設 level=patch、無前版 → 1.0.0；首版級別欄標「首版」（不標自相矛盾的 Patch，C2）
+    assert f"| 1.0.0 | {today} | 首版 | 首次發行 |" in text
 
 
 def test_publish_semver_bump_levels(make_project, write_leaf, monkeypatch):
@@ -67,13 +67,14 @@ def test_publish_semver_bump_levels(make_project, write_leaf, monkeypatch):
     render_cmd.run(["g"])
     _draft(home, "g")
 
+    # 內容不變、只驗版號 bump 算術 → 後續 publish 用 --allow-noop 跳過 no-op 守門（C2）
     assert publish_cmd.run(["g", "--note", "init"]) == 0          # 預設 patch、無前版 → 1.0.0
     assert (archive / "v1.0.0.md").is_file()
-    assert publish_cmd.run(["g", "--level", "minor", "--note", "m"]) == 0
+    assert publish_cmd.run(["g", "--level", "minor", "--note", "m", "--allow-noop"]) == 0
     assert (archive / "v1.1.0.md").is_file()
-    assert publish_cmd.run(["g", "--level", "patch", "--note", "p"]) == 0
+    assert publish_cmd.run(["g", "--level", "patch", "--note", "p", "--allow-noop"]) == 0
     assert (archive / "v1.1.1.md").is_file()
-    assert publish_cmd.run(["g", "--level", "major", "--note", "M"]) == 0
+    assert publish_cmd.run(["g", "--level", "major", "--note", "M", "--allow-noop"]) == 0
     assert (archive / "v2.0.0.md").is_file()
 
     # changelog：四列、各標對的級別

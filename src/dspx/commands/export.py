@@ -85,7 +85,7 @@ def _resolve_format(econf: dict, format_config_file: str | None) -> dict:
     """合成最終旋鈕表並驗證：專案 config 的 export.format（預設）＋ --format-config 檔覆寫。
 
     回**已驗證**的完整旋鈕表（可直接 compile）。任一層含不合法值 → 拋 FormatConfigError
-    （由 run() 攔成清楚錯誤、export 非零、不產 LaTeX——壞值/幻覺永不進 xelatex）。
+    （由 run() 攔成清楚錯誤、export 非零、不進 render——壞值/幻覺永不進 typst）。
     """
     raw = dict(econf.get("format") or {})
     if format_config_file is not None:
@@ -119,6 +119,45 @@ def _strip_raw_latex(md: str) -> str:
     return _RAW_LATEX_BLOCK_RE.sub("", md)
 
 
+# pandoc 的 typst writer 對沒指定欄寬的表格給「等分百分比」欄寬（columns: (33.33%, 33.33%, …)），
+# 與內容無關 → 文字重的欄被擠成窄條、字被硬斷成「parti-tion」「exe-cution」。把『等分百分比』
+# 改成 typst auto（依內容定寬、且 typst auto 會把表收進容器寬、不水平溢出，只在需要時換行）。
+# 非等分（作者用 grid table 指定的相對欄寬）＝作者意圖，保留不動。
+_TYPST_COLS_RE = re.compile(r"columns:\s*\(([^)]*)\)")
+
+
+def _balance_table_columns(typst_src: str) -> str:
+    """把 pandoc typst 表格的等分百分比欄寬改成 auto（依內容定寬）；非等分保留。"""
+    def repl(m: "re.Match[str]") -> str:
+        parts = [p.strip() for p in m.group(1).split(",") if p.strip()]
+        if len(parts) < 2 or not all(p.endswith("%") for p in parts):
+            return m.group(0)
+        try:
+            vals = [float(p[:-1]) for p in parts]
+        except ValueError:
+            return m.group(0)
+        if max(vals) - min(vals) > 0.5:   # 非等分＝作者指定的相對寬 → 尊重
+            return m.group(0)
+        return "columns: (" + ", ".join(["auto"] * len(parts)) + ")"
+    return _TYPST_COLS_RE.sub(repl, typst_src)
+
+
+# pandoc 的 typst writer 對少數數學符號發出 typst 不認的識別字（pandoc/typst 版本錯位）→ 編譯炸。
+# 已知：集合交集 ∩ → pandoc 發 `sect`，但 typst 用 `inter`。只在 `$…$` 數學區段內、整字替換（避免動到散文）。
+_TYPST_MATH_RE = re.compile(r"\$.*?\$", re.DOTALL)
+_TYPST_MATH_SYMBOL_FIXES = {"sect": "inter"}   # pandoc 名 → typst 名
+
+
+def _fix_typst_math(typst_src: str) -> str:
+    """修 pandoc→typst 數學符號錯位（如 ∩：sect→inter）；只在數學區段內整字替換。"""
+    def fix_span(m: "re.Match[str]") -> str:
+        span = m.group(0)
+        for bad, good in _TYPST_MATH_SYMBOL_FIXES.items():
+            span = re.sub(rf"\b{bad}\b", good, span)
+        return span
+    return _TYPST_MATH_RE.sub(fix_span, typst_src)
+
+
 def _collect_referenced_assets(layout: Layout, article: str, body_md: str) -> dict[str, Path]:
     """收集正文引用、且實際存在的圖片資產：{`assets/<file>` → corpus 源檔路徑}。
 
@@ -143,6 +182,42 @@ def _collect_referenced_assets(layout: Layout, article: str, body_md: str) -> di
         for p in lf.asset_files():
             name_to_path[f"assets/{p.name}"] = p
     return {r: name_to_path[r] for r in dict.fromkeys(refs) if r in name_to_path}
+
+
+def _figure_health_warnings(body_md: str, assets: dict[str, Path]) -> list[str]:
+    """非阻塞圖片健檢（export 時，補 render-fidelity 只比文字的盲區）：
+      ① 正文引用 `assets/<file>` 卻沒收集到實體檔 → PDF 會缺圖（snapshot 已剝 marker 無法逐節
+         歸屬，但扁平 ref↔收集表比對 snapshot-safe）。
+      ② 收集到的光柵圖近全黑/近全白 → drawio SVG 在 Typst 壓成黑塊正是這樣（PNG-primary 已治源，
+         此為事後健檢）。需 Pillow；缺則只做 ①。
+    回 WARN 字串清單，呼叫端印 stderr、不阻擋 export。"""
+    from dspx.render import find_image_refs
+    warns: list[str] = []
+    refs = [r for r in dict.fromkeys(find_image_refs(body_md)) if r.startswith("assets/")]
+    for r in refs:
+        if r not in assets:
+            warns.append(f"image \"{r}\" is referenced but no matching asset was collected "
+                         f"— the PDF will be missing this figure")
+    try:
+        from PIL import Image, ImageStat
+    except ImportError:
+        return warns
+    for ref, src in assets.items():
+        if src.suffix.lower() not in (".png", ".jpg", ".jpeg"):
+            continue
+        try:
+            with Image.open(src) as im:
+                mean = ImageStat.Stat(im.convert("L")).mean[0]
+        except Exception:  # noqa: BLE001 — 壞圖/解碼失敗不阻擋
+            continue
+        if mean < 8:
+            warns.append(f"figure \"{ref}\" renders almost entirely black (mean luma {mean:.0f}/255)"
+                         f" — a drawio SVG under the Typst track collapses to a black box; re-render"
+                         f" it as PNG (dspx-diagram is PNG-primary)")
+        elif mean > 247:
+            warns.append(f"figure \"{ref}\" is almost entirely blank (mean luma {mean:.0f}/255)"
+                         f" — verify the render is not empty")
+    return warns
 
 
 def _copy_assets_into(build: Path, assets: dict[str, Path]) -> None:
@@ -187,7 +262,8 @@ def _split_title_body(text: str, fallback_title: str) -> tuple[str, str]:
 def _build_pdf_typst(pandoc: str, typst: str, typst_template: Path, fonts_src: Path,
                      title: str, body_md: str, out: Path,
                      highlight_style: str = "tango", format_vars: list[str] | None = None,
-                     assets: dict[str, Path] | None = None) -> None:
+                     assets: dict[str, Path] | None = None, lang: str = "zh",
+                     region: str | None = None, profile: str = "default") -> None:
     """Typst 軌：pandoc -t typst（套 docspec-typst 模板）→ typst compile（受控字型）→ PDF。
 
     比 xelatex 軌輕：單一 typst binary、原生 CJK（--font-path 受控字型夾、--ignore-system-fonts
@@ -209,10 +285,18 @@ def _build_pdf_typst(pandoc: str, typst: str, typst_template: Path, fonts_src: P
              "--shift-heading-level-by=-1",
              f"--syntax-highlighting={highlight_style}",
              "-V", f"title={title}",
+             "-V", f"lang={lang}",
+             "-V", f"profile={profile}",
+             *(["-V", f"region={region}"] if region else []),
              *(format_vars or []),
              "-o", "doc.typ"],
             cwd=str(build), check=True,
         )
+
+        # pandoc 後處理：① 等分百分比欄寬 → auto（治表格擠爆＋硬斷字）；② 修數學符號錯位（sect→inter）。
+        doc_typ = build / "doc.typ"
+        _src = doc_typ.read_text(encoding="utf-8")
+        doc_typ.write_text(_fix_typst_math(_balance_table_columns(_src)), encoding="utf-8")
 
         # typst compile（受控字型夾、忽略系統字型＝確定性）。
         proc = subprocess.run(
@@ -249,6 +333,30 @@ def _resolve_journal_template(journal: str | None, template_override: str | None
     return None
 
 
+# journal 軌：作者/摘要/關鍵字進了 slot（→期刊 class 的 \author/\affiliation/abstract 巨集）後，
+# body 仍是整份快照、開頭重複作者列＋Abstract/Keywords 節 → 期刊範本從不重複這些。砍掉 body 開頭
+# 到「第一個真正內容標題（如 Introduction）」之間的前置內容，讓 .tex 匹配期刊示範。
+_ATX_RE = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+_FRONTMATTER_HEADINGS = {
+    "abstract", "keywords", "key words", "index terms",
+    "摘要", "關鍵詞", "关键词", "關鍵字", "关键字",
+}
+
+
+def _strip_journal_frontmatter(body_md: str) -> str:
+    """砍掉 body 開頭重複 slot 的前置內容（作者列＋摘要/關鍵字節），保留至第一個內容標題起。
+    找不到內容標題＝整份無 heading → 保守不動。"""
+    def _norm(t: str) -> str:
+        t = re.sub(r"^[\dⅠ-ⅩivxIVX一二三四五六七八九十]+[.、)）]?\s*", "", t)
+        return t.strip().lower()
+    lines = body_md.splitlines()
+    for i, line in enumerate(lines):
+        m = _ATX_RE.match(line)
+        if m and _norm(m.group(2)) not in _FRONTMATTER_HEADINGS:
+            return "\n".join(lines[i:])   # 第一個非前置標題＝正文起點
+    return body_md
+
+
 def _emit_journal(pandoc: str, template: Path, title: str, body_md: str,
                   extra_slots: dict, out: Path) -> None:
     """journal 軌：把 slot contract 餵過 journal pandoc 模板 → emit `.tex`（不編譯、不驗 fidelity）。
@@ -257,6 +365,10 @@ def _emit_journal(pandoc: str, template: Path, title: str, body_md: str,
     文件給了模板沒用到的 slot＝印「unused」（informational）。壞 slot 值在 build_slots 就拋。
     """
     from dspx import slots as slots_mod
+
+    # 作者/摘要進了 slot → 砍掉 body 開頭重複的作者列＋摘要/關鍵字節（匹配期刊範本、不重複）。
+    if extra_slots.get("abstract") or extra_slots.get("authors"):
+        body_md = _strip_journal_frontmatter(body_md)
 
     built = slots_mod.build_slots(title, body_md, extra_slots)
     template_text = template.read_text(encoding="utf-8")
@@ -372,8 +484,9 @@ def _verify_byte_lock(out: Path, body_md: str, article: str = "", *, ack: bool =
     拉丁/數字差異一律 **informational**（等寬字/語法高亮的字元級抽取本就有損）——印出但
     不致 fail（取代舊的 5% 硬容差）。
 
-    回傳：0＝忠實/僅拉丁雜訊/pdfplumber 缺（soft-dep 跳過）/`--ack`（已 proof 複判）；
-         1＝CJK 淨缺失（疑似豆腐/丟段）。
+    回傳：0＝忠實/僅拉丁雜訊/`--ack`（已 proof 複判）；
+         1＝CJK 淨缺失（疑似豆腐/丟段），**或驗證無法執行**（pdfplumber 缺/開不了 PDF）。
+    ★渲染忠實度是 hard-gate：驗證器缺席不等於通過（fail-closed）。要明確跳過用 `--no-verify`。
     """
     from collections import Counter
 
@@ -381,16 +494,19 @@ def _verify_byte_lock(out: Path, body_md: str, article: str = "", *, ack: bool =
         import pdfplumber  # type: ignore
     except Exception:
         sys.stderr.write(
-            "docspec: ⚠ pdfplumber not installed — skipping export render-fidelity verification (PDF was still produced). "
-            "Install: uv pip install 'docspec[export]' (includes pdfplumber).\n")
-        return 0
+            "docspec: ✗ pdfplumber not installed — cannot verify export render fidelity, so export FAILS "
+            "(the PDF was produced but is UNVERIFIED). Install the verifier: "
+            "uv tool install --from <docspec path> docspec --with pdfplumber  (or `pip install 'docspec[export]'`). "
+            "To skip verification deliberately, re-run with --no-verify.\n")
+        return 1
 
     try:
         pdf_cm = pdfplumber.open(str(out))
     except Exception as exc:  # noqa: BLE001
         sys.stderr.write(
-            f"docspec: ⚠ pdfplumber failed to open the PDF ({exc}) — skipping verification (PDF was still produced).\n")
-        return 0
+            f"docspec: ✗ pdfplumber failed to open the produced PDF ({exc}) — render fidelity could not be "
+            "verified, so export FAILS (fail-closed). Re-run with --no-verify to skip verification.\n")
+        return 1
 
     with pdf_cm as pdf:
         pdf_chars, pdf_pages = _pdf_paged_stream(pdf)
@@ -488,6 +604,29 @@ def _check_pack_integrity(template_dir: Path, is_bundled: bool, allow: bool) -> 
     return 1
 
 
+def _prune_old_pdfs(layout: Layout, article: str, keep: Path) -> list[Path]:
+    """預設只留 latest：刪同篇其他已產 PDF（舊版號 + `_vlatest` 預覽），只留剛產出的 `keep`。
+
+    scope 嚴格：只掃 docs/exports/ **頂層**、檔名前綴 `<article>_v`（`_v` 分隔符保證不誤傷
+    `<article>-x` 等他篇）；非遞迴（不碰 journals/ 子夾）、不碰 archive/。回刪除清單。"""
+    pruned: list[Path] = []
+    exports = layout.docs_exports_dir
+    if not exports.is_dir():
+        return pruned
+    keep = keep.resolve()
+    for p in exports.glob(f"{article}_v*.pdf"):
+        if not p.is_file():
+            continue
+        if p.resolve() == keep:
+            continue
+        try:
+            p.unlink()
+            pruned.append(p)
+        except OSError:
+            pass   # 刪不掉不致命（鎖定/權限）；export 本身已成功
+    return pruned
+
+
 # ── 選輸入快照 ────────────────────────────────────────────────────
 
 def _resolve_input(layout: Layout, article: str, version: str | None,
@@ -551,6 +690,13 @@ def run(argv: list[str]) -> int:
                         help="a per-article format-knob override file (YAML; overrides the project export.format knobs of the same name). "
                              "Knobs = validated values (font enum / font-size range / table style…); bad values are rejected before "
                              "compiling to LaTeX and no PDF is produced")
+    parser.add_argument("--profile", default=None,
+                        choices=["default", "academic", "paper", "manual", "essay", "novel"],
+                        help="Typst document-type layout profile (overrides project export.profile): "
+                             "default | academic (single-column serif body + sans headings, indented paragraphs) | "
+                             "paper (two-column academic; title/abstract span both columns, 10pt body — IEEE/journal style) | "
+                             "manual (sans body, code/admonition-friendly) | essay (quiet unnumbered headings) | "
+                             "novel (first-line indent, * * * scene breaks, sunk chapter openers)")
     parser.add_argument("--allow", action="store_true",
                         help="escape hatch: explicitly allow exporting with a hand-edited bundled template pack (by default any detected change is rejected, "
                              "forcing you through knobs or your own --template pack)")
@@ -559,6 +705,9 @@ def run(argv: list[str]) -> int:
                              "= render is faithful / extraction misfire, not real character loss)")
     parser.add_argument("--no-verify", action="store_true",
                         help="skip the post-export render-fidelity verification entirely (for debugging; --ack is the proper \"re-checked, allowed\")")
+    parser.add_argument("--keep", action="store_true",
+                        help="keep this article's previously-generated PDFs (by default a successful export removes the article's other "
+                             "PDFs in docs/exports/ — older versions + the _vlatest preview — so only the latest deliverable remains)")
     args = parser.parse_args(argv)
 
     try:
@@ -567,6 +716,12 @@ def run(argv: list[str]) -> int:
         return exc.exit_code
 
     econf = _export_config(config)
+    # 文類版面 profile：--profile 旗標 > 專案 export.profile config > default。
+    from dspx.config import EXPORT_PROFILES
+    profile = args.profile or econf.get("profile") or "default"
+    if profile not in EXPORT_PROFILES:
+        sys.stderr.write(f"docspec: unknown export profile '{profile}' — valid: {', '.join(EXPORT_PROFILES)}.\n")
+        return 1
     # render 引擎：--engine 旗標 >（--journal/--template 隱含 journal）> 專案 export.engine config > 預設 typst。
     engine = args.engine or ("journal" if (args.journal or args.template) else None) or econf.get("engine") or "typst"
 
@@ -628,7 +783,9 @@ def run(argv: list[str]) -> int:
                 sys.stderr.write(f"docspec: the --slots file's top level must be a mapping: {sp}\n")
                 return 1
             extra_slots.update(data)
-        out = layout.docs_export(args.article, label, "tex")
+        # journal 軌產物落 per-journal 子夾（不與 latest PDF 混、雙 adapter 不互蓋）。
+        journal_id = args.journal or (Path(args.template).name if args.template else "journal")
+        out = layout.docs_journal_export(args.article, label, journal_id, "tex")
         from dspx.slots import SlotError
         try:
             _emit_journal(pandoc, template, title, body_md, extra_slots, out)
@@ -642,6 +799,16 @@ def run(argv: list[str]) -> int:
             sys.stderr.write(f"docspec: journal emit failed ({exc}).\n")
             return 1
         print(f"Emitted (journal track, not compiled): {out}")
+        # 把 .tex 引用的圖 copy 到它旁邊（`docs/exports/assets/`），否則使用者拿 .tex 去 Overleaf
+        # 會缺圖編不出（圖原本只住 corpus/<section>/assets/）。
+        j_assets = _collect_referenced_assets(layout, args.article, body_md)
+        if j_assets:
+            adir = out.parent / "assets"
+            adir.mkdir(parents=True, exist_ok=True)
+            for ref, src in j_assets.items():
+                if src.is_file():
+                    shutil.copy2(src, adir / Path(ref).name)
+            print(f"  Copied {len(j_assets)} referenced image asset(s) next to the .tex → {adir}")
         print("  Compile it with the journal's toolchain (Overleaf / its real .cls). docspec does not compile the journal track.")
         return 0
 
@@ -660,6 +827,8 @@ def run(argv: list[str]) -> int:
     out = layout.docs_export(args.article, label, "pdf")
     # 被引用的圖片資產（兩條編譯軌共用）：copy 進 build dir 才渲得出嵌圖。
     assets = _collect_referenced_assets(layout, args.article, body_md)
+    for w in _figure_health_warnings(body_md, assets):
+        sys.stderr.write(f"docspec: ⚠ {w}\n")
 
     try:
         if engine == "typst":
@@ -677,10 +846,16 @@ def run(argv: list[str]) -> int:
             if _check_pack_integrity(typst_template, is_bundled=True, allow=args.allow) != 0:
                 return 1
             from dspx.format_config import compile_typst_vars
+            from dspx.config import detect_language, region_for
+            # 文件語言＝從定稿內容偵測（非綁專案 config.language；agent 常忘了改）。
+            # title＋body 一起判（標題已被抽出，但仍是文件文字）。config.language 為 fallback。
+            _lang = detect_language(f"{title}\n{body_md}", config.get("language"))
+            _region = region_for(_lang, config.get("language"))
             _build_pdf_typst(pandoc, typst, typst_template / "template.typ", fonts_src,
                              title, body_md, out,
                              highlight_style=highlight_style,
-                             format_vars=compile_typst_vars(knobs), assets=assets)
+                             format_vars=compile_typst_vars(knobs), assets=assets,
+                             lang=_lang, region=_region, profile=profile)
         else:
             sys.stderr.write(f"docspec: unknown engine '{engine}' — valid engines: typst, journal.\n")
             return 1
@@ -700,6 +875,14 @@ def run(argv: list[str]) -> int:
     if not args.no_verify:
         if _verify_byte_lock(out, f"{title}\n{verify_body}", args.article, ack=args.ack) != 0:
             return 1
+
+    # 預設只留 latest：成功 export+verify 後清同篇舊版 PDF（`--keep` 保留；`--latest` 預覽不清，
+    # 預覽不該抹掉已發行匯出；失敗已在上方 early-return、到不了這裡）。
+    if not args.keep and not args.latest:
+        pruned = _prune_old_pdfs(layout, args.article, out)
+        if pruned:
+            print(f"  Pruned {len(pruned)} older PDF export(s) (use --keep to retain): "
+                  f"{', '.join(p.name for p in pruned)}")
 
     print(f"Exported: {out}")
     return 0

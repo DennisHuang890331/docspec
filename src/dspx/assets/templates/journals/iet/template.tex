@@ -4,6 +4,7 @@
 %% toolchain with the real cta-author.cls + hypernat.sty from the IET CTA bundle).
 %% Slot variables referenced: title, authors(.name/.affiliation/.email), abstract, keywords, body.
 \documentclass{cta-author}
+\usepackage{tabularx}  %% docspec journal-tables.lua 用 tabularx X 欄（寬表自動換行、不溢出版面）
 \providecommand{\tightlist}{\setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
 $if(highlighting-macros)$
 $highlighting-macros$

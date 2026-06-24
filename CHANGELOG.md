@@ -70,5 +70,7 @@ a minor bump.
   Typst track; LaTeX output is the emit-only journal track (compiled by the user, not docspec).
 - **TinyTeX (xelatex) is kept** — it is the general LaTeX engine, a separate concern from the removed
   class; `docspec setup` still installs it for the journal toolchain.
-- Removed paths helpers `bundled_template_dir()` / `resolve_template_dir()` / `REQUIRED_TEMPLATE_*`
-  and export's LaTeX build path; the format-config LaTeX-emit functions remain as (unused) legacy.
+- Removed paths helpers `bundled_template_dir()` / `resolve_template_dir()` / `REQUIRED_TEMPLATE_*`,
+  export's LaTeX build path, and the format-config cas-sc LaTeX-emit functions (format_config.py now
+  exposes only `validate_format_config` / `compile_typst_vars` / `pandoc_highlight_style` /
+  `pandoc_table_metavars` plus helpers).

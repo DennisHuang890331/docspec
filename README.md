@@ -13,7 +13,24 @@ English: [README.en.md](README.en.md)
 
 </div>
 
+> [!WARNING]
+> **使用邊界 (Usage Boundaries)**
+> 本專案採 PolyForm Noncommercial 1.0.0 授權，**嚴格禁止任何商業使用**。
+> - ✅ **允許的場景 (Non-commercial)**：個人寫作、學術研究、學生專題、開源專案 (Open Source) 的文件維護、個人技術部落格或不收費的社群分享。
+> - ❌ **禁止的場景 (Commercial)**：寫小說、書籍、教材並拿去販售營利、作為公司的內部文件管理系統 (Wiki, KB)、撰寫公司商業產品的規格書或開發文件。
+
 你跟 agent 先把每一節的邏輯與決策講清楚，docspec 再把它渲染成散文，同時守住結構。文件變長時不容易自相矛盾。你只看渲染出來的成品，後台的細節交給 agent。
+
+## 端到端產出實證 (Showcase)
+
+docspec 已通過完整的壓力測試（包含結構閘門與忠實度硬閘），能駕馭雙語及多種文體。以下是完全由人與 agent 共筆、滾輪式從淺到深做出來的實證範例：
+
+| 文件類型 | 語言 | 產出與排版亮點 |
+|---|---|---|
+| **中/長篇小說** | 中/英雙語 | 跨章節連續性查核、防劇透大綱生成。 |
+| **長篇論說** | 中/英雙語 | 論點連貫性保持、章節交叉引用驗證。 |
+| **工程設計/手冊** | 中/英雙語 | **自動生成架構圖**：由 agent 呼叫 drawio 繪圖並嵌進 PDF。 |
+| **學術綜述** | 中/英雙語 | **雙軌發布**：同時輸出 Typst 排版 PDF 與期刊標準 `.tex` 源碼。 |
 
 ## 這給誰用
 
@@ -41,8 +58,8 @@ AI： [publish] 所有閘門綠 → 凍結 v1 唯讀快照、升版、記 change
 AI： [release] 匯出 → 看頁面圖 → 調排版旋鈕 → docs/exports/zenoh.pdf
 ```
 
-<!-- TODO: 放一張 docs/exports/zenoh.pdf 的頁面截圖（zenoh dogfood 樣本） -->
-> 📄 **成品長這樣：**（PDF 頁面截圖待補）
+> 📄 **成品長這樣：**
+> `[插入壓測 PDF 截圖於此]`
 
 ## 快速開始
 
@@ -137,7 +154,8 @@ corpus/zenoh/intro/decisions.yaml                （依 brief 與決策生成，
 
 ## 授權
 
-**PolyForm Noncommercial 1.0.0**：任何非商業用途免費，商業使用需另外向作者取得授權。這是 source-available 的非商業授權，不是 OSI 定義的那種「開源」。隨附的第三方元件各自保留原授權，詳見 [`LICENSE`](LICENSE) 與根目錄的 [`NOTICE.md`](NOTICE.md)。
+**PolyForm Noncommercial 1.0.0**：任何非商業用途免費，商業使用需另外向作者取得授權。這是 source-available 的非商業授權，不是 OSI 定義的那種「開源」。
+詳細的使用界線請參考本文最上方的「使用邊界 (Usage Boundaries)」。隨附的第三方元件各自保留原授權，詳見 [`LICENSE`](LICENSE) 與根目錄的 [`NOTICE.md`](NOTICE.md)。
 
 ## 致謝
 

@@ -52,10 +52,10 @@ class AuditStore:
     def load(cls, path: Path, store: str = "") -> "AuditStore":
         if not path.is_file():
             return cls(path=path, findings=[], store=store)
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        items = data.get("findings") or []
-        return cls(path=path, findings=[f for f in items if isinstance(f, dict)],
-                   store=store)
+        from dspx.model import keyed_list
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        items = keyed_list(raw, path, "findings", error=AuditError)  # 誤名頂層 key fail-loud
+        return cls(path=path, findings=items, store=store)
 
     def save(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)

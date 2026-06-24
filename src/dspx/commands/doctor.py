@@ -5,11 +5,13 @@ r"""docspec doctor — 唯一排版環境診斷入口（唯讀、離線、不改
 
 檢查項（全離線、不連網）：
   1. 程式版本 dspx.__version__。
-  2. TinyTeX：paths.resolve_xelatex() 命中否（否 → FAIL：`docspec setup`）。
-  3. tlmgr 套件 vs tex.lock 宣告：tex.lock 記的 tlmgr_packages 與 setup._TEX_PACKAGES
-     比對（缺宣告 → WARN，叫 `docspec upgrade`；tex.lock 不存在 → WARN 叫 setup）。
+  2. typst（預設 render 引擎）：paths.resolve_typst() 命中否（否 → FAIL：`docspec setup`）。
+  3. pandoc：受控 pandoc 命中否（缺 → FAIL：`docspec setup`）。
   4. 字型：paths.REQUIRED_FONT_FILES 在 resolve_fonts_dir() 齊否（缺 → FAIL：`docspec upgrade`）。
-  5. pandoc：受控 pandoc 命中否（缺 → FAIL：`docspec setup`）。
+     （字型兩軌共用：Typst --font-path 與期刊 xelatex 都要。）
+  5. TinyTeX（xelatex，OPTIONAL）：預設 Typst 軌不用、期刊軌 emit-only 不自編；只有想本機編
+     emit 出的期刊 `.tex` 才需要 → 缺 = WARN（`docspec setup --with-latex`），非 FAIL。
+  6. tlmgr 套件（optional）：僅在 LaTeX 軌已裝時比對；未裝 → WARN「LaTeX 軌未裝（可選）」。
 
 選配：
   --deep         實編一頁中文最小檔（預設 Typst 軌），驗文字層乾淨（抓 cid:0/壞字型）。
@@ -56,14 +58,30 @@ def _check_version() -> _Check:
     return _Check(_OK, "docspec version", __version__)
 
 
+def _check_typst() -> _Check:
+    """typst＝預設 render 引擎；缺＝預設 export 出不了 PDF → FAIL。"""
+    try:
+        typst = paths.resolve_typst()
+    except Exception as exc:  # noqa: BLE001 — platformdirs 缺席等
+        return _Check(_FAIL, "typst (default engine)", f"resolution failed: {exc}", "docspec setup")
+    if typst is None:
+        return _Check(_FAIL, "typst (default engine)", "controlled typst not found", "docspec setup")
+    return _Check(_OK, "typst (default engine)", str(typst))
+
+
 def _check_tinytex() -> _Check:
+    """TinyTeX/xelatex 為 OPTIONAL：預設 Typst 軌不用它，期刊軌是 emit-only（docspec 不自編）。
+    只有想在本機用受控 toolchain 自行編譯 emit 出的期刊 `.tex` 才需要 → 缺＝WARN 非 FAIL。"""
     try:
         xelatex = paths.resolve_xelatex()
     except Exception as exc:  # noqa: BLE001 — platformdirs 缺席等
-        return _Check(_FAIL, "TinyTeX (xelatex)", f"resolution failed: {exc}", "docspec setup")
+        return _Check(_WARN, "TinyTeX (xelatex, optional)", f"resolution failed: {exc}",
+                      "docspec setup --with-latex")
     if xelatex is None:
-        return _Check(_FAIL, "TinyTeX (xelatex)", "controlled TinyTeX not found", "docspec setup")
-    return _Check(_OK, "TinyTeX (xelatex)", str(xelatex))
+        return _Check(_WARN, "TinyTeX (xelatex, optional)",
+                      "not installed — only needed to locally compile an emitted journal .tex",
+                      "docspec setup --with-latex")
+    return _Check(_OK, "TinyTeX (xelatex, optional)", str(xelatex))
 
 
 def _check_packages() -> _Check:
@@ -72,6 +90,11 @@ def _check_packages() -> _Check:
     if lock is None:
         return _Check(_WARN, "tlmgr packages", "tex.lock does not exist (not set up yet)", "docspec setup")
     declared = set(lock.get("tlmgr_packages") or [])
+    if not declared:
+        # 受控 LaTeX 軌（TinyTeX）未安裝＝可選、預設 Typst 軌不需要 → 非缺陷
+        return _Check(_WARN, "tlmgr packages (optional)",
+                      "LaTeX track not installed — optional, only for locally compiling a journal .tex",
+                      "docspec setup --with-latex")
     expected = set(setup_cmd._TEX_PACKAGES)
     missing = sorted(expected - declared)
     if missing:
@@ -108,11 +131,11 @@ def _check_pandoc() -> _Check:
 
 # ── --deep：實編一頁中文最小檔（只有實編才現形的問題）─────────────────
 
-# 中英混排、含 code（mono 字型）的最小驗證文：xelatex 編得過＝字型/套件鏈真的可用。
+# 中英混排、含 code（mono 字型）的最小驗證文：typst 編得過＝字型/渲染鏈真的可用。
 _DEEP_DOC = (
     "# 排版環境健檢\n\n"
     "這是一頁中文最小驗證檔，混排英文 English 與行內 `code`，"
-    "用來確認 xelatex＋xeCJK＋字型鏈在實編下沒有缺字或壞字型。\n\n"
+    "用來確認 typst＋CJK 字型鏈在實編下沒有缺字或壞字型。\n\n"
     "- 正體中文：臺中港、車隊、協定。\n"
     "- 數字與標點：123,456。（全形）\n"
 )
@@ -256,10 +279,11 @@ def run(argv: list[str]) -> int:
 
     checks: list[_Check] = [
         _check_version(),
+        _check_typst(),
+        _check_pandoc(),
+        _check_fonts(),
         _check_tinytex(),
         _check_packages(),
-        _check_fonts(),
-        _check_pandoc(),
     ]
     if args.deep:
         checks.append(_check_deep())

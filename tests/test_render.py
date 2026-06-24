@@ -22,6 +22,46 @@ def _latest(home):
     return home.parent / "docs" / "g" / "_latest.md"
 
 
+def test_ledger_lives_in_sidecar_not_frontmatter(make_project, write_leaf, monkeypatch):
+    """ISSUE-3：指紋帳本住隱藏 sidecar，_latest frontmatter 只剩 article/version。"""
+    from dspx.layout import Layout
+    from dspx.render import read_ledger
+    home = _setup(make_project, write_leaf)
+    monkeypatch.chdir(home.parent)
+    latest = _latest(home)
+    render_cmd.run(["g"])
+    # 寫點散文再 render，確保有指紋
+    latest.write_text(latest.read_text("utf-8").replace("## 概覽\n", "## 概覽\n\n內文。\n"), "utf-8")
+    render_cmd.run(["g"])
+    meta, _ = parse_frontmatter(latest.read_text("utf-8"))
+    assert "sections" not in meta and set(meta) <= {"article", "version"}
+    ledger_file = Layout(home).docs_ledger("g")
+    assert ledger_file.is_file() and ledger_file.name.startswith(".")
+    assert "g/intro" in read_ledger(Layout(home), "g")
+
+
+def test_ledger_migrates_from_old_frontmatter(make_project, write_leaf, monkeypatch):
+    """舊交付物 frontmatter 仍帶 sections、無 sidecar → read_ledger fallback 讀得到；
+    一次 render 後遷出（sidecar 建立、frontmatter sections 消失）。"""
+    from dspx.layout import Layout
+    from dspx.render import read_ledger
+    home = _setup(make_project, write_leaf)
+    monkeypatch.chdir(home.parent)
+    latest = _latest(home)
+    latest.parent.mkdir(parents=True, exist_ok=True)
+    # 模擬舊格式：sections 在 frontmatter、無 sidecar
+    latest.write_text(
+        "---\narticle: g\nversion: 0.0.0\n"
+        "sections:\n  g/intro:\n    prose: deadbeef\n---\n\n<!-- dspx:section g/intro -->\n## 概覽\n\n舊文。\n",
+        encoding="utf-8")
+    assert not Layout(home).docs_ledger("g").is_file()
+    assert read_ledger(Layout(home), "g").get("g/intro", {}).get("prose") == "deadbeef"  # fallback
+    render_cmd.run(["g"])                       # 遷移
+    assert Layout(home).docs_ledger("g").is_file()
+    meta, _ = parse_frontmatter(latest.read_text("utf-8"))
+    assert "sections" not in meta               # frontmatter 已遷出
+
+
 def test_render_builds_skeleton_in_order(make_project, write_leaf, monkeypatch):
     home = _setup(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
@@ -47,9 +87,12 @@ def test_render_preserves_written_prose(make_project, write_leaf, monkeypatch):
     render_cmd.run(["g"])
     text2 = latest.read_text(encoding="utf-8")
     assert "限流保護後端。" in text2
-    meta, _ = parse_frontmatter(text2)
-    assert "g/intro" in meta["sections"]      # 有散文 → 記 hash
-    assert "g/usage" not in meta["sections"]  # 沒散文 → 不記
+    # 指紋帳本現存隱藏 sidecar（ISSUE-3），不在 _latest frontmatter
+    from dspx.layout import Layout
+    from dspx.render import read_ledger
+    ledger = read_ledger(Layout(home), "g")
+    assert "g/intro" in ledger      # 有散文 → 記 hash
+    assert "g/usage" not in ledger  # 沒散文 → 不記
 
 
 def test_status_synced_after_draft_and_render(make_project, write_leaf, monkeypatch):
@@ -152,15 +195,88 @@ def test_root_section_is_intro(make_project, write_leaf, monkeypatch):
     assert text.index("# 指南") < text.index("## 簡介")
 
 
-def test_no_root_falls_back_to_bare_title(make_project, write_leaf, monkeypatch):
-    """無根節 → 退回印一行純標題（不強制導言）。"""
+def test_no_root_falls_back_to_humanized_title(make_project, write_leaf, monkeypatch):
+    """A1：無根節 → 封面標題退回 humanize slug（非裸 slug）。"""
     from dspx.commands import render as render_cmd
     home = make_project()
     write_leaf(home, "guide/intro", concept={"id": "c1", "title": "簡介", "order": 1})
     monkeypatch.chdir(home.parent)
     render_cmd.run(["guide"])
     text = (home.parent / "docs" / "guide" / "_latest.md").read_text(encoding="utf-8")
-    assert "# guide" in text and "## 簡介" in text
+    assert "# Guide" in text and "## 簡介" in text
+
+
+def test_no_root_uses_article_group_yaml_title(make_project, write_leaf, monkeypatch):
+    """A1：無根節 + corpus/<article>/group.yaml title → 封面在地化標題（治 CJK 文件冒拼音 slug）。"""
+    from dspx.commands import render as render_cmd
+    home = make_project()
+    write_leaf(home, "guide/intro", concept={"id": "c1", "title": "簡介", "order": 1})
+    (home / "corpus" / "guide" / "group.yaml").write_text("title: 系統概念\n", encoding="utf-8")
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["guide"])
+    text = (home.parent / "docs" / "guide" / "_latest.md").read_text(encoding="utf-8")
+    assert "# 系統概念" in text and "# Guide" not in text
+
+
+def test_group_node_uses_localized_group_yaml_title(make_project, write_leaf, monkeypatch):
+    """② 分組節點放 group.yaml → 標題在地化（治中文文件冒英文 slug 標題）。"""
+    home = make_project()
+    write_leaf(home, "g/howto/s3", concept={"id": "c1", "title": "S3 後端", "order": 1})
+    (home / "corpus" / "g" / "howto" / "group.yaml").write_text("title: 操作指南\n", encoding="utf-8")
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])
+    text = _latest(home).read_text(encoding="utf-8")
+    assert "## 操作指南" in text                       # group.yaml title 生效
+    assert "Howto" not in text and "How-to" not in text  # 不再冒英文 slug
+
+
+def test_group_node_falls_back_to_humanize(make_project, write_leaf, monkeypatch):
+    """② 無 group.yaml → 維持路徑末段 humanize（向後相容）。"""
+    home = make_project()
+    write_leaf(home, "g/howto/s3", concept={"id": "c1", "title": "S3 後端", "order": 1})
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])
+    text = _latest(home).read_text(encoding="utf-8")
+    assert "## Howto" in text                           # humanize fallback（既有行為）
+
+
+def test_group_node_sorts_by_group_yaml_order(make_project, write_leaf, monkeypatch):
+    """B8：分組節點 group.yaml order 排在有序兄弟之間（非固定 0.0 排最前）。"""
+    home = make_project()
+    write_leaf(home, "g/intro", concept={"id": "c1", "title": "簡介", "order": 1})
+    write_leaf(home, "g/methods/a", concept={"id": "c2", "title": "方法A", "order": 1})
+    write_leaf(home, "g/results", concept={"id": "c3", "title": "結果", "order": 4})
+    (home / "corpus" / "g" / "methods" / "group.yaml").write_text(
+        "title: 方法\norder: 3.0\n", encoding="utf-8")
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])
+    text = _latest(home).read_text(encoding="utf-8")
+    # order：簡介(1) < 方法(3) < 結果(4)
+    assert text.index("## 簡介") < text.index("## 方法") < text.index("## 結果")
+
+
+def test_group_node_without_order_keeps_default(make_project, write_leaf, monkeypatch):
+    """B8 回歸：分組節點無 order → 維持既有預設 0.0（無回歸）。"""
+    home = make_project()
+    write_leaf(home, "g/intro", concept={"id": "c1", "title": "簡介", "order": 1})
+    write_leaf(home, "g/methods/a", concept={"id": "c2", "title": "方法A", "order": 1})
+    (home / "corpus" / "g" / "methods" / "group.yaml").write_text("title: 方法\n", encoding="utf-8")
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])
+    text = _latest(home).read_text(encoding="utf-8")
+    # 無 order → 分組 0.0 排在 intro(1) 之前（既有行為，未變）
+    assert text.index("## 方法") < text.index("## 簡介")
+
+
+def test_heading_level_clamped_to_max(make_project, write_leaf, monkeypatch):
+    """③ 過深章節樹：render clamp 至 H5（四級），絕不吐字面 #######。"""
+    home = make_project()
+    write_leaf(home, "g/a/b/c/d/e", concept={"id": "c1", "title": "葉", "order": 1})  # depth 5 → 本應 H6
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])
+    text = _latest(home).read_text(encoding="utf-8")
+    assert "######" not in text                         # 不吐 H6+（CommonMark 字面文字）
+    assert "##### 葉" in text                            # 末節 clamp 至 H5（四級）
 
 
 def test_strip_markers():

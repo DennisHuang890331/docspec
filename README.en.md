@@ -13,7 +13,24 @@
 
 </div>
 
+> [!WARNING]
+> **Usage Boundaries**
+> This project is licensed under PolyForm Noncommercial 1.0.0. **Any commercial use is strictly prohibited.**
+> - ✅ **Allowed (Non-commercial)**: Personal writing, academic research, student projects, maintaining documentation for Open Source projects, personal tech blogs, or free community sharing.
+> - ❌ **Prohibited (Commercial)**: Publishing novels/books for profit, using it as an internal company knowledge base (Wiki, KB), or writing specs and development docs for commercial company products.
+
 You and the agent settle each section's logic and decisions first; docspec renders the prose and keeps the structure intact. As the document grows it stays consistent. You read only the rendered output — the backstage details are the agent's job.
+
+## End-to-End Showcase
+
+docspec has been stress-tested across multiple genres and languages, passing strict structural and fidelity gates. Here are real examples entirely co-authored by human-agent interaction:
+
+| Document Type | Language | Output & Typesetting Highlights |
+|---|---|---|
+| **Novellas / Novels** | EN / ZH | Plot continuity fact-checking, spoiler-free outline generation. |
+| **Long-form Essays** | EN / ZH | Argument coherence, cross-section reference validation. |
+| **Engineering / Manuals** | EN / ZH | **Auto-generated diagrams**: Agent uses drawio to draw and embed diagrams. |
+| **Academic Surveys** | EN / ZH | **Dual-track publishing**: Emits both Typst-typeset PDFs and journal-ready `.tex` source. |
 
 ## Who it's for
 
@@ -41,8 +58,8 @@ You: make a PDF
 AI:  [release] export → review page images → tune layout knobs → docs/exports/zenoh.pdf
 ```
 
-<!-- TODO: add a screenshot of a rendered docs/exports/zenoh.pdf page (zenoh dogfood sample) -->
-> 📄 **What the output looks like:** (PDF page screenshot to come)
+> 📄 **What the output looks like:**
+> `[Insert screenshot of rendered PDF here]`
 
 ## Quick start
 
@@ -137,7 +154,8 @@ Issues and PRs welcome. The dev setup, how to run the tests, and why Windows + n
 
 ## License
 
-**PolyForm Noncommercial 1.0.0** — free for any noncommercial use; commercial use requires a separate license from the author. This is a source-available, noncommercial license, not an OSI "open source" license. Bundled third-party components keep their own licenses — see [`LICENSE`](LICENSE) and the root [`NOTICE.md`](NOTICE.md).
+**PolyForm Noncommercial 1.0.0** — free for any noncommercial use; commercial use requires a separate license from the author. This is a source-available, noncommercial license, not an OSI "open source" license.
+For detailed boundaries, please refer to the "Usage Boundaries" section at the top of this document. Bundled third-party components keep their own licenses — see [`LICENSE`](LICENSE) and the root [`NOTICE.md`](NOTICE.md).
 
 ## Acknowledgements
 

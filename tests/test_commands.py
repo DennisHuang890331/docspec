@@ -257,10 +257,11 @@ def test_factcheck_gets_ancestor_normative(make_project, write_leaf, monkeypatch
     data = json.loads(capsys.readouterr().out)
     an = data["ancestorNormative"]
     assert any(d["id"] == "dec-sot" for a in an for d in a["decisions"])
-    # draft 不該拿到（只有 factcheck）
+    # M4：draft 現在也拿得到祖先 normative（落筆遵守 ruling；供料、非 gate）
     capsys.readouterr()
     instr.run(["draft", "art/child", "--json"])
-    assert json.loads(capsys.readouterr().out)["ancestorNormative"] == []
+    draft_an = json.loads(capsys.readouterr().out)["ancestorNormative"]
+    assert any(d["id"] == "dec-sot" for a in draft_an for d in a["decisions"])
 
 
 def test_list_json_includes_concept_and_status(make_project, write_leaf, monkeypatch, capsys):
@@ -275,6 +276,25 @@ def test_list_json_includes_concept_and_status(make_project, write_leaf, monkeyp
     row = next(r for r in rows if r["section"] == "g/x")
     assert row["concept"] == "the one-liner"
     assert row["status"] == "ready"
+
+
+def test_list_shows_develop_only_sections(make_project, monkeypatch, capsys):
+    """只有 develop.md（未結晶）的節：status 看得到，list 也要看得到（同 liveness 判準），
+    不可誤報 Corpus is empty。"""
+    import json
+    from dspx.commands import list_cmd, new as new_cmd
+    home = make_project()
+    monkeypatch.chdir(home.parent)
+    new_cmd.run(["g/intro"])                      # 只建 develop.md、未結晶
+    # text 模式：不說 empty、列出該節並標 developing
+    assert list_cmd.run([]) == 0
+    out = capsys.readouterr().out
+    assert "Corpus is empty" not in out
+    assert "g/intro" in out and "developing" in out
+    # json 模式：含該節、status=developing
+    assert list_cmd.run(["--json"]) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert any(r["section"] == "g/intro" and r["status"] == "developing" for r in rows)
 
 
 def test_hook_postcheck_flags_incomplete(make_project, write_leaf, monkeypatch):
@@ -383,7 +403,10 @@ def test_publish_gate_and_staleness(make_project, write_leaf, monkeypatch):
     assert (docs / "archive" / "v1.0.0.md").is_file()
     meta = yaml.safe_load(latest.read_text("utf-8").split("---")[1])
     assert meta["version"] == "1.0.0"
-    assert "g/x" in meta["sections"]
+    # 指紋帳本現存隱藏 sidecar（ISSUE-3），不在 _latest frontmatter
+    from dspx.layout import Layout
+    from dspx.render import read_ledger
+    assert "g/x" in read_ledger(Layout(home), "g")
 
 
 def test_publish_aborts_on_dirty_docs(make_project, write_leaf, monkeypatch):
@@ -398,3 +421,74 @@ def test_publish_aborts_on_dirty_docs(make_project, write_leaf, monkeypatch):
         latest.read_text(encoding="utf-8").replace("## X\n", "## X\n\n洩漏 sec-leak。\n"),
         encoding="utf-8")
     assert publish_cmd.run(["g"]) == 1
+
+
+# ── C2：publish i18n + 版本正確性 ──────────────────────────────────
+
+def _render_and_draft(home, monkeypatch, write_leaf, prose):
+    from dspx.commands import render as render_cmd
+    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
+    monkeypatch.chdir(home.parent)
+    docs = home.parent / "docs" / "g"
+    render_cmd.run(["g"])
+    latest = docs / "_latest.md"
+    latest.write_text(latest.read_text("utf-8").replace("## X\n", f"## X\n\n{prose}\n"),
+                      encoding="utf-8")
+    return docs
+
+
+def test_publish_first_version_not_labeled_patch(make_project, write_leaf, monkeypatch):
+    home = make_project()
+    _render_and_draft(home, monkeypatch, write_leaf, "內文。")
+    assert publish_cmd.run(["g"]) == 0
+    from dspx.layout import Layout
+    cl = Layout(home).docs_changelog("g").read_text("utf-8")
+    assert "1.0.0" in cl
+    assert "Patch" not in cl and "首版" in cl   # 首版不標自相矛盾的 Patch
+
+
+def test_publish_refuses_noop_bump(make_project, write_leaf, monkeypatch):
+    home = make_project()
+    docs = _render_and_draft(home, monkeypatch, write_leaf, "內文。")
+    assert publish_cmd.run(["g"]) == 0           # v1.0.0
+    assert publish_cmd.run(["g"]) == 1           # 無改動 → no-op 拒
+    assert not (docs / "archive" / "v1.0.1.md").is_file()
+    assert publish_cmd.run(["g", "--allow-noop"]) == 0   # 強制放行
+    assert (docs / "archive" / "v1.0.1.md").is_file()
+
+
+def test_publish_english_changelog(make_project, write_leaf, monkeypatch):
+    home = make_project("language: en\ndocs_layout: per-article\n")
+    _render_and_draft(home, monkeypatch, write_leaf, "Body text.")
+    assert publish_cmd.run(["g"]) == 0
+    from dspx.layout import Layout
+    cl = Layout(home).docs_changelog("g").read_text("utf-8")
+    assert "| Version | Date | Level | Summary |" in cl
+    assert "Initial" in cl
+    assert "版本" not in cl and "（未填摘要）" not in cl
+
+
+def test_publish_changelog_level_localized_by_content(make_project, write_leaf, monkeypatch):
+    """非首版級別欄依**文件語言**在地化：中文交付物 → 中文級別（非英文「Patch」）。"""
+    home = make_project()
+    docs = _render_and_draft(home, monkeypatch, write_leaf, "中文內文第一版。")
+    assert publish_cmd.run(["g"]) == 0                         # v1.0.0 首版
+    latest = docs / "_latest.md"
+    latest.write_text(latest.read_text("utf-8").replace("第一版", "第二版"), encoding="utf-8")
+    assert publish_cmd.run(["g", "--level", "patch", "--note", "修字"]) == 0  # v1.0.1
+    from dspx.layout import Layout
+    cl = Layout(home).docs_changelog("g").read_text("utf-8")
+    assert "修訂" in cl              # 中文級別 map（patch→修訂）
+    assert "Patch" not in cl        # 不冒英文
+
+
+def test_publish_changelog_language_detected_not_config(make_project, write_leaf, monkeypatch):
+    """英文交付物即使專案 config.language 為預設 zh-TW，changelog 仍走英文（內容偵測 > config）。"""
+    home = make_project()   # 預設 config.language = zh-TW
+    _render_and_draft(home, monkeypatch, write_leaf, "This deliverable is written in English prose.")
+    assert publish_cmd.run(["g"]) == 0
+    from dspx.layout import Layout
+    cl = Layout(home).docs_changelog("g").read_text("utf-8")
+    assert "| Version | Date | Level | Summary |" in cl   # 英文表頭
+    assert "版本" not in cl                                # 無中文殘留（雖 config 是 zh-TW）
+    assert "(no summary)" in cl

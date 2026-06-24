@@ -57,7 +57,7 @@ def _root(home, write_leaf):
     write_leaf(home, "art", concept={"id": "c-art", "title": "Art", "order": 1,
                                      "concept": "x",
                                      "brief": {"audience": "a", "depth": "d",
-                                               "breadth": "b", "forbidden": "f"}})
+                                               "breadth": "b", "forbidden": ["f"]}})
 
 
 def test_vr1_too_many_open_warns(make_project, write_leaf):

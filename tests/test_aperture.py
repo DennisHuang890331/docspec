@@ -71,12 +71,12 @@ def test_develop_is_only_reader_of_develop(make_project, write_leaf):
     assert "草稿內容" in proj.reads["develop"]
 
 
-def test_purpose_projected_to_develop_only(make_project, write_leaf):
-    """config.purpose 只投 develop 開工脈絡；draft/edit 不帶。"""
+def test_purpose_projected_to_develop_and_draft(make_project, write_leaf):
+    """config.purpose 投 develop 開工脈絡＋draft 寫定向 overview 的北極星（W2）；edit 不帶。"""
     home = make_project("language: zh-TW\ndocs_layout: per-article\npurpose: 把分散文件統一成一座森林\n")
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     assert _project(home, "develop", "a/x").project_purpose == "把分散文件統一成一座森林"
-    assert _project(home, "draft", "a/x").project_purpose is None
+    assert _project(home, "draft", "a/x").project_purpose == "把分散文件統一成一座森林"
     assert _project(home, "edit", "a/x").project_purpose is None
 
 

@@ -270,9 +270,14 @@ def _lint_glossary(layout, articles: list[str]) -> list[Finding]:
                     findings.append(Finding("Vg1", WARN, where,
                         f"possible synonym \"{alias}\" -> canonical name should be \"{canonical}\" (confirm context; precise judgment is in audit)"))
             code = t.get("code")
-            if t.get("bucket") == "module" and code and _bare_token(str(code), body):
+            # Vg2 只在「整篇從未在地化（canonical 從不出現）卻裸用縮寫」時報——若 canonical 已在
+            # 文中出現過（首用已展開/在地化），後續裸用縮寫是合法 shorthand，不再每次誤報
+            # （否則 ODD/MRM 這類已正確 gloss 的縮寫每次裸用都被 WARN，訓練作者忽略 Vg2）。
+            if (t.get("bucket") == "module" and code and _bare_token(str(code), body)
+                    and not (canonical and str(canonical) in body)):
                 findings.append(Finding("Vg2", WARN, where,
-                    f"module abbreviation \"{code}\" used bare -> bucket 1 should be localized to \"{canonical}\""))
+                    f"module abbreviation \"{code}\" used bare and never localized -> "
+                    f"introduce it as \"{canonical}\" (bucket 1)"))
     return findings
 
 
@@ -364,7 +369,7 @@ def _lint_export_safety(layout: Layout, articles: list[str]) -> list[Finding]:
                     （HTML 只變死連結、xelatex 嚴格擋）。
     Ve2 非標準 markdown：`@import` 等 MPE 指令 → 不會在 docx/PDF 交付物渲染。
     Ve3 非中立圖記法：```mermaid（不渲染）或 raw `{=latex}`/`{=tex}`（LaTeX-only TikZ，預設 Typst
-                      軌會被剝掉）→ 改用 backend-neutral 嵌入圖片（dspx-diagram：drawio→SVG）。
+                      軌會被剝掉）→ 改用嵌入式圖片（dspx-diagram：drawio 渲成 PNG）。
     """
     findings: list[Finding] = []
     for article in articles:
@@ -391,10 +396,10 @@ def _lint_export_safety(layout: Layout, articles: list[str]) -> list[Finding]:
         # Ve3 掃 body（不剝 code fence——這些記法本身就是 fence）：非 backend-neutral 圖記法。
         if _MERMAID_FENCE_RE.search(body):
             findings.append(Finding("Ve3", WARN, where,
-                "contains a ```mermaid diagram -- mermaid does not render in the controlled toolchain (it ships as a placeholder box); author the diagram as an embedded image instead (the dspx-diagram subagent renders drawio -> SVG, embedded with `![](assets/...)`)"))
+                "contains a ```mermaid diagram -- mermaid does not render in the controlled toolchain (it ships as a placeholder box); author the diagram as an embedded image instead (the dspx-diagram subagent renders drawio to a raster PNG, embedded with `![](assets/...)`)"))
         if _RAW_LATEX_FENCE_RE.search(body):
             findings.append(Finding("Ve3", WARN, where,
-                "contains a raw `{=latex}`/`{=tex}` block (LaTeX-only, e.g. TikZ) -- it is not backend-neutral and the default Typst track strips it (the figure silently disappears); author the diagram as an embedded image instead (drawio -> SVG via the dspx-diagram subagent)"))
+                "contains a raw `{=latex}`/`{=tex}` block (LaTeX-only, e.g. TikZ) -- it is not backend-neutral and the default Typst track strips it (the figure silently disappears); author the diagram as an embedded image instead (drawio rendered to a raster PNG via the dspx-diagram subagent)"))
     return findings
 
 

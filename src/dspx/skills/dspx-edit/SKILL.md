@@ -7,6 +7,8 @@ description: Use after draft and before publish, when a drafted document needs t
   prose rather than generating it, and unlike factcheck it changes how text reads, never what it claims.
 ---
 ## STEP 0 — do this FIRST, every time
+> **If `docspec` is not found** — it IS installed (via `uv tool`); your shell's PATH just predates the install (a freshly-launched or sandboxed agent shell). Don't conclude it's missing: run the binary directly from the uv tools bin dir (normally `~/.local/bin/docspec`, Windows `%USERPROFILE%\.local\bin\docspec.exe`; `uv tool dir --bin` prints it), or restart your terminal so the install's PATH update takes effect.
+
 Run `docspec guide` and `docspec instructions edit <section>` before acting. The mechanics —
 the file model, field names, formats, read/write aperture, filing rules, the graduation/retire
 transactions — live there, projected live from the schema; assume they may have changed since this
@@ -36,18 +38,25 @@ catches, and real fixes loop back to line/copy.
 
 **IMPORTANT: engine first — but route to what the engine ACTUALLY enforces.**
 Leaked codes/anchors/scaffolding, placeholder leftovers (`[TBD]`/`[TBD: …]`/`[TODO]`/
-`[待補]`), leftover `> [!WARNING]` alerts, dead links, and structural integrity are the
-engine's job (`docspec lint`/`check`, blocking ERROR) — do not eyeball them.
+`[待補]`), leftover `> [!WARNING]` alerts, and structural integrity are the engine's job
+(`docspec lint`/`check`, blocking ERROR) — do not eyeball them. A dead internal anchor
+link is an **export-safety WARN** (it does NOT block publish, but it breaks the PDF at
+export time) — so fix it, but know it is a WARN, not a blocking ERROR.
 Cross-document **number** consistency and **term** identity are engine **WARN** advisories
-(`docspec lint` V10/Vg): the engine flags, it does not fix — review each and reconcile by
-hand. Banned openers and **cross-section references** (`as above` / `如前一節所述`) are
-writing-guide doctrine the engine does **NOT** validate — they are your manual proofread
-duty, not a lint catch. Readability, register, contextual word-choice, and the final
-whole-document read are the only things worth a subagent.
+(the engine flags, it does not fix — review each and reconcile by hand). Banned openers and
+**cross-section references** (`as above` / `如前一節所述`) are writing-guide doctrine the
+engine does **NOT** validate — they are your manual proofread duty, not a lint catch.
+Readability, register, contextual word-choice, and the final whole-document read are the
+only things worth a subagent.
 
 **This is a procedure, not a stance.** Unlike develop/factcheck, edit has an ordered
 sequence — because copy-prep that runs out of order wastes itself (you don't proofread
 prose you're about to rewrite).
+
+**Cost tip (cross-skill order, advisory):** on a freshly drafted section, a cheap `factcheck`
+claim-pass FIRST routes content defects upstream while the prose is still cheap to re-render
+— spending the expensive line/copy polish here only after that avoids re-polishing prose a
+later factcheck would invalidate. This is advice, not a gate (the loop is any-order).
 
 ---
 ## Your yardstick: the writing-guide
@@ -122,7 +131,7 @@ that is a `develop` finding — flag it and leave it.
    - leaked code/anchor/scaffolding → rewrite to display-text + hidden target, or cut
    - dead link / cross-reference → repair or remove
    - glossary exact-match miss / format drift → normalize to the one canonical term/format.
-   - **number** drift (lint V10 WARN): the engine flags a value conflict but you cannot tell
+   - **number** drift (an advisory lint WARN): the engine flags a value conflict but you cannot tell
      which is correct — do NOT pick one (numbers stay byte-for-byte). Raise an audit / diff-
      summary finding to reconcile against the source.
      The projected glossary is a **lean index** (`canonical` + `bucket` + `aliases_forbidden`);
@@ -138,7 +147,7 @@ This is a living document: overwrite stale state in place, never append a correc
 ## Stage 3 — Proofread (final gate) · ENGINE gate + one catch-only read
 1. Re-run the engine as the deterministic final gate:
    - `docspec lint` — deliverable cleanliness ERRORs must be **zero**: no leaked machinery,
-     no `[TBD]`/placeholder, no leftover `[!WARNING]`. (Number-drift V10 is a WARN — review
+     no `[TBD]`/placeholder, no leftover `[!WARNING]`. (Number drift is an advisory WARN — review
      and reconcile it; it does not block, but don't ship an unreviewed value conflict.)
    - `docspec check` — every reference resolves, structure whole.
 2. Dispatch a subagent for ONE clean-context, end-to-end read — **catch-only**: flow
@@ -147,7 +156,9 @@ This is a living document: overwrite stale state in place, never append a correc
 
 ---
 ## docspec Awareness
-`docspec status` tells you which leaves are drafted but not yet edited; `docspec lint`
+`docspec status` tells you which leaves are **drafted** (have rendered prose) and which are
+**stale**; it does NOT track an edit/factcheck-progress state (there is no "drafted-but-not-edited"
+field) — which sections you have already polished is yours to track. `docspec lint`
 and `docspec check` are your deterministic checks (exact coverage in `docspec guide`).
 Route to them first — that routing is the whole point. You read and write ONLY the
 deliverable working copy. The brief, decisions, and develop.md are off-limits — you

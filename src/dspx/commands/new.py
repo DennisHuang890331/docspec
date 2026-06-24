@@ -82,10 +82,28 @@ def run(argv: list[str]) -> int:
     for item in created:
         print(f"  + {item}")
     print("  next: think in develop.md; once clear, crystallize into concept.yaml + decisions.yaml.")
-    from dspx.schema import required_field_names
+    print("  ('develop stage' = the workflow phase; concept.status is a separate enum: draft|stable|deprecated)")
+    from dspx.schema import field_contract, required_field_names, yaml_skeleton
     for aid in ("concept", "decisions"):
         art = schema.by_id(aid)
-        if art and art.schema:
-            req = ", ".join(required_field_names(art.schema)) or "(none)"
-            print(f"  after crystallizing, {aid} requires: {req}")
+        if not (art and art.schema):
+            continue
+        req = ", ".join(required_field_names(art.schema)) or "(none)"
+        print(f"\n  after crystallizing, {aid} requires: {req}")
+        if art.entries:
+            print("    container: file top level MUST be { entries: [ … ] }")
+        for f in field_contract(art.schema):
+            req_s = "required" if f.get("required") else "optional"
+            vals = f" = {' | '.join(map(str, f['values']))}" if f.get("values") else ""
+            rel = f" → {f['relation']}" if f.get("relation") else ""
+            print(f"      {f['name']:<14} {f['type']:<9} {req_s}{vals}{rel}")
+            for sub in f.get("fields", []):
+                sv = f" = {' | '.join(map(str, sub['values']))}" if sub.get("values") else ""
+                sreq = "required" if sub.get("required") else "optional"
+                print(f"        {sub['name']:<12} {sub['type']:<9} {sreq}{sv}")
+        skel = yaml_skeleton(art)
+        if skel:
+            print("    skeleton:")
+            for ln in skel.splitlines():
+                print(f"      {ln}")
     return 0

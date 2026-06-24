@@ -6,6 +6,8 @@ description: Enter develop mode — a developmental editor that shapes what a do
   prose — it builds the skeleton and controls whether ideas diverge or converge.
 ---
 ## STEP 0 — do this FIRST, every time
+> **If `docspec` is not found** — it IS installed (via `uv tool`); your shell's PATH just predates the install (a freshly-launched or sandboxed agent shell). Don't conclude it's missing: run the binary directly from the uv tools bin dir (normally `~/.local/bin/docspec`, Windows `%USERPROFILE%\.local\bin\docspec.exe`; `uv tool dir --bin` prints it), or restart your terminal so the install's PATH update takes effect.
+
 Run `docspec guide` and `docspec instructions develop <section>` before acting. The mechanics —
 the file model, field names, formats, read/write aperture, filing rules, the graduation/retire
 transactions — live there, projected live from the schema; assume they may have changed since this
@@ -93,13 +95,21 @@ not from scratch.
   jumps title → first detailed clause and the reader never learns what the document is.
 - **Choose the layout** — note when a section's content should be a TABLE, LIST, or **diagram** rather
   than prose. Logic, rules, and state belong in structure, not paragraphs; mark it now so `draft`
-  doesn't prose it up. When you mark a diagram, mark it as a **drawio image** (backend-neutral, renders
-  identically on both export tracks) — never TikZ or mermaid. `draft` doesn't draw it inline; it
-  **delegates to a subagent** that loads the `dspx-diagram` skill to author the `.drawio` + SVG into the
-  section's `assets/`, then embeds the SVG as an image. Optionally also set the section's `brief.kind`
+  doesn't prose it up. When you mark a diagram, mark it as a **drawio image** (a high-DPI raster PNG
+  that embeds reliably on the default Typst track) — never TikZ or mermaid. `draft` doesn't draw it
+  inline; it **delegates to a subagent** that loads the `dspx-diagram` skill to author the `.drawio` +
+  PNG into the section's `assets/`, then embeds the PNG as an image. Optionally also set the section's `brief.kind`
   (explain / how-to / reference / tutorial) when its Diátaxis type is clear — `draft` honors it and
   `factcheck` flags type-mixing; it inherits down the tree, so set it on the parent and leave children blank.
+- **Localize grouping-node headings** — a grouping node (an intermediate section with children but no
+  concept of its own) gets a heading whose text defaults to its path slug humanized. In a non-English
+  document that surfaces an English slug (e.g. `howto` → "How-to") as a heading amid localized leaf
+  titles. When that happens, give the grouping node a `group.yaml` with `title: <localized heading>`
+  (the projected `group` project-file). Leaf headings come from `concept.title`; this is only for the
+  no-concept grouping nodes between them. Keep the section tree shallow — heading depth is capped at
+  level 4 (`1.1.1.1`); `check` rejects anything deeper, so nest by meaning, not reflexively.
 - **Write each section's one-line concept as its ROLE in the whole** — `draft` is shown the document map (every section's role) so it can frame openers and seams; that only works if each `concept` one-liner states the section's job in the argument ("define the ODD boundary and derive fleet-level safety goals"), not just a topic label. Sanity-check the organizing axis reads as a progression: each section's conclusion is the next section's premise.
+- **Pick the PDF layout profile for the document's GENRE** — the delivered PDF has a typesetting profile (`export.profile` in config, or `docspec export --profile`): **academic** (paper / survey / report — serif body, sans headings, indented paragraphs, numbered headings), **manual** (software / technical manual — sans body, code- and admonition-friendly), **essay** (argumentative long-form — quiet unnumbered headings, serif), **novel** (fiction — first-line indent, `* * *` scene breaks, sunk chapter openers), or **default** (general). Set it once for the project to match what kind of document this is; the engine handles the genre's conventions (fonts, paragraph model, margins, chapter openers, scene breaks).
 - **Capture normative choices as decisions** — the moment a choice is made, note BOTH the confirmed
   decision AND any rejected option with its *why*, so settled questions don't get re-litigated. For a
   *triggered* normative rule, prefer the EARS form in the statement ("WHEN <trigger> SHALL <response>")
@@ -107,7 +117,10 @@ not from scratch.
 - **Home a cross-cutting concept once** — a concept shared across sections or documents gets ONE
   canonical home, never duplicated copies that drift. Shared *truth* lives as a decision in the
   authority's section, and each consumer realizes it (drafting its own prose, going stale when the
-  truth changes); two coupled ideas in one doc get a parent that owns the coupling.
+  truth changes); two coupled ideas in one doc get a parent that owns the coupling. When a consumer
+  section must honour that ruling, give it a name for the **mechanism/responsibility** (e.g. "the
+  safety board's veto") — `draft` invokes it by that name, never by a section number/id (it is blind
+  to siblings); the `realizes` id is the machine binding, the mechanism name is the prose handle.
 - **Own the document's shared style** — setting the document-wide tone and conventions is a develop
   decision, like the root brief; `edit`/`factcheck` only flag a new convention, you lift it in.
   **Fill the writing-guide's `Project conventions` zone — do NOT leave it as the empty template.**

@@ -5,12 +5,14 @@ description: Enter release mode — the interactive typesetting gate AFTER publi
   for delivery. Unlike the content skills, it touches ONLY the format layer (the template
   pack), never a word of content, and converges over rounds with the human in every round.
 license: PolyForm-Noncommercial-1.0.0
-compatibility: Requires the docspec CLI with the export extra (pandoc + the bundled typst binary for the default track; the journal track additionally needs the controlled TinyTeX/xelatex), pdfplumber, and pypdfium2.
+compatibility: Requires the docspec CLI with the export extra (pandoc + the bundled typst binary for the default track), pdfplumber, and pypdfium2. The journal track is emit-only (it produces a `.tex` for an external toolchain like Overleaf, docspec does not compile it); local journal compilation is optional and on-demand (`docspec setup --with-latex`).
 metadata:
   author: docspec
   version: "2.0"
 ---
 ## STEP 0 — do this FIRST, every time
+> **If `docspec` is not found** — it IS installed (via `uv tool`); your shell's PATH just predates the install (a freshly-launched or sandboxed agent shell). Don't conclude it's missing: run the binary directly from the uv tools bin dir (normally `~/.local/bin/docspec`, Windows `%USERPROFILE%\.local\bin\docspec.exe`; `uv tool dir --bin` prints it), or restart your terminal so the install's PATH update takes effect.
+
 Run `docspec guide` and `docspec instructions release <section>` before acting. The mechanics —
 the export/proof commands, the validated `--format-config` knobs (their names, enums, ranges),
 the byte-lock check, where the deliverable lands — live there, projected live from the schema and
@@ -66,6 +68,23 @@ humans see and judge, not something the engine gates.
   different visual format is a different *pack*. Read its class/sample once, author a pandoc bridge a
   single time, then every future export through that pack is deterministic. One careful bridge, then
   mechanical reuse.
+- **BYO journal template (`--engine journal --template <dir>`): the bridge MUST follow the journal's
+  own sample `.tex`, not a generic guess.** A journal class exposes *its own* metadata macros — IET
+  uses `\author{\au{Name$^1$}…}` + `\address{\add{1}{…}\email{…}}` + `\begin{abstract}` before
+  `\maketitle`; Elsevier `cas-dc` uses `\author[1]{Name}` + `\ead{}` + `\affiliation[1]{organization={…}}`
+  + `\begin{abstract}`/`\begin{keywords}…\sep…`; IEEEtran uses `\author{\IEEEauthorblockN{…}…}`. Open
+  the template's bundled sample/author `.tex` (e.g. `Author_tex.tex`, `cas-dc-sample.tex`) and map the
+  slot contract (title / authors.name·affiliation·email / abstract / keywords / body) onto **exactly
+  those macros**, in the order and nesting the sample shows. Wrong macros → the class silently drops
+  the field or miscompiles. The bundled `ieee`/`elsevier`/`iet` adapters are the worked examples; a new
+  journal's bridge is authored the same way — from its sample, once.
+- **Journal track emits one `.tex`; front matter lives in the macros, not twice.** The slot contract
+  feeds title/authors/abstract/keywords into the class macros; the body must NOT also repeat the author
+  block or the Abstract/Keywords sections (a real journal `.tex` never does). docspec strips that
+  leading front matter from the body automatically when those slots are supplied — keep the body
+  starting at the first real section (Introduction). Provide author/abstract/keywords via `--slots`, not
+  buried only in the prose. The emitted `.tex` is compiled by the journal's toolchain (Overleaf), not by
+  docspec.
 - **Diagnose by measuring, not by eye.** When a font-size change "didn't take," run
   `docspec measure-fonts <pdf>` and read the dominant size — don't guess from the proof image.
 
@@ -88,9 +107,10 @@ You converge over rounds; the human is in every round.
 7. **Converge** when the human says the layout is good. The snapshot is unchanged; the deliverable
    PDF is the only new thing.
 
-**Broken diagram → route upstream (diagrams are embedded images, authored upstream).** Diagrams are
-now backend-neutral images: a subagent loading the `dspx-diagram` skill authors a `.drawio` + SVG into
-the section's `assets/` upstream in `draft`, and the deliverable embeds the SVG. Release does NOT draw,
+**Broken diagram → route upstream (diagrams are embedded images, authored upstream).** Diagrams travel
+as raster images: a subagent loading the `dspx-diagram` skill authors a `.drawio` + its rendered PNG into
+the section's `assets/` upstream in `draft`, and the deliverable embeds the PNG (drawio's SVG export
+collapses to a black box under the Typst track, so the embedded image is a PNG). Release does NOT draw,
 re-draw, or hand-edit a diagram — there is **no sanctioned raw-LaTeX** here any more (TikZ and the
 mermaid→TikZ swap are retired). If a figure looks wrong in proof (blank box, clipped, stale, wrong
 content), that is a content/asset defect: **route it upstream** — the human takes it back through
@@ -118,8 +138,8 @@ editing the picture.
   upstream-authored images now — there is no sanctioned raw-LaTeX diagram authoring at release.)
 - Don't hand-write a preamble line for something a knob already covers — that bypasses validation.
 - Don't route around the bundled-pack acknowledgement gate; it is there on purpose.
-- Don't bundle proprietary fonts; use the bundled redistributable faces (some "kai" faces corrupt
-  the PDF text layer).
+- Don't substitute non-bundled CJK faces; use the bundled redistributable faces (the house style
+  is unified 思源宋體 + Source Serif 4 + Source Code Pro, validated for a clean PDF text layer).
 - Don't touch any `archive/` snapshot, and don't treat the derived PDF as if it were frozen.
 - Don't self-evaluate or victory-lap — present the proofed pages and hand back; the human judges.
 

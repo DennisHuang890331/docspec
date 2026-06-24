@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -156,14 +157,24 @@ def _install(root: Path, tools: tuple[str, ...], force: bool) -> list[str]:
 
 
 # ---- freeze 守門 hook（擋改 archive/）----------------------------------------
-# 跨平台：hook 一律呼叫 `docspec hook guard`（邏輯在 Python），設定檔不寫各平台 shell。
+# 跨平台：hook 一律呼叫 `docspec hook ...`（邏輯在 Python），設定檔不寫各平台 shell。
+
+def _docspec_invocation() -> str:
+    """hook 指令叫用 docspec 的方式：安裝時解析**絕對路徑**（`shutil.which`），避免 hook 在
+    PATH 尚未更新／被沙箱清過的 shell 裡找不到 docspec 而靜默不守門（凍結保護失效）；
+    含空白則加引號（cmd/sh 皆可）；解不到才退回裸 `docspec`。"""
+    resolved = shutil.which("docspec")
+    if not resolved:
+        return "docspec"
+    return f'"{resolved}"' if " " in resolved else resolved
+
 
 def _claude_guard_entry() -> dict:
     return {
         "matcher": "Edit|Write|Bash|PowerShell",   # 改檔工具 ＋ shell（bash/PS 寫檔也擋）
         "hooks": [{
             "type": "command",
-            "command": "docspec hook guard",
+            "command": f"{_docspec_invocation()} hook guard",
             "timeout": 10,
             "statusMessage": "docspec freeze guard (archive/)",
         }],
@@ -175,7 +186,7 @@ def _claude_postcheck_entry() -> dict:
         "matcher": "Edit|Write",                   # 寫/改檔後做 corpus/*.yaml 完整性回饋
         "hooks": [{
             "type": "command",
-            "command": "docspec hook check",
+            "command": f"{_docspec_invocation()} hook check",
             "timeout": 10,
             "statusMessage": "docspec completeness reminder (corpus/*.yaml)",
         }],
@@ -189,7 +200,7 @@ def _codex_guard_entry() -> dict:
         "matcher": "Edit|Write|Bash|apply_patch",
         "hooks": [{
             "type": "command",
-            "command": "docspec hook guard",
+            "command": f"{_docspec_invocation()} hook guard",
             "timeout": 10,
             "statusMessage": "docspec freeze guard (archive/)",
         }],
@@ -201,7 +212,7 @@ def _codex_postcheck_entry() -> dict:
         "matcher": "Edit|Write|apply_patch",
         "hooks": [{
             "type": "command",
-            "command": "docspec hook check",
+            "command": f"{_docspec_invocation()} hook check",
             "timeout": 10,
             "statusMessage": "docspec completeness reminder (corpus/*.yaml)",
         }],
@@ -209,15 +220,16 @@ def _codex_postcheck_entry() -> dict:
 
 
 def _is_docspec_guard(entry: dict) -> bool:
+    # 比對 `hook guard` 子命令（容忍 docspec 被寫成絕對路徑＝C4 portability 修法）。
     for h in (entry or {}).get("hooks", []):
-        if "docspec hook guard" in str(h.get("command", "")):
+        if "hook guard" in str(h.get("command", "")):
             return True
     return False
 
 
 def _is_docspec_postcheck(entry: dict) -> bool:
     for h in (entry or {}).get("hooks", []):
-        if "docspec hook check" in str(h.get("command", "")):
+        if "hook check" in str(h.get("command", "")):
             return True
     return False
 
@@ -295,6 +307,11 @@ def _cmd_install(args: argparse.Namespace) -> int:
     print(f"Installing skills to {root} (tools: {', '.join(tools)})")
     for line in results:
         print(line)
+    if shutil.which("docspec") is None:
+        print("\n⚠ `docspec` is not on this shell's PATH — your agent tools (Codex/Antigravity/Claude)")
+        print("  will hit \"docspec: command not recognized\". Add the uv tools bin dir to PATH:")
+        print("    uv tool update-shell    # then fully restart the agent tool's terminal/session")
+        print("  (the binary lives in `uv tool dir --bin`, normally ~/.local/bin).")
     return 0
 
 

@@ -16,7 +16,13 @@ import yaml
 from dspx.forest import forest_view
 from dspx.glossary import load_glossary
 from dspx.layout import Layout
-from dspx.model import ASSET_DIR_NAME, Leaf, decision_index, realized_statements
+from dspx.model import (
+    ASSET_DIR_NAME,
+    Leaf,
+    ancestor_leaves,
+    decision_index,
+    realized_statements,
+)
 from dspx.schema import Schema
 
 # draft 讀 concept 的准投欄位（治理欄 realizes 不投）
@@ -47,6 +53,7 @@ class Projection:
     project_purpose: str | None = None            # config.purpose（森林整體目標；只投 develop 開工脈絡）
     image_assets: list = field(default_factory=list)  # 本節可用圖片（draft 放圖只能用這些；ref 形如 assets/<file>）
     document_map: list = field(default_factory=list)  # 本文件章節骨架（draft 看整篇架構：每節 section/title/order/role；只結構、不含 sibling 散文）
+    coverage_contract: dict | None = None             # factcheck 完整性契約前景化：{must_cover:[...], layout, kind}（W3；餵非阻塞 audit）
 
 # 注入寫作守則的 skill（連貫靠它替代跨節脈絡）
 _GUIDE_SKILLS = ("draft", "edit")
@@ -58,8 +65,11 @@ _REALIZED_SKILLS = ("draft", "factcheck")
 _ASSET_SKILLS = ("draft", "edit")
 # 需要看到「整篇章節骨架」的 skill：draft 寫角色開場（structure-visible / prose-blind）
 _DOCUMENT_MAP_SKILLS = ("draft",)
-# 需要祖先鏈 normative 決策當「繼承一致性」核對料的 skill（純供料、非阻塞；P3-lite）
-_INHERITANCE_SKILLS = ("factcheck",)
+# 需要祖先鏈 normative 決策的 skill：factcheck 做語義對抗稽核；**draft 落筆時遵守 ruling**
+# （M4：draft 對父 ruling 全盲＝低層輸出不連貫的根源）。純供料、非阻塞——子違抗父仍只由 audit 表達。
+_INHERITANCE_SKILLS = ("factcheck", "draft")
+# 看得到森林整體目標（config.purpose）的 skill：develop 開工脈絡、draft 寫定向 overview 的北極星（W2）
+_PURPOSE_SKILLS = ("develop", "draft")
 
 
 def _yaml_text(obj: object) -> str:
@@ -93,62 +103,6 @@ def _read_file(leaf: Leaf, filename: str) -> str | None:
 def _read_docs(layout: Layout, leaf: Leaf) -> str | None:
     path = layout.docs_latest(leaf.article)
     return path.read_text(encoding="utf-8") if path.is_file() else None
-
-
-def _path_parents(section: str, by_section: dict) -> list[Leaf]:
-    """路徑父鏈（不含自己），由淺到深；只回有 leaf 的祖先。"""
-    parts = section.split("/")
-    out = []
-    for depth in range(1, len(parts)):
-        anc = by_section.get("/".join(parts[:depth]))
-        if anc is not None:
-            out.append(anc)
-    return out
-
-
-def _ancestor_leaves(section: str, by_section: dict,
-                     concept_by_id: dict) -> list[tuple[Leaf, bool]]:
-    """祖先集＝對「路徑父邊 ∪ governed-by 邊」做遞移閉包。
-
-    回傳 [(ancestor_leaf, is_governed)]，依「先路徑父鏈、再跨樹治理」的順序：
-    路徑父鏈優先且保持淺→深，確保無 governed-by 的單樹 path-only 行為逐欄等價。
-    visited（by section）防環/去重——即使 check 未先擋環也不會無限。
-    """
-    result: list[tuple[Leaf, bool]] = []
-    visited: set[str] = {section}      # 自己不算祖先（self-governed 環自保）
-
-    def collect(leaf: Leaf, is_governed: bool) -> None:
-        if leaf.section in visited:
-            return
-        visited.add(leaf.section)
-        result.append((leaf, is_governed))
-
-    # 種子＝起始節（不進 result、只供其 governed-by 邊被探索）＋路徑父鏈（淺→深）
-    self_leaf = by_section.get(section)
-    queue: list[Leaf] = [self_leaf] if self_leaf is not None else []
-    for anc in _path_parents(section, by_section):
-        collect(anc, False)
-        queue.append(anc)
-
-    # BFS：解析 governed-by → 跨樹父（is_governed=True），並折入其路徑父鏈
-    i = 0
-    while i < len(queue):
-        leaf = queue[i]
-        i += 1
-        if not leaf.concept:
-            continue
-        for target_id in (leaf.concept.get("governed-by") or []):
-            gov = concept_by_id.get(str(target_id))
-            if gov is None or gov.section in visited:
-                continue
-            collect(gov, True)
-            queue.append(gov)
-            # 折入跨樹父自己的路徑父鏈（同樣標 governed＝來自治理鏈）
-            for anc in _path_parents(gov.section, by_section):
-                if anc.section not in visited:
-                    collect(anc, True)
-                    queue.append(anc)
-    return result
 
 
 def project(layout: Layout, schema: Schema, skill: str, section: str,
@@ -254,7 +208,7 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
     # 疑問1 結論：scope 看父即可（可遞移），但 decision 不繼承→要看 root 起全祖先鏈 normative。
     # 引擎只「往上 glob 組裝、擺到 factcheck 桌上」＝供料；判矛盾/越界是 factcheck 的語義工作、非阻塞。
     # 祖先集＝路徑父鏈 ∪ governed-by 鏈（跨樹）；reuse 樹內繼承語義，governed 標來源。
-    for anc, is_governed in _ancestor_leaves(section, by_section, concept_by_id):
+    for anc, is_governed in ancestor_leaves(section, by_section, concept_by_id):
         if not anc.concept:
             continue
         proj.parent_briefs.append({
@@ -270,11 +224,28 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
             if norms:
                 proj.ancestor_normative.append({"section": anc.section, "decisions": norms})
 
+    # ── 森林整體目標（config.purpose）：develop 開工脈絡 ＋ draft 寫定向 overview 的北極星（W2）──
+    if skill in _PURPOSE_SKILLS and config:
+        proj.project_purpose = config.get("purpose") or None
+
+    # ── factcheck 完整性契約前景化（W3）：把 must_cover ＋ 有效 layout/kind 拉成獨立區塊，
+    #    不埋在 raw concept dump 裡——完整性稽核最該打的攻擊面。純供料、餵非阻塞 audit。
+    if skill == "factcheck" and leaf.concept is not None:
+        brief = leaf.concept.get("brief")
+        brief = brief if isinstance(brief, dict) else {}
+        must = leaf.concept.get("must_cover")   # 頂層 concept 欄（非 brief 子欄）
+        cc: dict = {}
+        if isinstance(must, list) and must:
+            cc["must_cover"] = list(must)
+        if brief.get("layout"):
+            cc["layout"] = brief.get("layout")
+        if brief.get("kind"):
+            cc["kind"] = brief.get("kind")
+        if cc:
+            proj.coverage_contract = cc
+
     # ── 森林地圖（derive；只投 develop——確認本文件在森林位置/被誰治理/跟誰平行）──
     if skill == "develop":
-        # 森林整體目標（config.purpose）——開工脈絡看得到整座森林/專案在幹嘛
-        if config:
-            proj.project_purpose = config.get("purpose") or None
         proj.forest = forest_view(leaves)
         # ── 待辦 backlog（derive；只投 develop——開工先看計劃了還沒做的工作）──
         # reuse build_backlog_view（已掉 done/dropped、算 blocked/unblocked、按文件分組），

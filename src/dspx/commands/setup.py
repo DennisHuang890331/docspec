@@ -1,17 +1,21 @@
-r"""docspec setup — 把受控 TinyTeX(xelatex)＋字型裝進 data_dir（Phase B、冪等）。
+r"""docspec setup — 把受控 render 工具鏈裝進 data_dir（冪等）。
 
-讓 `docspec export`/`proof` 不再依賴 dev 的 /tmp/ttx，且字型移出 wheel。
+讓 `docspec export`/`proof` 不依賴 dev 環境，且字型移出 wheel。
 
-做四件事（冪等：已齊就跳過、只補缺）：
-  1. 偵測平台/arch → 下載受控 TinyTeX（版本+sha256 釘在下方 _MANIFEST；release asset 名
-     不寫死、靠 GitHub release API 按平台 pattern 解析）→ 解到 data_dir/tinytex。
-     dev 捷徑：偵測到既有 /tmp/ttx 的 TinyTeX 可 copy 進 data_dir 免重抓。
-  2. tlmgr update --self → tlmgr install <_TEX_PACKAGES>（docspec-cas.cls \RequirePackage
-     ＋本專案 preamble ＋ session 實裝推導；缺的補、已裝的跳）。
-  3. 字型放 data_dir/fonts：主路＝從 _FONT_MANIFEST 的 pinned OFL URL 下載 zip→驗
-     sha256→解出需要的字型檔；快路/離線後備＝偵測到 dev 源樹/DOCSPEC_FONTS_SRC 就 copy。
-  4. 寫 tex.lock（TinyTeX 版本＋tlmgr 套件清單＋探測到的 bin 路徑），供日後 doctor 比對。
+**核心（永遠裝）＝字型 + pandoc + typst（預設 render 引擎）**：
+  1. 字型放 data_dir/fonts：主路＝從 _FONT_MANIFEST 的 pinned OFL URL 下載 zip→驗 sha256
+     →解出需要的字型檔；快路/離線後備＝偵測到 dev 源樹/DOCSPEC_FONTS_SRC 就 copy。
+     （兩軌共用：Typst --font-path ＋ 期刊 xelatex。）
+  2. pandoc：釘版受控 binary（版本+sha256 釘在 _PANDOC_MANIFEST）→ data_dir/pandoc。
+  3. typst：釘版受控 binary（_TYPST_MANIFEST）→ data_dir/typst。輕量(~22MB)、原生 CJK。
 
+**選用（旗標才裝）**：
+  - `--with-latex`：受控 TinyTeX(xelatex) + tlmgr 套件 → data_dir/tinytex。**只給想在本機用
+    受控 toolchain 自行編譯 emit 出的期刊 `.tex` 的人**；預設 Typst 軌與 emit-only 期刊軌都
+    不自編 LaTeX，故核心不再硬塞數百 MB 的 TinyTeX。
+  - `--with-drawio`：受控 draw.io 可攜版 → data_dir/drawio（供 dspx-diagram subagent 渲圖）。
+
+最後寫 tex.lock（各工具版本＋路徑＋tlmgr 套件清單），供 doctor 比對。
 soft-dep/網路失敗 → 清楚報錯、回 1、不 crash。不需要 docspec 專案（全域工具設定）。
 """
 
@@ -22,6 +26,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -34,7 +39,7 @@ from pathlib import Path
 from dspx import paths
 
 NAME = "setup"
-HELP = "Install controlled TinyTeX (xelatex) + fonts into data_dir so export/proof don't depend on a dev environment (idempotent)"
+HELP = "Install the controlled render toolchain (fonts + pandoc + typst) into data_dir; TinyTeX is optional via --with-latex (idempotent)"
 
 # ── 釘版 manifest（版本＋每平台 sha256；asset 名不寫死、靠 release API 解析）────
 #
@@ -222,30 +227,28 @@ _DRAWIO_MANIFEST = {
 }
 
 
-# tlmgr 要補裝的套件（docspec-cas.cls \RequirePackage ＋ preamble \usepackage ＋ session
-# 實裝推導）。TinyTeX-1 medium scheme 多半已含，install 對已裝者 no-op。缺的才裝。
+# tlmgr 要補裝的 TeX 套件集——僅供 optional `--with-latex` 本機編譯期刊軌 emit 出的 `.tex`
+# 使用（Typst 預設軌不需要 TinyTeX）。涵蓋期刊模板/xelatex/xeCJK 鏈常用依賴。
+# TinyTeX-1 medium scheme 多半已含，install 對已裝者 no-op。缺的才裝。
 _TEX_PACKAGES = [
     "xecjk", "fontspec", "framed", "fvextra", "tabularx", "xltabular",
     "ltablex",  # xltabular 的依賴（提供 ltablex.sty）；TinyTeX medium scheme 含 xltabular
                 # 卻不含 ltablex，tlmgr 裝 xltabular 時又因「已存在」沒拉依賴 → Linux 實編
                 # 撞 `ltablex.sty not found`（Windows medium scheme 剛好含故未爆，Linux 真測抓到）。
     "seqsplit", "etoolbox", "enumitem", "tcolorbox", "environ", "trimspaces",
-    "pgf",  # TikZ 原生繪圖（preamble \usepackage{tikz}＋positioning/arrows.meta/fit/backgrounds/calc）：agent 把 mermaid 翻成等價 TikZ。tikz.sty 與各 tikzlibrary 都在 pgf bundle 內
-    "lastpage",  # 頁尾「Page X of N」總頁數：preamble 用 \pageref{LastPage} 取代 cas 的 off-by-one \lastpage
+    "pgf",  # TikZ 繪圖支援（tikz.sty 與各 tikzlibrary 都在 pgf bundle 內），供期刊軌 .tex 本機編譯時用得到
+    "lastpage",  # 頁尾「Page X of N」總頁數所需的 \pageref{LastPage} 支援
 
     "booktabs", "colortbl", "makecell", "multirow", "stix", "inconsolata",
     "dcolumn", "footmisc", "xstring", "xspace", "needspace",
-    # docspec-cas.cls 進一步 \RequirePackage 推導：
+    # 期刊軌常見的 elsarticle/citation 鏈依賴：
     "natbib", "elsarticle", "moreverb", "wrapfig", "setspace",
-    "sttools",  # 提供 stfloats.sty（upstream cas-sc \RequirePackage{stfloats}）；TL 套件名＝sttools，
-                # 非 stfloats（後者只是 .sty 檔名）。誤用 stfloats 會「not present in repository」
-                # 讓整批 tlmgr install 回非零、setup 中止（Linux 真測抓到，Windows medium scheme 已含故未爆）。
+    "sttools",  # 提供 stfloats.sty；TL 套件名＝sttools，非 stfloats（後者只是 .sty 檔名）。
+                # 誤用 stfloats 會「not present in repository」讓整批 tlmgr install 回非零、setup
+                # 中止（Linux 真測抓到，Windows medium scheme 已含故未爆）。
     "l3packages", "l3kernel", "amsmath", "amsfonts",
 ]
-# 註：upstream cas-sc.cls 原本 \RequirePackage{charis}/{stix}/{inconsolata}，但我們的 preamble
-# 用 fontspec \setmainfont/\setCJKmainfont 整組覆蓋掉這些字型設定（見 preamble.tex），
-# 故 charis 不在清單（實測純-data_dir export 不需它即正確產出）。stix/inconsolata 仍留
-# （數學符號 fallback 可能用到）。
+# 註：stix/inconsolata 留作數學符號／等寬字型的 fallback；其餘為期刊軌 .tex 本機編譯的常用依賴。
 
 
 # ── 平台偵測 ──────────────────────────────────────────────────────
@@ -819,8 +822,23 @@ def _check_linux_drawio_runtime(*, interactive: bool) -> None:
             pass
 
 
+def _drawio_version(binary: str | Path) -> str | None:
+    """跑 `<binary> --version` 取 draw.io 自報版本（如 "30.2.4"）。
+    先剝掉繼承的 `ELECTRON_RUN_AS_NODE`——它會讓 Electron app 當 node 跑、拒 `-x -f`/版本旗標。
+    探不到（逾時/非零/無版本字串/headless 起不來）→ None：呼叫端不阻擋，只是無法擔保版本。"""
+    env = {k: v for k, v in os.environ.items() if k != "ELECTRON_RUN_AS_NODE"}
+    try:
+        out = subprocess.run([str(binary), "--version"], capture_output=True,
+                             text=True, timeout=30, env=env, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    m = re.search(r"\b(\d+\.\d+\.\d+)\b", f"{out.stdout}\n{out.stderr}")
+    return m.group(1) if m else None
+
+
 def _ensure_drawio(*, force: bool, no_download: bool, interactive: bool = False) -> bool:
-    """選用：把釘版 draw.io 可攜版放進 data_dir/drawio。冪等：已在就跳過。"""
+    """選用：把釘版 draw.io 可攜版放進 data_dir/drawio。冪等：已在**且版本對得上釘版**才跳過
+    （舊版殘檔的 CLI 會拒 `-x -f`，故不只信檔案存在——驗 `--version`，不符就重抓）。"""
     pkey = _pandoc_platform_key()
     if pkey is None or pkey not in _DRAWIO_MANIFEST["assets"]:
         sys.stderr.write(
@@ -829,10 +847,22 @@ def _ensure_drawio(*, force: bool, no_download: bool, interactive: bool = False)
 
     plat = "windows" if pkey == "windows" else ("darwin" if pkey.startswith("darwin") else "linux")
     target = paths.drawio_managed_binary(plat)
+    pinned = _DRAWIO_MANIFEST["tag"]
     if not force and target.is_file():
-        print(f"  draw.io already at {target} (skipping download)")
-        _check_linux_drawio_runtime(interactive=interactive)
-        return True
+        ver = _drawio_version(target)
+        if ver is not None and ver != pinned:
+            if no_download:
+                sys.stderr.write(
+                    f"docspec: draw.io at {target} self-reports v{ver} but pinned v{pinned}; "
+                    f"--no-download given, keeping it (its CLI may reject -x -f export flags).\n")
+                _check_linux_drawio_runtime(interactive=interactive)
+                return True
+            print(f"  draw.io at {target} self-reports v{ver}, pinned v{pinned} — re-downloading")
+            # 落到下面重抓
+        else:
+            print(f"  draw.io already at {target} (v{ver or '?'}, skipping download)")
+            _check_linux_drawio_runtime(interactive=interactive)
+            return True
 
     if no_download:
         sys.stderr.write("docspec: --no-download given and no draw.io in data_dir — aborting.\n")
@@ -853,13 +883,20 @@ def _ensure_drawio(*, force: bool, no_download: bool, interactive: bool = False)
         sys.stderr.write("docspec: draw.io extraction did not yield a runnable binary.\n")
         return False
     print(f"  draw.io ready ({target})")
+    ver = _drawio_version(target)
+    if ver is not None and ver != pinned:
+        sys.stderr.write(
+            f"docspec: warning — installed draw.io self-reports v{ver} but pinned v{pinned} "
+            f"(the export flags it accepts may differ).\n")
+    elif ver:
+        print(f"  draw.io version {ver} (matches pinned v{pinned})")
     _check_linux_drawio_runtime(interactive=interactive)
     return True
 
 
 # ── tex.lock（指紋；供 doctor 比對）────────────────────────────────
 
-def _write_lock(tlmgr: Path, xelatex: Path | None, packages: list[str],
+def _write_lock(tlmgr: Path | None, xelatex: Path | None, packages: list[str],
                 pandoc: str | None = None, typst: str | None = None,
                 drawio: str | None = None) -> None:
     lock = {
@@ -868,12 +905,13 @@ def _write_lock(tlmgr: Path, xelatex: Path | None, packages: list[str],
         "typst_tag": _TYPST_MANIFEST["tag"],
         "drawio_tag": _DRAWIO_MANIFEST["tag"],
         "platform": _platform_key(),
-        "tinytex_root": str(paths.tinytex_root()),
-        "tlmgr_path": str(tlmgr),
+        "tinytex_root": str(paths.tinytex_root()) if tlmgr else None,  # None＝未裝（--with-latex 才裝）
+        "tlmgr_path": str(tlmgr) if tlmgr else None,
         "xelatex_path": str(xelatex) if xelatex else None,
         "pandoc_path": str(pandoc) if pandoc else None,
         "typst_path": str(typst) if typst else None,
         "drawio_path": str(drawio) if drawio else None,  # None＝未裝（--with-drawio 才裝）
+        "drawio_installed_version": _drawio_version(drawio) if drawio else None,  # binary 自報；供 doctor 比對漂移
         "fonts_dir": str(paths.fonts_dir()),
         "fonts": list(paths.REQUIRED_FONT_FILES),
         "tlmgr_packages": packages,
@@ -894,6 +932,9 @@ def run(argv: list[str]) -> int:
                         help="do not copy from dev /tmp/ttx (force the real download path)")
     parser.add_argument("--with-drawio", action="store_true",
                         help="also install the optional managed draw.io desktop binary (for diagram rendering)")
+    parser.add_argument("--with-latex", action="store_true",
+                        help="also install the optional managed TinyTeX (xelatex) + tlmgr packages — "
+                             "only needed to locally compile an emitted journal .tex (the default Typst track does not use it)")
     args = parser.parse_args(argv)
 
     pkey = _platform_key()
@@ -911,43 +952,50 @@ def run(argv: list[str]) -> int:
 
     print(f"docspec setup (platform={pkey}) → data_dir: {dd}")
 
-    # 1+2. TinyTeX
-    if not _ensure_tinytex(pkey, force=args.force, no_download=args.no_download,
-                           use_dev_shortcut=not args.no_dev_shortcut):
-        sys.stderr.write("docspec: TinyTeX install did not complete — setup aborted.\n")
-        return 1
-    tlmgr = paths.tlmgr_path(paths.tinytex_root())
-    if tlmgr is None:
-        sys.stderr.write("docspec: TinyTeX is in place but tlmgr was not found — the install may be incomplete.\n")
-        return 1
+    # 核心受控工具鏈（永遠裝）＝ fonts + pandoc + typst（預設 render 引擎）。
+    # TinyTeX（LaTeX 軌）是 OPTIONAL、只在 `--with-latex` 才裝——預設 Typst 軌與 emit-only
+    # 期刊軌都不自編 LaTeX，故核心 setup 不再硬塞數百 MB 的 TinyTeX。
 
-    ok, packages = _ensure_packages(tlmgr)
-    if not ok:
-        sys.stderr.write("docspec: tlmgr package install did not complete (possibly offline/mirror issue) — setup aborted.\n")
-        return 1
-
-    # 3. 字型
+    # 1. 字型（兩軌共用：Typst --font-path ＋ 期刊 xelatex）
     if not _ensure_fonts(force=args.force, no_download=args.no_download):
         return 1
 
-    # 4. pandoc（受控 binary；與 TinyTeX 同級＝確定性輸出，不靠系統 pandoc）
+    # 2. pandoc（受控 binary；確定性輸出，不靠系統 pandoc）
     if not _ensure_pandoc(force=args.force, no_download=args.no_download):
         sys.stderr.write("docspec: pandoc install did not complete — setup aborted.\n")
         return 1
 
-    # 4.5 typst（受控 binary；Typst 軌＝預設 render 引擎，輕量、原生 CJK）
+    # 3. typst（受控 binary；Typst 軌＝預設 render 引擎，輕量、原生 CJK）
     if not _ensure_typst(force=args.force, no_download=args.no_download):
         sys.stderr.write("docspec: typst install did not complete — setup aborted.\n")
         return 1
 
-    # 4.6 draw.io（選用、D8：核心不裝、--with-drawio 才裝；供 dspx-diagram subagent 渲圖）
+    # 4. TinyTeX + tlmgr packages — OPTIONAL（--with-latex；只給想本機編期刊 .tex 的人）
+    tlmgr: Path | None = None
+    xelatex = None
+    packages: list[str] = []
+    if args.with_latex:
+        if not _ensure_tinytex(pkey, force=args.force, no_download=args.no_download,
+                               use_dev_shortcut=not args.no_dev_shortcut):
+            sys.stderr.write("docspec: TinyTeX install did not complete — setup aborted.\n")
+            return 1
+        tlmgr = paths.tlmgr_path(paths.tinytex_root())
+        if tlmgr is None:
+            sys.stderr.write("docspec: TinyTeX is in place but tlmgr was not found — the install may be incomplete.\n")
+            return 1
+        ok, packages = _ensure_packages(tlmgr)
+        if not ok:
+            sys.stderr.write("docspec: tlmgr package install did not complete (possibly offline/mirror issue) — setup aborted.\n")
+            return 1
+        xelatex = paths.resolve_xelatex()
+
+    # 5. draw.io（選用、D8：核心不裝、--with-drawio 才裝；供 dspx-diagram subagent 渲圖）
     if args.with_drawio:
         if not _ensure_drawio(force=args.force, no_download=args.no_download, interactive=True):
             sys.stderr.write("docspec: draw.io install did not complete — setup aborted.\n")
             return 1
 
-    # 5. tex.lock
-    xelatex = paths.resolve_xelatex()
+    # 6. tex.lock
     pandoc = paths.resolve_pandoc()
     typst = paths.resolve_typst()
     drawio = paths.resolve_drawio()
@@ -955,8 +1003,11 @@ def run(argv: list[str]) -> int:
 
     print(f"\n✓ setup complete. tex.lock: {paths.tex_lock_path()}")
     print(f"  typst: {typst}  (default render engine)")
-    print(f"  xelatex: {xelatex}  (LaTeX track)")
     print(f"  pandoc: {pandoc}")
+    if xelatex:
+        print(f"  xelatex: {xelatex}  (optional LaTeX track)")
+    else:
+        print("  xelatex: not installed (run `docspec setup --with-latex` to compile journal .tex locally)")
     if drawio:
         print(f"  draw.io: {drawio}  (optional; diagram rendering)")
     else:

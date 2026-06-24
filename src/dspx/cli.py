@@ -66,7 +66,26 @@ def main(argv: list[str] | None = None) -> int:
         available = ", ".join(sorted(REGISTRY)) or "(none)"
         sys.stderr.write(f"{_PROG}: unknown command '{name}'. Available commands: {available}\n")
         return 2
-    return command.run(rest)
+    try:
+        return command.run(rest)
+    except _DOMAIN_ERRORS as exc:
+        # 已知 domain 錯誤（壞 YAML 結構/誤名頂層 key/壞 frontmatter/壞 config/壞 schema…）
+        # → 友善一行訊息＋非零，不丟原始 Python traceback 給使用者。
+        sys.stderr.write(f"{_PROG}: {exc}\n")
+        return 1
+
+
+def _domain_error_types() -> tuple[type, ...]:
+    from dspx.audit import AuditError
+    from dspx.config import ConfigError
+    from dspx.format_config import FormatConfigError
+    from dspx.frontmatter import FrontmatterError
+    from dspx.model import ModelError
+    from dspx.schema import SchemaError
+    return (ModelError, SchemaError, AuditError, FrontmatterError, ConfigError, FormatConfigError)
+
+
+_DOMAIN_ERRORS = _domain_error_types()
 
 
 if __name__ == "__main__":  # pragma: no cover

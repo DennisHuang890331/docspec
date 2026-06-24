@@ -14,7 +14,7 @@ import json
 import sys
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
-from dspx.schema import required_field_names
+from dspx.schema import field_contract, required_field_names
 
 NAME = "guide"
 HELP = ("agent contract: projects the workflow + every artifact's "
@@ -28,6 +28,9 @@ def _artifact_contract(art) -> dict:
         "kind": art.kind,
         "meaning": art.description,
         "requiredFields": required_field_names(art.schema) if art.schema else [],
+        "fieldContract": field_contract(art.schema) if art.schema else [],
+        "entriesContainer": bool(art.entries),
+        "closed": bool(art.closed),
         "blockGrammar": art.block_grammar,
         "reader": list(art.aperture.read),
         "writer": list(art.aperture.write),
@@ -35,10 +38,35 @@ def _artifact_contract(art) -> dict:
     }
 
 
+def _format_field_line(f: dict, indent: str = "    ") -> list[str]:
+    """一欄一行：name  type  required/optional  [= enum 值]  [→ relation]  [(closed)]；
+    巢狀 object 子欄縮排遞迴。讓 agent 一眼看到合法形狀（型別＋enum 合法值）。"""
+    req = "required" if f.get("required") else "optional"
+    bits = [f"{indent}{f['name']:<14} {f['type']:<9} {req}"]
+    if f.get("values"):
+        bits.append(f"= {' | '.join(map(str, f['values']))}")
+    if f.get("relation"):
+        bits.append(f"→ {f['relation']}")
+    if f.get("type") == "object":
+        bits.append("(closed)" if f.get("closed") else "(open)")
+    lines = ["  ".join(bits)]
+    for sub in f.get("fields", []):
+        lines.extend(_format_field_line(sub, indent + "  "))
+    return lines
+
+
 def _print_artifact(a: dict) -> None:
     print(f"\n● {a['id']} → {a['generates']} ({a['kind']})")
     print(f"  meaning: {a['meaning'].strip()}")
-    if a["requiredFields"]:
+    if a.get("entriesContainer"):
+        print("  container: file top level is { entries: [ <entry-below> ] }  (NOT a bare list / other key)")
+    if a.get("fieldContract"):
+        closed = " (closed: unknown keys are a check error)" if a.get("closed") else ""
+        print(f"  fields{closed}:")
+        for f in a["fieldContract"]:
+            for line in _format_field_line(f):
+                print(line)
+    elif a["requiredFields"]:
         print(f"  required: {', '.join(a['requiredFields'])}")
     if a["blockGrammar"]:
         print(f"  format: {a['blockGrammar']}")

@@ -1,7 +1,7 @@
 ---
 name: dspx-diagram
-description: Author a diagram as a draw.io (.drawio) file and render it to a backend-neutral
-  image (SVG primary) for embedding in a docspec deliverable. A SUPPORT skill, loaded by a
+description: Author a diagram as a draw.io (.drawio) file and render it to a high-resolution
+  raster PNG for embedding in a docspec deliverable. A SUPPORT skill, loaded by a
   delegated subagent — the main authoring agent (draft/develop) never loads it; it hands over
   intent and reviews the rendered image. Use for architecture / flow / sequence / state /
   network diagrams that a docspec section needs as an embedded figure.
@@ -16,9 +16,11 @@ metadata:
   version: "1.0"
 ---
 ## STEP 0 — orient before acting
+> **If `docspec` is not found** — it IS installed (via `uv tool`); your shell's PATH just predates the install (a freshly-launched or sandboxed agent shell). Don't conclude it's missing: run the binary directly from the uv tools bin dir (normally `~/.local/bin/docspec`, Windows `%USERPROFILE%\.local\bin\docspec.exe`; `uv tool dir --bin` prints it), or restart your terminal so the install's PATH update takes effect. **For the draw.io CLI:** prefer the docspec-managed binary (`docspec setup --with-drawio`) or point `DOCSPEC_DRAWIO` at it.
+
 You are a **delegated subagent**. The main agent gave you the diagram's *intent* (what it must
 show) and the *target section* (`corpus/<section>/assets/`). Your job: produce one `.drawio`
-source plus a rendered **SVG** image there, then hand the image path back. You do NOT edit the
+source plus a rendered **PNG** image there, then hand the image path back. You do NOT edit the
 deliverable prose, place the figure in the document, or assign a figure number — the renderer
 numbers figures at export, and `draft` writes the `![caption](assets/<file>)` reference. You make
 the picture; the engine and the main agent do the rest.
@@ -35,18 +37,38 @@ The two vendored helpers live next to this file:
 
 ---
 ## The Stance — the iron laws
-- **One picture, backend-neutral.** The output is a `.drawio` source + a rendered **SVG** (crisp
-  in both Typst `image()` and LaTeX `\includegraphics`). Store BOTH in the section's
-  `assets/` dir — the SVG is what the deliverable embeds, the `.drawio` is the editable source
-  that makes the image regenerable. Never embed raw TikZ, raw `{=latex}`, or mermaid in the
-  deliverable; the diagram travels as an image.
+- **One picture, rendered to a high-resolution PNG.** The output is a `.drawio` source + a
+  rendered **PNG** (high-DPI raster). Store BOTH in the section's `assets/` dir — the PNG is what
+  the deliverable embeds, the `.drawio` is the editable source that makes the image regenerable.
+  **Why PNG, not SVG:** draw.io's SVG export wraps labels in `foreignObject` (HTML) or packs the
+  whole canvas as one base64 `<image>` PNG; the default Typst track's renderer (resvg) does NOT
+  composite embedded PNGs or support `foreignObject`, so a drawio "SVG" collapses to a **solid
+  black box** with the labels gone. A high-DPI PNG embeds reliably on the default Typst track (and
+  on the LaTeX track). Render at `--width 2400`+ so the raster stays crisp. Never embed raw TikZ,
+  raw `{=latex}`, or mermaid in the deliverable; the diagram travels as an image.
+- **Legible at column width — labels must survive the squeeze.** The PNG is scaled to fit the
+  document's text column (~160mm on A4), and a raster's text can't be re-enlarged afterwards. So
+  the labels' on-page size is set entirely by **label-height ÷ canvas-width**. Keep that ratio
+  **≥ 1.5%** (→ ≥7–8pt on the page; **5pt is the absolute floor**, target 10pt at ~2.2%). Concretely:
+  on a ~1000–1200px-wide canvas use **14–16px label text**, never the 12px default on a wide canvas.
+  **Keep diagrams compact — ≤ 7–10 nodes;** if it needs more, **split it into 2–3 figures** (A/B/C)
+  rather than one dense mega-diagram whose labels vanish when scaled. A genuinely wide diagram
+  (much wider than tall) should be **split or handed back flagged "needs landscape/full-page"** —
+  don't let it be squeezed into the column. Sans labels, weight ≥ 400, contrast ≥ 4.5:1.
+- **Connectors must stay legible — jumps at crossings, no occlusion.** Two connectors that cross MUST
+  use a line **jump** (`jumpStyle=arc` with a `jumpSize`, in the edge `style`) so one visibly hops over
+  the other instead of merging into an ambiguous intersection. Route edges so they do NOT pass over
+  (occlude) an unrelated node or its label: use `edgeStyle=orthogonalEdgeStyle`, spread connection points
+  with `exitX/exitY`/`entryX/entryY` when a node has 2+ connectors, and add `<Array as="points">`
+  waypoints to steer an edge around a shape. A diagram whose lines cross without jumps or run through
+  boxes reads as a tangle — fix it before the final render (the vision self-check looks for exactly this).
 - **You author the picture, not the document.** No figure numbers, no cross-section references,
   no captions baked into prose. Hand back the image path and a one-line description of what it
   shows; the main agent places it.
 - **Validate before you render.** A wrong `source`/`target` id or a dangling edge renders as a
   silently broken picture. Run `scripts/validate.py` first; fix every error before exporting.
 - **Render small, review, converge.** Export a preview, LOOK at it (vision), fix the obvious
-  defects, then export the final SVG. Diagram quality is something you SEE — do not declare a
+  defects, then export the final PNG. Diagram quality is something you SEE — do not declare a
   diagram done from the XML alone.
 - **Degrade honestly.** If the draw.io CLI is missing or crashes, do NOT fake an image. Emit the
   browser-fallback URL (or the `.drawio` XML alone) and say so, so the main agent can decide.
@@ -64,12 +86,16 @@ The two vendored helpers live next to this file:
 4. **Render a preview** — `drawio -x -f png --width 2000 -o /tmp/<name>.png <name>.drawio`
    (NO `-e`; cap width so vision can read it).
 5. **Self-check (vision).** Read the preview PNG. Catch overlaps, clipped labels, missing
-   connections, off-canvas shapes, edges crossing unrelated shapes. Apply targeted XML fixes and
-   re-render. Max 2 rounds, then proceed. (No vision model → skip this step.)
-6. **Final render → SVG** — `drawio -x -f svg -e -o corpus/<section>/assets/<name>.svg
-   <name>.drawio`. SVG is text, so `-e` (embed editable XML) is safe. The deliverable embeds the
-   SVG; the `.drawio` stays as the source of truth.
-7. **Hand back** the SVG path + a one-line description of what the diagram shows. Done.
+   connections, off-canvas shapes, **edges that occlude an unrelated node/label, and crossings rendered
+   without a jump** (ambiguous intersections). Apply targeted XML fixes (waypoints, spread exit/entry,
+   add `jumpStyle`) and re-render. Max 2 rounds, then proceed. (No vision model → skip this step.)
+6. **Final render → PNG** — `drawio -x -f png --width 2400 -o corpus/<section>/assets/<name>.png
+   <name>.drawio` (high-DPI raster; no `-e` — that's SVG/PDF-only). The deliverable embeds the
+   PNG; the `.drawio` stays beside it as the regenerable source of truth.
+7. **Hand back** the PNG path + a one-line description of what the diagram shows. If the diagram
+   genuinely cannot fit a single column (much wider than tall), say so explicitly — "needs
+   full-page / landscape" — so the main agent records that layout intent (it raises a `docspec
+   audit` finding) instead of letting it vanish at the handoff. Done.
 
 **If the draw.io CLI is unavailable** (not installed, or crashes / empty output in a sandbox):
 do not retry in a loop. Run `python3 scripts/encode_drawio_url.py <name>.drawio` for a browser
@@ -113,13 +139,14 @@ Rules that keep `validate.py` and the renderer happy:
 
 ### Edge
 ```xml
-<mxCell id="10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;html=1;"
+<mxCell id="10" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;jettySize=auto;jumpStyle=arc;jumpSize=6;html=1;"
         edge="1" parent="1" source="2" target="3">
   <mxGeometry relative="1" as="geometry" />
 </mxCell>
 ```
+Keep `jumpStyle=arc;jumpSize=6;` on edges so crossings render as visible hops, not ambiguous merges.
 Pin `exitX/exitY/entryX/entryY` when a node has 2+ connections (spread them across the perimeter);
-add `<Array as="points">` waypoints when an edge must route around an unrelated shape.
+add `<Array as="points">` waypoints when an edge must route around an unrelated shape (avoid occlusion).
 
 ### A restrained default palette (fill / stroke)
 blue `#dae8fc`/`#6c8ebf` (services) · green `#d5e8d4`/`#82b366` (stores) ·
@@ -137,23 +164,34 @@ A **docspec-managed** draw.io (from `docspec setup --with-drawio`) lives under d
 absent entirely, fall back to `scripts/encode_drawio_url.py` (browser) or hand back the XML.
 
 ```bash
-# Preview PNG (step 4) — NO -e, width-capped for vision
+# Preview PNG (step 4) — width-capped for vision
 drawio -x -f png --width 2000 -o preview.png input.drawio
-# Final SVG (step 6) — -e safe for SVG; this is the deliverable image
-drawio -x -f svg -e -o output.svg input.drawio
+# Final PNG (step 6) — high-DPI raster; this is the deliverable image
+drawio -x -f png --width 2400 -o output.png input.drawio
 # Linux headless: prefix with  xvfb-run -a  ; running as root in CI: append  --no-sandbox  at the very end
 ```
-Key flags: `-x` export · `-f {svg,png,pdf}` format · `-e` embed editable XML (SVG/PDF only for the
-deliverable) · `--width <px>` cap (no `-s` with it) · `-o` output path · `-b 10` border.
+Key flags: `-x` export · `-f {png,svg,pdf}` format · `--width <px>` raster width (no `-s` with it) ·
+`-o` output path · `-b 10` border. The deliverable image is **PNG** (see the stance: drawio SVGs go
+black under the Typst track).
+
+**Guardrail — `bad option: -x` / the CLI ignores export flags:** the draw.io binary is being run as
+Node, not as the app. Clear the inherited `ELECTRON_RUN_AS_NODE` env var before invoking it
+(`env -u ELECTRON_RUN_AS_NODE drawio …` on POSIX; `$env:ELECTRON_RUN_AS_NODE=$null` then call it on
+Windows PowerShell) and retry.
+
+**Guardrail — wrong drawio version:** the CLI export flags (`-x -f`) need a recent draw.io. If
+`drawio --version` reports an old release (e.g. v24) and rejects `-x -f`, you picked up a stale
+system install. Prefer the docspec-managed binary from `docspec setup --with-drawio` (it pins and
+version-asserts the release); point `DOCSPEC_DRAWIO` at it if needed.
 
 ---
 ## Guardrails
 **Do**
-- Take the intent + target section from the main agent; produce ONE `.drawio` + its rendered SVG.
+- Take the intent + target section from the main agent; produce ONE `.drawio` + its rendered PNG.
 - Run `scripts/validate.py` before rendering; fix every error.
-- Render a width-capped preview and self-check it with vision before the final SVG.
-- Store BOTH the `.drawio` source and the SVG in `corpus/<section>/assets/`.
-- Hand back the SVG path + a one-line description; let the main agent place the figure.
+- Render a width-capped preview and self-check it with vision before the final PNG.
+- Store BOTH the `.drawio` source and the rendered PNG in `corpus/<section>/assets/`.
+- Hand back the PNG path + a one-line description; let the main agent place the figure.
 - Degrade to the browser URL / XML-only and SAY SO when the CLI is unavailable.
 
 **Don't**

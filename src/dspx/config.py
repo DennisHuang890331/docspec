@@ -45,12 +45,64 @@ DEFAULTS: dict = {
         "formats": ["pdf"],
         "template": "",
         "format": {},
+        "profile": "default",   # 文類版面 profile（default|academic|paper|manual|essay|novel）；`--profile` per-export 覆寫
     },
 }
+
+# export.profile 合法文類（Typst 模板依此切換字型/段落/邊界/標題/場景分隔）。
+EXPORT_PROFILES = ("default", "academic", "paper", "manual", "essay", "novel")
 
 KNOWN_KEYS = frozenset(DEFAULTS)
 
 AUTONOMY_KNOBS = ("publish",)
+
+
+def lang_subtag(language: str | None) -> str:
+    """BCP-47 語言標籤 → ISO-639 base subtag（`zh-TW` → `zh`、`en-US` → `en`）。
+    typst `#set text(lang: …)` 與出版軌（changelog 在地化）吃 base subtag；把整個 `zh-TW`
+    直接丟進 typst lang 是錯的（預設 `zh-TW` 本身就不是合法 typst lang）。空/壞 → `zh`（house 預設）。"""
+    if not language:
+        return "zh"
+    base = str(language).replace("_", "-").split("-", 1)[0].strip().lower()
+    return base or "zh"
+
+
+def detect_language(text: str, fallback: str | None = None) -> str:
+    """從交付物內容偵測文件語言 base subtag（`zh`/`en`），確定性、無魔術門檻。
+
+    規則：數 CJK 表意字（`一`–`鿿` 區段）vs ASCII 字母（A–Z/a–z）。CJK 多數 → `zh`、
+    否則 `en`。中文學術文件即便夾大量英文術語，表意字仍佔多數；英文文件 CJK≈0。
+    無可判字元（空/全符號/全數字）→ 回 `lang_subtag(fallback)`（house 預設 zh）。
+
+    用於：publish changelog 在地化、export 的 lang/region——皆「文件語言」而非「專案 config」，
+    因為單一專案級 config.language 常忘了改（英文交付物洩中文表頭）。"""
+    cjk = 0
+    latin = 0
+    for ch in text:
+        if "一" <= ch <= "鿿":
+            cjk += 1
+        elif ("A" <= ch <= "Z") or ("a" <= ch <= "z"):
+            latin += 1
+    if cjk == 0 and latin == 0:
+        return lang_subtag(fallback)
+    return "zh" if cjk >= latin else "en"
+
+
+def region_for(lang: str, config_language: str | None = None) -> str:
+    """文件語言 base subtag → typst region（CJK 標點位置/在地化）。
+
+    `zh` → house Traditional 預設 `tw`，除非 config.language 帶同 base 的明確 region
+    （如 `zh-CN` → `cn`）；`en` → `us`；其餘 → base 本身。保留思源宋 Traditional house 預設、
+    又尊重明設簡體專案。"""
+    if lang == "zh":
+        if config_language:
+            parts = str(config_language).replace("_", "-").split("-")
+            if len(parts) >= 2 and parts[0].strip().lower() == "zh" and parts[1].strip():
+                return parts[1].strip().lower()
+        return "tw"
+    if lang == "en":
+        return "us"
+    return lang
 
 
 class ConfigError(Exception):

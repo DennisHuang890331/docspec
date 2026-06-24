@@ -189,6 +189,23 @@ def test_sibling_order_collision_fails(make_project, write_leaf):
     assert any("collides" in e for e in res.errors)
 
 
+def test_deep_nesting_beyond_max_heading_level_fails(make_project, write_leaf):
+    # 1.8(d)：章節樹過深 → 標題層級 > 四級（H5）→ render 會吐 #######＝字面文字、靜默破版 → check ERROR
+    home = make_project()
+    write_leaf(home, "g/a/b/c/d/e", concept={"id": "c1", "title": "葉", "order": 1})  # level 6 (五級)
+    res = _check(home)
+    assert not res.ok
+    assert any("too deep" in e for e in res.errors)
+
+
+def test_four_levels_deep_passes(make_project, write_leaf):
+    # 四級（1.1.1.1）＝最深合法層級，不報深度錯（level 5）
+    home = make_project()
+    write_leaf(home, "g/a/b/c/d", concept={"id": "c1", "title": "葉", "order": 1})  # level 5 (四級)
+    res = _check(home)
+    assert not any("too deep" in e for e in res.errors)
+
+
 def test_supersede_coherence_fails(make_project, write_leaf):
     # 1.8(c)：a supersedes b，但 b 仍 accepted、無 superseded-by → 紅
     home = make_project()
@@ -317,8 +334,83 @@ def test_external_image_ref_not_validated(make_project, write_leaf):
     assert res.ok, res.errors
 
 
+def test_cross_section_asset_basename_collision_fails_check(make_project, write_leaf):
+    """兩節各有同 basename 的 asset 且都被引用 → 扁平命名空間無法區分、export 會嵌錯圖。
+    check ⑨ MUST fail-loud（治在源頭），叫人改名。"""
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    write_leaf(home, "a/y", concept={"id": "c2", "title": "Y", "order": 2})
+    _add_asset(home, "a/x", "diagram.svg", b"\x89PNG\r\n\x1a\nXXX")
+    _add_asset(home, "a/y", "diagram.svg", b"\x89PNG\r\n\x1a\nYYY")  # 同名、不同檔
+    layout = Layout(home)
+    latest = layout.docs_latest("a")
+    latest.parent.mkdir(parents=True, exist_ok=True)
+    latest.write_text(
+        "---\narticle: a\n---\n"
+        "<!-- dspx:section a/x -->\n# X\n\n![d](assets/diagram.svg)\n\n"
+        "<!-- dspx:section a/y -->\n# Y\n\n![d](assets/diagram.svg)\n",
+        encoding="utf-8")
+    res = _check_with_layout(home)
+    assert not res.ok
+    assert any("owned by multiple sections" in e and "diagram.svg" in e for e in res.errors)
+
+
+def test_same_basename_only_one_referenced_passes(make_project, write_leaf):
+    """兩節各有同名 asset，但只有一節真的引用 → 無撞名、不誤報。"""
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    write_leaf(home, "a/y", concept={"id": "c2", "title": "Y", "order": 2})
+    _add_asset(home, "a/x", "diagram.svg")
+    _add_asset(home, "a/y", "diagram.svg")
+    layout = Layout(home)
+    latest = layout.docs_latest("a")
+    latest.parent.mkdir(parents=True, exist_ok=True)
+    latest.write_text(
+        "---\narticle: a\n---\n"
+        "<!-- dspx:section a/x -->\n# X\n\n![d](assets/diagram.svg)\n\n"
+        "<!-- dspx:section a/y -->\n# Y\n\nno image here.\n",
+        encoding="utf-8")
+    res = _check_with_layout(home)
+    assert res.ok, res.errors
+
+
 def test_image_ref_check_skipped_without_latest(make_project, write_leaf):
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     res = _check_with_layout(home)   # no _latest.md rendered yet
+    assert res.ok, res.errors
+
+
+# ── diagram-intent 閘（C1：宣告 layout=diagram 卻零張圖＝機械落差）──────────
+
+_DIAGRAM_BRIEF = {"audience": "devs", "depth": "deep", "breadth": "b", "layout": "diagram"}
+_PROSE_BRIEF = {"audience": "devs", "depth": "deep", "breadth": "b", "layout": "prose"}
+
+
+def test_declared_diagram_without_image_fails_check(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1,
+                                     "brief": dict(_DIAGRAM_BRIEF)})
+    _write_latest(home, "a", "a/x", "X", "Just prose, no figure embedded.")
+    res = _check_with_layout(home)
+    assert not res.ok
+    assert any("layout=diagram" in e and "a/x" in e for e in res.errors)
+
+
+def test_declared_diagram_with_image_passes_check(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1,
+                                     "brief": dict(_DIAGRAM_BRIEF)})
+    _add_asset(home, "a/x", "arch.png")
+    _write_latest(home, "a", "a/x", "X", "![arch](assets/arch.png)")
+    res = _check_with_layout(home)
+    assert res.ok, res.errors
+
+
+def test_non_diagram_without_image_not_flagged(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1,
+                                     "brief": dict(_PROSE_BRIEF)})
+    _write_latest(home, "a", "a/x", "X", "Just prose, no figure — and that's fine.")
+    res = _check_with_layout(home)
     assert res.ok, res.errors

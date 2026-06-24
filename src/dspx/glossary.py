@@ -27,9 +27,9 @@ def load_glossary(layout: Layout) -> list[dict]:
     path = glossary_path(layout)
     if not path.is_file():
         return []
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    terms = data.get("terms") or []
-    return [t for t in terms if isinstance(t, dict)]
+    from dspx.model import ModelError, keyed_list
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return keyed_list(raw, path, "terms", error=ModelError)  # 誤名頂層 key fail-loud
 
 
 def validate_glossary(terms: list[dict]) -> list[str]:

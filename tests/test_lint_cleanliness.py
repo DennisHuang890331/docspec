@@ -34,7 +34,7 @@ def _lint(layout: Layout):
 def _leaf(write_leaf, home):
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "x",
                                      "brief": {"audience": "a", "depth": "d",
-                                               "breadth": "b", "forbidden": "f"}})
+                                               "breadth": "b", "forbidden": ["f"]}})
 
 
 # ── V4 placeholder 類（放寬：不只 literal [TBD]）──────────────────────────

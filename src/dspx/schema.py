@@ -48,6 +48,7 @@ class Artifact:
     schema: dict | None          # kind==yaml 的欄位 meta-schema
     block_grammar: dict | None   # kind==md 的分塊文法
     entries: bool                # True = 此 yaml 檔為 {entries: [...]} 結構
+    closed: bool = False         # True = 此 fieldmap key 集已完全列舉，未宣告的 key 由 check 報 ERROR
 
 
 @dataclass(frozen=True)
@@ -93,6 +94,64 @@ def required_field_names(fieldmap: dict | None) -> list[str]:
         if spec.get("type") == "object" and isinstance(spec.get("fields"), dict):
             out.extend(f"{fname}.{s}" for s in required_field_names(spec["fields"]))
     return out
+
+
+def field_contract(fieldmap: dict | None) -> list[dict]:
+    """完整投影一個 fieldmap 的封閉契約：每欄 {name, type, required, values?, relation?, closed?, fields?}。
+    比 required_field_names 多帶 type／enum 合法值／optional 封閉欄／巢狀子契約——讓 agent
+    寫之前就看到合法形狀（鐵律2：契約源自 schema、不靠會漂的散文）。"""
+    out: list[dict] = []
+    for fname, spec in (fieldmap or {}).items():
+        if not isinstance(spec, dict):
+            continue
+        typ = spec.get("type") or "string"
+        entry: dict = {"name": fname, "type": typ, "required": bool(spec.get("required"))}
+        if typ == "enum" and spec.get("values"):
+            entry["values"] = list(spec["values"])
+        if spec.get("relation"):
+            entry["relation"] = spec["relation"]
+        if typ == "object" and isinstance(spec.get("fields"), dict):
+            entry["closed"] = bool(spec.get("closed"))
+            entry["fields"] = field_contract(spec["fields"])
+        out.append(entry)
+    return out
+
+
+def _skeleton_lines(contract: list[dict], indent: str) -> list[str]:
+    """從 field_contract 產 YAML skeleton 行：必填欄 + 常用封閉 optional（layout/kind）；
+    enum 以行內註解列合法值。給 instructions/new 投影一份可貼的正確形狀。"""
+    lines: list[str] = []
+    for f in contract:
+        name, typ = f["name"], f["type"]
+        has_required_sub = bool(f.get("fields")) and any(s.get("required") for s in f["fields"])
+        # 納入 skeleton：必填欄、常用封閉 optional（layout/kind）、或「有必填子欄的 object 信封」（如 brief）
+        if not f.get("required") and name not in ("layout", "kind") and not has_required_sub:
+            continue
+        comment = ("    # " + " | ".join(map(str, f["values"]))) if f.get("values") else ""
+        if f.get("fields"):
+            lines.append(f"{indent}{name}:")
+            sub = _skeleton_lines(f["fields"], indent + "  ")
+            lines.extend(sub or [f"{indent}  # (fill sub-fields)"])
+        elif typ in ("list", "list[ref]"):
+            lines.append(f"{indent}{name}: []{comment}")
+        else:
+            placeholder = f["values"][0] if f.get("values") else "..."
+            lines.append(f"{indent}{name}: {placeholder}{comment}")
+    return lines
+
+
+def yaml_skeleton(art) -> str | None:
+    """可貼的 YAML skeleton：entries 容器檔包成 `entries:\\n  - …`，一般 yaml 直接列欄。"""
+    if not getattr(art, "schema", None):
+        return None
+    contract = field_contract(art.schema)
+    if getattr(art, "entries", False):
+        body = _skeleton_lines(contract, "    ")
+        if not body:
+            return None
+        return "\n".join(["entries:", "  - " + body[0].lstrip(), *body[1:]])
+    lines = _skeleton_lines(contract, "")
+    return "\n".join(lines) if lines else None
 
 
 def builtin_schemas_root() -> Path:
@@ -162,6 +221,7 @@ def load_schema_from(schema_dir: Path) -> Schema:
                 schema=entry.get("schema") if kind == "yaml" else None,
                 block_grammar=entry.get("block-grammar") if kind == "md" else None,
                 entries=bool(entry.get("entries", False)),
+                closed=bool(entry.get("closed", False)),
             )
         )
 

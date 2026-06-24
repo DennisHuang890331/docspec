@@ -207,6 +207,27 @@ project-files:
       **Non-blocking, never blocks publish**; a finding that requires engineering work → promoted into a roadmap entry (roadmap from-audit, one-way).
     fence: >
       Holds only "flaws in existing content" (discovered). Planned work → roadmap, terminology → glossary. Append-only, via command, not hand-edited.
+  - id: group
+    file: corpus/<article>/<…grouping dir…>/group.yaml (per grouping node, OPTIONAL)
+    meaning: >
+      A grouping node is an intermediate section directory that has leaf descendants but NO concept.yaml of its own; render emits a
+      heading for it so the deliverable hierarchy stays contiguous. By default that heading text is the path segment humanized — which
+      renders an English path slug (e.g. `howto` → "How-to") as a heading even in an all-Chinese document. `group.yaml` has two OPTIONAL
+      fields: `title` (a string) gives the grouping node an author-controlled, localizable heading text; `order` (a number) gives it an
+      author-controlled position among its siblings — without it a concept-less grouping node sorts at a fixed default (0.0) ahead of
+      explicitly-ordered siblings. It does NOT make the directory a leaf (leaf discovery keys on concept.yaml): no five-file contract,
+      no fingerprint, no completeness fields. OPTIONAL everywhere — absent (or a field absent) ⇒ heading text falls back to
+      path-segment humanization and ordering to the default (backward compatible).
+    reader: [engine]            # render reads it when emitting the grouping-node heading; not injected into any skill aperture
+    writer: [develop]           # develop sets a localized title on grouping nodes (esp. for non-English documents)
+    when: >
+      develop adds a `group.yaml` (`title: <localized heading>`, optionally `order: <number>`) on a grouping node whenever the path slug
+      would otherwise surface as a wrong-language or unpolished heading, or whenever the concept-less grouping node would otherwise sort
+      ahead of its explicitly-ordered siblings. Leaf headings/order come from concept.title/order; this is only for the no-concept
+      grouping nodes between them.
+    fence: >
+      Holds only the grouping node's display title (`title`) and optional sibling position (`order`). Leaf identity/brief → that section's
+      concept.yaml (a grouping node has none); writing tone → writing-guide.md.
 
 # The engine recognizes only these reference arrows (closed set)
 relation-kinds: [realizes, governs, supersedes]
@@ -223,6 +244,7 @@ artifacts:
       read:  [develop, draft, edit, factcheck, publish]
       write: [develop]
       projects-into: docs
+    closed: true                 # concept top-level keys are fully enumerated; unknown keys fail loud (check)
     schema:
       id:         { type: string,    required: true }
       title:      { type: string,    required: true }
@@ -232,11 +254,12 @@ artifacts:
       brief:
         type: object
         required: false          # the whole block may be omitted = inherited; required at root is enforced by the hierarchy check
+        closed: true             # brief sub-keys are fully enumerated; an invented key (e.g. brief.diagram) fails loud
         fields:                  # nested sub-schema → _check_fieldmap recurses over a "non-empty brief"
           audience: { type: string, required: true }   # if you wrote a brief, fill the whole envelope (checked only when non-empty)
           depth:    { type: string, required: true }
           breadth:  { type: string, required: true }
-          forbidden:{ type: list }
+          forbidden: { type: list }
           layout:   { type: enum, values: [prose, table, list, diagram] }
           kind:     { type: enum, values: [explain, how-to, reference, tutorial] }   # Diátaxis topic type — optional audit/draft hint, NOT a render gate; inherits down the tree
       must_cover: { type: list,      required: false }
@@ -256,6 +279,7 @@ artifacts:
       write: [develop]
       projects-into: docs
     entries: true                       # this file has a { entries: [...] } structure; schema validates each entry
+    closed: true                        # each decisions entry's keys are fully enumerated; unknown keys fail loud (check)
     schema:
       id:            { type: string, required: true }
       kind:          { type: enum,   required: true, values: [normative, rationale] }
@@ -314,6 +338,7 @@ artifacts:
       write: [develop]
       projects-into: null
     entries: true
+    closed: true                        # each history entry's keys are fully enumerated; unknown keys fail loud (check)
     schema:
       id:            { type: string, required: true }
       kind:          { type: enum,   required: true, values: [normative, rationale, section] }

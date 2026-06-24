@@ -147,6 +147,13 @@ class Layout:
             return self.docs_dir / f"{article}_latest.md"
         return self.docs_dir / article / "_latest.md"
 
+    def docs_ledger(self, article: str) -> Path:
+        """隱藏 sidecar：存 render 記的各節指紋表（`sections` 帳本），與 `_latest.md` 分離
+        ——交付物開頭不再被一張巨大指紋表佔據（ISSUE-3）。人讀的是 `_latest.md`，這檔是機器簿記。"""
+        if self.docs_layout == "flat":
+            return self.docs_dir / f".{article}.sections.yaml"
+        return self.docs_dir / article / ".sections.yaml"
+
     def docs_snapshot(self, article: str, version: str) -> Path:
         # version＝semver 字串（X.Y.Z）。凍結快照一律收進 archive/ 子夾（兩種 layout 皆然）
         # ——凍結＝資料夾級規則（任何 archive/ 內禁改），不靠檔名 pattern。見 dspx.freeze。
@@ -173,6 +180,20 @@ class Layout:
     def docs_export(self, article: str, version: str, fmt: str) -> Path:
         """export 產物路徑：docs/exports/<article>_v<version>.<fmt>。"""
         return self.docs_exports_dir / f"{article}_v{version}.{fmt}"
+
+    @property
+    def docs_journal_dir(self) -> Path:
+        """journal 軌產物根夾＝docs/exports/journals/（與 Typst 軌 latest PDF 分離）。"""
+        return self.docs_exports_dir / "journals"
+
+    def docs_journal_export(self, article: str, version: str, journal_id: str, fmt: str) -> Path:
+        """journal 軌 emit 路徑：docs/exports/journals/<journal_id>/<article>_v<version>.<fmt>。
+
+        per-journal 子夾＝①不與 latest 交付物混；②雙 adapter（ieee/elsevier）不互蓋
+        （先前都寫同一 docs/exports/<article>_v<N>.tex 互覆寫）。"""
+        # journal_id 防護：取末段檔名、剔分隔符（BYO --template 可能給夾路徑）。
+        safe = "".join(c for c in Path(journal_id).name if c.isalnum() or c in "-_") or "journal"
+        return self.docs_journal_dir / safe / f"{article}_v{version}.{fmt}"
 
     def existing_versions(self, article: str) -> list[tuple[int, int, int]]:
         """已發行 semver 清單（scheme-aware；供 publish 算下一版）。

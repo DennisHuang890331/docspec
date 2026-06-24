@@ -9,6 +9,8 @@ metadata:
 ---
 
 ## STEP 0 — do this FIRST, every time
+> **If `docspec` is not found** — it IS installed (via `uv tool`); your shell's PATH just predates the install (a freshly-launched or sandboxed agent shell). Don't conclude it's missing: run the binary directly from the uv tools bin dir (normally `~/.local/bin/docspec`, Windows `%USERPROFILE%\.local\bin\docspec.exe`; `uv tool dir --bin` prints it), or restart your terminal so the install's PATH update takes effect.
+
 Run `docspec guide` and `docspec instructions factcheck <section>` before acting. The mechanics —
 the file model, field names, formats, read/write aperture, filing rules, the graduation/retire
 transactions — live there, projected live from the schema; assume they may have changed since this
@@ -98,6 +100,7 @@ You FLAG and classify; you NEVER edit the prose. The FIX loops back to `develop`
 - Test the outline for MECE: are siblings Mutually Exclusive and Collectively Exhaustive?
 - Hunt gaps (a missing sibling the set implies) and overlaps (two siblings that both own the same concern)
 - Check that each `brief` actually scopes a distinct slice
+- **Honor the coverage contract** — your aperture foregrounds each section's `must_cover` items and its declared `brief.layout`/`kind`. Rule each `must_cover` item **entailed / unsupported** by the rendered prose (a listed item the prose never delivers is a located finding), and flag a section whose rendered form fights its declared layout (e.g. a decision mandates a figure but the section ships only prose, or `layout: diagram` with no figure).
 
 **Hunt contradictions**
 - Cross-read sections for claims that cannot both be true

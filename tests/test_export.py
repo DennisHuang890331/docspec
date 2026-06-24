@@ -137,6 +137,43 @@ def test_pandoc_from_disables_citations():
     assert "-citations" in export_cmd._PANDOC_FROM
 
 
+# ── 表格欄寬：pandoc 等分百分比 → typst auto（治窄欄硬斷字）─────────────
+
+def test_balance_table_columns_equal_pct_to_auto():
+    # pandoc 對沒指定寬的表給等分百分比 → 改 auto（依內容定寬）
+    src = "#table(\n  columns: (33.33%, 33.33%, 33.33%),\n  align: (auto,auto,auto,),\n)"
+    out = export_cmd._balance_table_columns(src)
+    assert "columns: (auto, auto, auto)" in out
+    assert "33.33%" not in out
+
+
+def test_balance_table_columns_respects_unequal_widths():
+    # 非等分＝作者用 grid table 指定的相對寬 → 保留不動
+    src = "#table(columns: (50%, 25%, 25%),)"
+    assert export_cmd._balance_table_columns(src) == src
+
+
+def test_balance_table_columns_leaves_auto_and_fr_alone():
+    # 已是 auto / fr 的欄寬不碰
+    src = "#table(columns: (auto, 1fr, auto),)"
+    assert export_cmd._balance_table_columns(src) == src
+
+
+def test_fix_typst_math_sect_to_inter():
+    # pandoc 把 ∩ 譯成 typst 不認的 sect → 在數學區段改 inter
+    src = r"text $ frac(\|hat(R)_k sect R\|, \|R\|) $ more"
+    out = export_cmd._fix_typst_math(src)
+    assert "inter" in out and "sect" not in out
+
+
+def test_fix_typst_math_leaves_prose_word_alone():
+    # 散文裡的 "sect"（非數學）不動
+    src = "The religious sect met. $a sect b$"
+    out = export_cmd._fix_typst_math(src)
+    assert "religious sect met" in out      # 散文不碰
+    assert "a inter b" in out               # 數學內改
+
+
 # ── 輸出路徑：絕不在 archive 下 ───────────────────────────────────
 
 def test_export_output_never_in_archive(make_project, monkeypatch):
@@ -312,7 +349,7 @@ def test_journal_emit_ieee(make_project, monkeypatch, tmp_path):
     monkeypatch.chdir(home.parent)
     assert export_cmd.run(["g", "--engine", "journal", "--journal", "ieee",
                            "--slots", str(slots)]) == 0
-    out = layout.docs_export("g", "1.0.0", "tex")
+    out = layout.docs_journal_export("g", "1.0.0", "ieee", "tex")
     assert out.is_file()
     tex = out.read_text(encoding="utf-8")
     assert "\\documentclass[journal]{IEEEtran}" in tex
@@ -329,7 +366,7 @@ def test_journal_implied_by_journal_flag(make_project, monkeypatch):
     monkeypatch.chdir(home.parent)
     # 給 --journal 但不給 --engine → 隱含 journal 軌
     assert export_cmd.run(["g", "--journal", "elsevier"]) == 0
-    tex = layout.docs_export("g", "1.0.0", "tex").read_text(encoding="utf-8")
+    tex = layout.docs_journal_export("g", "1.0.0", "elsevier", "tex").read_text(encoding="utf-8")
     assert "{cas-dc}" in tex
 
 
@@ -337,7 +374,7 @@ def test_journal_iet_adapter(make_project, monkeypatch):
     home, layout = _setup(make_project)
     monkeypatch.chdir(home.parent)
     assert export_cmd.run(["g", "--journal", "iet"]) == 0
-    tex = layout.docs_export("g", "1.0.0", "tex").read_text(encoding="utf-8")
+    tex = layout.docs_journal_export("g", "1.0.0", "iet", "tex").read_text(encoding="utf-8")
     assert "{cta-author}" in tex
 
 
@@ -346,9 +383,31 @@ def test_journal_table_filter_avoids_longtable(make_project, monkeypatch):
     home, layout = _setup(make_project)  # _SNAP 內含一個 markdown 表格
     monkeypatch.chdir(home.parent)
     assert export_cmd.run(["g", "--journal", "ieee"]) == 0
-    tex = layout.docs_export("g", "1.0.0", "tex").read_text(encoding="utf-8")
+    tex = layout.docs_journal_export("g", "1.0.0", "ieee", "tex").read_text(encoding="utf-8")
     assert "\\begin{longtable}" not in tex   # 環境（非 \usepackage{longtable}）不該出現
-    assert "\\begin{tabular}" in tex
+    assert "\\begin{tabularx}" in tex        # tabularx X 欄＝寬表自動換行、收進 \textwidth、不溢出版面
+    assert "}X" in tex                       # X 欄型（ragged-right）
+
+
+def test_strip_journal_frontmatter_drops_author_and_abstract():
+    # 作者列＋Abstract/Keywords 節進了 slot → 從 body 砍掉、保留至第一個內容標題（Introduction）
+    body = (
+        "**Dennis Huang**\n\n*Some Affiliation*\n\n"
+        "## Abstract\n\nThe abstract text.\n\n"
+        "## Keywords\n\nfoo; bar\n\n"
+        "## Introduction\n\nReal body starts here.\n"
+    )
+    out = export_cmd._strip_journal_frontmatter(body)
+    assert out.startswith("## Introduction")
+    assert "Dennis Huang" not in out
+    assert "The abstract text" not in out
+    assert "Real body starts here." in out
+
+
+def test_strip_journal_frontmatter_no_heading_left_untouched():
+    # 整份無 heading → 保守不動（不誤砍）
+    body = "Just a paragraph with no headings at all.\n"
+    assert export_cmd._strip_journal_frontmatter(body) == body
 
 
 def test_journal_unknown_slot_value_fails(make_project, monkeypatch, tmp_path):
@@ -358,7 +417,7 @@ def test_journal_unknown_slot_value_fails(make_project, monkeypatch, tmp_path):
     monkeypatch.chdir(home.parent)
     rc = export_cmd.run(["g", "--engine", "journal", "--journal", "ieee", "--slots", str(slots)])
     assert rc == 1
-    assert not layout.docs_export("g", "1.0.0", "tex").is_file()
+    assert not layout.docs_journal_export("g", "1.0.0", "ieee", "tex").is_file()
 
 
 def test_journal_missing_template_errors(make_project, monkeypatch):
@@ -377,7 +436,7 @@ def test_journal_byo_template_dir(make_project, monkeypatch, tmp_path):
         "\\maketitle\n$body$\n\\end{document}\n", encoding="utf-8")
     monkeypatch.chdir(home.parent)
     assert export_cmd.run(["g", "--engine", "journal", "--template", str(pack)]) == 0
-    tex = layout.docs_export("g", "1.0.0", "tex").read_text(encoding="utf-8")
+    tex = layout.docs_journal_export("g", "1.0.0", "myjournal", "tex").read_text(encoding="utf-8")
     assert "\\documentclass{article}" in tex and "概覽文件" in tex
 
 
@@ -418,6 +477,42 @@ def test_export_template_flag_missing_dir_errors(make_project, monkeypatch, caps
     rc = export_cmd.run(["g", "--template", str(home / "missing_tpl")])
     assert rc == 1
     assert "journal template not found" in capsys.readouterr().err
+
+
+def test_prune_old_pdfs_keeps_only_latest_scoped(make_project):
+    """D8：清同篇舊版 PDF（含 _vlatest），只留剛產出；他篇/journal 子夾/archive 不碰。"""
+    home, layout = _setup(make_project)
+    exports = layout.docs_exports_dir
+    exports.mkdir(parents=True, exist_ok=True)
+    (exports / "g_v1.0.0.pdf").write_text("old", encoding="utf-8")
+    (exports / "g_v1.0.1.pdf").write_text("old", encoding="utf-8")
+    (exports / "g_vlatest.pdf").write_text("preview", encoding="utf-8")
+    (exports / "other_v1.0.0.pdf").write_text("other-article", encoding="utf-8")  # 他篇
+    jtex = layout.docs_journal_export("g", "1.0.0", "ieee", "tex")               # journal 子夾
+    jtex.parent.mkdir(parents=True, exist_ok=True)
+    jtex.write_text("tex", encoding="utf-8")
+    keep = exports / "g_v1.0.2.pdf"
+    keep.write_text("new", encoding="utf-8")
+
+    pruned = {p.name for p in export_cmd._prune_old_pdfs(layout, "g", keep)}
+    assert pruned == {"g_v1.0.0.pdf", "g_v1.0.1.pdf", "g_vlatest.pdf"}
+    assert keep.is_file()                                  # 留最新
+    assert (exports / "other_v1.0.0.pdf").is_file()        # 他篇不碰（前綴 g_v 不匹配）
+    assert jtex.is_file()                                  # journal 子夾不碰（非遞迴）
+
+
+def test_journal_adapters_no_collision(make_project, monkeypatch):
+    """B7：ieee 與 elsevier 落不同子夾、互不覆寫。"""
+    home, layout = _setup(make_project)
+    monkeypatch.chdir(home.parent)
+    assert export_cmd.run(["g", "--journal", "ieee"]) == 0
+    assert export_cmd.run(["g", "--journal", "elsevier"]) == 0
+    ieee = layout.docs_journal_export("g", "1.0.0", "ieee", "tex")
+    elsevier = layout.docs_journal_export("g", "1.0.0", "elsevier", "tex")
+    assert ieee.is_file() and elsevier.is_file()
+    assert ieee.parent != elsevier.parent
+    assert "{IEEEtran}" in ieee.read_text(encoding="utf-8")
+    assert "{cas-dc}" in elsevier.read_text(encoding="utf-8")
 
 
 def test_export_fonts_flag_missing_font_errors(make_project, monkeypatch, capsys, tmp_path):
@@ -558,8 +653,8 @@ def test_verify_byte_lock_latin_only_loss_is_informational(monkeypatch, capsys):
     assert "informational" in capsys.readouterr().err
 
 
-def test_verify_byte_lock_soft_dep_when_pdfplumber_missing(monkeypatch, capsys):
-    """pdfplumber 缺 → 印提示、跳過驗證但回 0（PDF 仍出，不 crash）。"""
+def test_verify_byte_lock_hard_gate_when_pdfplumber_missing(monkeypatch, capsys):
+    """pdfplumber 缺 → 渲染忠實度 hard-gate：印安裝提示、回 1（fail-closed，--no-verify 才跳）。"""
     import builtins
     real_import = builtins.__import__
 
@@ -569,8 +664,9 @@ def test_verify_byte_lock_soft_dep_when_pdfplumber_missing(monkeypatch, capsys):
         return real_import(name, *a, **k)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
-    assert export_cmd._verify_byte_lock(paths.Path("x.pdf"), "內容") == 0
-    assert "pdfplumber" in capsys.readouterr().err
+    assert export_cmd._verify_byte_lock(paths.Path("x.pdf"), "內容") == 1
+    err = capsys.readouterr().err
+    assert "pdfplumber" in err and "--no-verify" in err
 
 
 def test_export_no_verify_skips_check(make_project, monkeypatch):
@@ -705,3 +801,68 @@ def test_export_typst_produces_pdf(make_project, monkeypatch):
     monkeypatch.chdir(home.parent)
     assert export_cmd.run(["g", "--engine", "typst"]) == 0
     assert layout.docs_export("g", "1.0.0", "pdf").is_file()
+
+
+# ── C3：圖片健檢（非阻塞）＋表格分頁 ─────────────────────────────
+
+def test_figure_health_warns_unresolved_ref():
+    warns = export_cmd._figure_health_warnings("See ![d](assets/missing.png).", {})
+    assert any("missing.png" in w and "missing this figure" in w for w in warns)
+
+
+def test_figure_health_warns_black_png(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    p = tmp_path / "black.png"
+    Image.new("RGB", (24, 24), (0, 0, 0)).save(p)
+    warns = export_cmd._figure_health_warnings("![d](assets/black.png)", {"assets/black.png": p})
+    assert any("black.png" in w and "black" in w for w in warns)
+
+
+def test_figure_health_clean_png_no_warn(tmp_path):
+    Image = pytest.importorskip("PIL.Image")
+    p = tmp_path / "ok.png"
+    Image.new("RGB", (24, 24), (120, 130, 140)).save(p)
+    warns = export_cmd._figure_health_warnings("![d](assets/ok.png)", {"assets/ok.png": p})
+    assert warns == []
+
+
+def test_typst_template_table_breakable():
+    pack = paths.bundled_typst_template_dir()
+    txt = (pack / "template.typ").read_text(encoding="utf-8")
+    assert "figure.where(kind: table): set block(breakable: true)" in txt
+
+
+# ── C5：文類版面 profile（typesetting-document-profiles）─────────────
+
+def test_export_profiles_enum_and_default():
+    from dspx.config import EXPORT_PROFILES, DEFAULTS
+    assert set(EXPORT_PROFILES) == {"default", "academic", "paper", "manual", "essay", "novel"}
+    assert DEFAULTS["export"]["profile"] == "default"
+
+
+def test_typst_template_has_profile_branches():
+    txt = (paths.bundled_typst_template_dir() / "template.typ").read_text(encoding="utf-8")
+    assert 'profile == "novel"' in txt          # 文類條件分支
+    assert "first-line-indent" in txt           # 段落模型（縮排 XOR 段距）
+    assert "tracking: 0.35em" in txt            # novel 場景分隔花飾 * * *
+    assert "1.7em" in txt                        # 標題模數（title 1.7×＝對齊單欄學術慣例，收斂自過大的 2.0）
+    assert "Source Sans 3" in txt                # sans 標題/手冊內文（非 CJK 文件）
+    assert "_sansok" in txt                      # ★sans 受語言條件：CJK 文件退 serif（typst Source Sans 3 子集 bug 破壞 CJK 抽取）
+    assert "cjk-latin-spacing" in txt            # 漢字↔Latin 自動間距
+    # 刻意不用 covers（破壞 fidelity 抽取）：字型用簡單 Latin-first fallback；CJK 用 typst 註冊名「思源宋體」
+    assert '#let _serif = ("Source Serif 4", "思源宋體")' in txt
+
+
+def test_typst_template_has_paper_two_column():
+    txt = (paths.bundled_typst_template_dir() / "template.typ").read_text(encoding="utf-8")
+    assert 'profile == "paper"' in txt            # paper profile 分支
+    assert "_twocol" in txt                       # 雙欄旗標
+    assert "columns: if _twocol { 2 } else { 1 }" in txt   # 雙欄頁面
+    assert 'scope: "parent"' in txt               # 標題/摘要跨欄（IEEE 慣例）
+
+
+def test_export_rejects_unknown_profile_from_config(make_project, write_leaf, monkeypatch):
+    home = make_project("language: zh-TW\ndocs_layout: per-article\nexport:\n  profile: bogus\n")
+    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
+    monkeypatch.chdir(home.parent)
+    assert export_cmd.run(["g"]) == 1   # 友善報錯（config 壞 profile），非 argparse SystemExit

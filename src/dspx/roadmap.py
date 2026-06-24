@@ -28,14 +28,14 @@ def _load_entries(path: Path, store: str) -> list[dict]:
     """讀 {entries:[...]}；缺席→[]。標每筆 `_store`。"""
     if not path.is_file():
         return []
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    entries = data.get("entries") or []
+    from dspx.model import ModelError, keyed_list
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    entries = keyed_list(raw, path, "entries", error=ModelError)  # 誤名頂層 key fail-loud
     out: list[dict] = []
     for e in entries:
-        if isinstance(e, dict):
-            tagged = dict(e)
-            tagged["_store"] = store
-            out.append(tagged)
+        tagged = dict(e)
+        tagged["_store"] = store
+        out.append(tagged)
     return out
 
 
