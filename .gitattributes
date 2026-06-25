@@ -1,0 +1,19 @@
+# Cross-platform line endings: store AND check out text as LF everywhere.
+# Stops the "LF will be replaced by CRLF" churn on Windows checkouts.
+* text=auto eol=lf
+
+# Defensive binary rules — never apply line-ending conversion.
+# (None tracked today; fonts/images live in data_dir, not the repo. This guards
+#  against a stray asset being committed later.)
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.pdf   binary
+*.ico   binary
+*.otf   binary
+*.ttf   binary
+*.woff  binary
+*.woff2 binary
+*.zip   binary
+*.drawio text eol=lf
