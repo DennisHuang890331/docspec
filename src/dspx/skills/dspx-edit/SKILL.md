@@ -93,8 +93,16 @@ so you do a **light alignment pass**, not a rewrite:
 2. Re-tune ONLY the prose's tone, framing, and emphasis to fit the new parent brief —
    **the content (facts, decisions, numbers, claims) stays byte-for-byte**. If the new brief
    genuinely demands different content, that's a `draft`/`develop` matter — flag it, don't invent.
-3. Run `docspec render <article>` so the section's ancestor fingerprint is re-stamped (clears the
-   `stale-inherited` flag); then `docspec lint`/`docspec check` as usual.
+3. Re-stamp the section so `stale-inherited` clears — by the path that matches what you did:
+   - **If your alignment changed the prose** → `docspec render <article>` re-stamps it (the prose hash
+     moved, so the engine recomputes the ancestor fingerprint).
+   - **If, after reviewing against the moved brief, the prose legitimately needs NO change** (e.g. a
+     bibliography / reference list that carries no framework narrative) → do NOT fabricate an edit to
+     force a re-stamp. Acknowledge it: `docspec render <article> --ack <section>`. That re-stamps the
+     ancestor fingerprint as your explicit "reviewed, aligned, no change needed". (`--ack` is refused
+     if the section is actually `stale-own`/`stale-upstream` — that means its own source changed and
+     the prose genuinely needs rewriting, which is `draft`'s job, not an acknowledge.)
+   Then `docspec lint`/`docspec check` as usual.
 
 This is the only time `edit` consults the brief. Everything else below is plain copy-prep.
 
@@ -114,6 +122,15 @@ For each check you are about to make:
 **Where "flag, don't invent" goes:** when a fix would change meaning (a content/decision gap, a
 cross-section contradiction), raise a non-blocking `docspec audit` finding OR list it in your diff
 summary — **never** leave a `[!WARNING]`/`[TBD]` in `_latest.md`.
+
+**On a structural/deep revision, re-examine the title and root framing.** When a section was
+re-pivoted across its outline or its thesis re-framed, `concept.title` (and the document's
+root/overview framing) is the surface most often left stale — and the staleness ledger CANNOT catch
+it: a title left *byte-unchanged* while the prose was re-pivoted produces no `own`-fingerprint change,
+so `status` stays green even as the title contradicts the new argument. This is a semantic check that
+is yours, not the engine's. Confirm the title and root framing still match the rewritten prose; if the
+title is stale, that is a `develop` fix (`concept.title`) — flag it, don't rewrite the heading in
+`_latest.md` (render owns it).
 
 Never let the engine "judge" prose, and never hand a subagent work a regex (or you) already
 settles. That mis-routing is the only way this skill fails.

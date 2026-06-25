@@ -193,11 +193,18 @@ def parse_section_bodies(text: str) -> dict[str, str]:
     return bodies
 
 
-def render_article(layout: Layout, leaves: list[Leaf], article: str) -> dict:
+def render_article(layout: Layout, leaves: list[Leaf], article: str,
+                   ack_sections: set[str] | None = None) -> dict:
     """同步 docs/<article>/_latest.md 骨架；保留已寫散文；回報統計。
 
-    回傳 {sections, drafted, written_path}。
+    `ack_sections`（F5）：作者確認這些節已對齊上游（散文依設計合理不需改）→ 重蓋其
+    `anc` 指紋至現值、清掉 `stale-inherited`。守門：若該節其實 `stale-own`/`stale-upstream`
+    （own/deps 真的變了＝需重寫散文），ack **拒絕**並保住信號——ack 只清「祖先動了但本節散文
+    合理不變」這一類，不能拿來吞掉真正的 re-draft 需求。
+
+    回傳 {sections, drafted, written_path, acked, ack_refused}。
     """
+    ack_sections = ack_sections or set()
     by_section = {lf.section: lf for lf in leaves}   # 全專案，供祖先 brief 查找
     dindex = decision_index(leaves)                  # 全專案決策索引，供 deps 指紋
     art_leaves = [lf for lf in leaves if lf.article == article]
@@ -221,6 +228,9 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str) -> dict:
     existing_bodies: dict[str, str] = {}
     if latest.is_file():
         existing_bodies = parse_section_bodies(latest.read_text(encoding="utf-8"))
+    # 上次帳本：F2——指紋綁「散文上次基於什麼源料寫」。散文未重寫時沿用舊源指紋，
+    # 不被「現在源料」抹掉 stale-own/stale-upstream 信號（sidecar 優先、舊 frontmatter fallback）。
+    prior_ledger = read_ledger(layout, article)
 
     # 根節（section==article）＝文章標題＋全域導言；存在就由它當 `#`，
     # 否則退回印一行純標題（導言由人/文類決定，render 不強制生）。
@@ -230,6 +240,8 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str) -> dict:
     out: list[str] = [] if has_root else [f"# {_group_title(layout, article, article)}", ""]
     hashes: dict[str, str] = {}
     drafted = 0
+    acked: list[str] = []
+    ack_refused: list[str] = []
     emitted_groups: set[str] = set()
     for lf in art_leaves:
         depth = _depth(article, lf.section)
@@ -255,13 +267,44 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str) -> dict:
             out.append(body)
             out.append("")
             # 有散文才記指紋：own=自己源、anc=祖先 brief、deps=realizes 共享真相、
-            # prose=散文本身（diff 偵測手改）
-            rec = {
-                "own": lf.source_hash(),
-                "anc": ancestor_brief_fingerprint(lf.section, by_section),
-                "deps": deps_fingerprint(lf, dindex),
-                "prose": prose_hash(body),
-            }
+            # prose=散文本身（diff 偵測手改）。
+            # F2：指紋綁「散文上次基於什麼源料寫」。若散文自上次 render 未變（prose 指紋相同），
+            # 沿用上次帳本的 own/anc/deps——不用「現在源料」重算，否則一跑 render（哪怕只重生
+            # 骨架）就把 stale-own/stale-upstream 抹掉＝false-green。散文真的重寫（prose 變）或
+            # 首次撰寫時，才以現在源料重算（這次散文確實基於現在源料寫）。
+            prose_now = prose_hash(body)
+            prev = prior_ledger.get(lf.section)
+
+            def _current() -> dict:
+                return {
+                    "own": lf.source_hash(),
+                    "anc": ancestor_brief_fingerprint(lf.section, by_section),
+                    "deps": deps_fingerprint(lf, dindex),
+                    "prose": prose_now,
+                }
+
+            def _reuse_or_current() -> dict:
+                if isinstance(prev, dict) and prev.get("prose") == prose_now:
+                    return {"own": prev.get("own"), "anc": prev.get("anc"),
+                            "deps": prev.get("deps"), "prose": prose_now}
+                return _current()
+
+            if lf.section in ack_sections:
+                # F5：作者確認此節已對齊上游。只有當 own/deps 與帳本相符（即「僅 anc 變了」＝
+                # stale-inherited、非 stale-own/upstream）才准重蓋章；否則拒絕、保住 re-draft 信號。
+                cur = _current()
+                prev_own = prev.get("own") if isinstance(prev, dict) else None
+                prev_deps = prev.get("deps") if isinstance(prev, dict) else None
+                if prev is not None and prev_own == cur["own"] and prev_deps == cur["deps"]:
+                    rec = cur                      # 重蓋 anc 至現值 → 清 stale-inherited
+                    acked.append(lf.section)
+                else:
+                    rec = _reuse_or_current()      # own/deps 真的變了＝需重寫散文，ack 不吞
+                    ack_refused.append(lf.section)
+            else:
+                # F2：散文未重寫則沿用舊源指紋（保住 stale-own/upstream 信號）；
+                #     散文重寫或首次撰寫才以現在源料重算。
+                rec = _reuse_or_current()
             hashes[lf.section] = rec
             drafted += 1
         else:
@@ -288,6 +331,8 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str) -> dict:
         "sections": [lf.section for lf in art_leaves],
         "drafted": drafted,
         "written_path": str(latest),
+        "acked": acked,
+        "ack_refused": ack_refused,
     }
 
 

@@ -27,11 +27,47 @@ ASSET_DIR_NAME = "assets"
 IMAGE_EXTS = (".svg", ".png", ".jpg", ".jpeg", ".gif", ".pdf")
 
 
+class _DuplicateKeyError(yaml.YAMLError):
+    """同一 mapping 內出現重複 key（PyYAML 預設會靜默只留最後一個、吞掉前面）。"""
+
+
+class _DupCheckLoader(yaml.SafeLoader):
+    """SafeLoader 子類：偵測同層重複 mapping key 並 fail-loud。
+
+    PyYAML 預設對 `{a: 1, a: 2}` 靜默只留 `a: 2`、丟掉前者——讓重複 `statement:`/`id:`
+    這類決策 key 默默汙染記錄而 check 仍綠（F3）。這裡 override mapping 建構，遇重複 key
+    raise `_DuplicateKeyError`（帶 key 名與行號）。合法 merge key `<<` 由 PyYAML 在
+    flatten_mapping 階段先消化、不會走到這裡，故不誤判。
+    """
+
+    def construct_mapping(self, node, deep=False):  # noqa: D102 (見類別 docstring)
+        self.flatten_mapping(node)
+        seen: set = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            try:
+                hashable = key in seen
+            except TypeError:
+                hashable = False   # unhashable key（罕見）→ 交給父類常規錯誤路徑
+            if hashable:
+                line = key_node.start_mark.line + 1
+                raise _DuplicateKeyError(
+                    f"duplicate mapping key {key!r} (line {line})"
+                )
+            try:
+                seen.add(key)
+            except TypeError:
+                pass
+        return super().construct_mapping(node, deep=deep)
+
+
 def _load_yaml(path: Path) -> object:
     if not path.is_file():
         return None
     try:
-        return yaml.safe_load(path.read_text(encoding="utf-8"))
+        return yaml.load(path.read_text(encoding="utf-8"), Loader=_DupCheckLoader)
+    except _DuplicateKeyError as exc:
+        raise ModelError(f"YAML duplicate key: {path}: {exc}") from exc
     except yaml.YAMLError as exc:
         position = ""
         mark = getattr(exc, "problem_mark", None)

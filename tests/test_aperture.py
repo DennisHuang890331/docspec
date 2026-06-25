@@ -350,3 +350,58 @@ def test_image_change_marks_section_stale(make_project, write_leaf):
     asset.write_bytes(b"\x89PNG\r\n\x1a\nBBB")   # 改圖
     after = {lf.section: lf.source_hash() for lf in _lp(layout)}["a/x"]
     assert before != after
+
+
+# ── revision-coherence-probes：factcheck 的語義一致性探針投影 ──
+
+def test_factcheck_coherence_contract_lists_pairs(make_project, write_leaf):
+    """factcheck 投影 coherence_contract，列出 title/framing/own_brief/decisions 該核對的對。"""
+    home = make_project()
+    write_leaf(home, "doc/sec", concept={"id": "p1", "title": "Sec", "order": 1,
+                                         "concept": "父框架", "brief": {"audience": "專家"}})
+    write_leaf(home, "doc/sec/a", concept={
+        "id": "c1", "title": "A 標題", "order": 1, "concept": "A 的框架一句話",
+        "brief": {"audience": "新手", "depth": "概覽"}},
+        decisions=[{"id": "d1", "kind": "normative", "status": "accepted",
+                    "statement": "規則", "rationale": "因為舊框架"}])
+    proj = _project(home, "factcheck", "doc/sec/a")
+    coh = proj.coherence_contract
+    assert coh is not None
+    assert coh["title"] == "A 標題"
+    assert coh["framing"] == "A 的框架一句話"
+    # own_brief 在（因為有祖先可對照）
+    assert coh["own_brief"]["audience"] == "新手" and coh["own_brief"]["depth"] == "概覽"
+    # decisions 列 statement + rationale（rationale 常承載舊框架）
+    assert coh["decisions"][0]["id"] == "d1"
+    assert coh["decisions"][0]["rationale"] == "因為舊框架"
+
+
+def test_coherence_figure_pair_only_when_drawio_present(make_project, write_leaf):
+    """節有 .drawio 圖資產 → 列 figure 對；無 → 省略。"""
+    home = make_project()
+    write_leaf(home, "g/withfig", concept={"id": "c1", "title": "T", "order": 1, "concept": "f"})
+    write_leaf(home, "g/nofig", concept={"id": "c2", "title": "T2", "order": 2, "concept": "f2"})
+    adir = home / "corpus" / "g" / "withfig" / "assets"
+    adir.mkdir(parents=True, exist_ok=True)
+    (adir / "arch.drawio").write_text("<mxfile/>", encoding="utf-8")
+    assert _project(home, "factcheck", "g/withfig").coherence_contract.get("figures") == ["assets/arch.drawio"]
+    assert "figures" not in (_project(home, "factcheck", "g/nofig").coherence_contract or {})
+
+
+def test_coherence_contract_factcheck_only(make_project, write_leaf):
+    """coherence_contract 只投 factcheck（draft/edit 不給）。"""
+    home = make_project()
+    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "f",
+                                     "brief": {"audience": "a"}})
+    assert _project(home, "draft", "g/x").coherence_contract is None
+    assert _project(home, "factcheck", "g/x").coherence_contract is not None
+
+
+def test_coherence_own_brief_omitted_without_ancestor(make_project, write_leaf):
+    """無祖先（root 級單節）→ own_brief 對省略（沒得對照），但 title/framing 仍在。"""
+    home = make_project()
+    write_leaf(home, "solo", concept={"id": "c1", "title": "T", "order": 1, "concept": "f",
+                                      "brief": {"audience": "a", "depth": "d"}})
+    coh = _project(home, "factcheck", "solo").coherence_contract
+    assert coh["title"] == "T" and coh["framing"] == "f"
+    assert "own_brief" not in coh   # 無祖先 brief 可對照

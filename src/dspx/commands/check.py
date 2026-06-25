@@ -30,6 +30,7 @@ def run(argv: list[str]) -> int:
         print(json.dumps({
             "ok": result.ok,
             "errors": result.errors,
+            "warnings": result.warnings,
             "index": {
                 "ids": {k: {"section": v.section, "kind": v.kind, "status": v.status}
                         for k, v in result.index.ids.items()},
@@ -38,13 +39,21 @@ def run(argv: list[str]) -> int:
         }, ensure_ascii=False, indent=2))
         return 0 if result.ok else 1
 
+    def _print_warnings() -> None:
+        if result.warnings:
+            print(f"warnings ({len(result.warnings)}, non-blocking):")
+            for w in result.warnings:
+                print(f"  ⚠ {w}")
+
     if result.ok:
         print(f"check passed: {len(result.index.sections)} leaf sections, {len(result.index.ids)} ids.")
         for the_id, rec in sorted(result.index.ids.items()):
             print(f"  {the_id:<24} {rec.kind:<9} {rec.section}")
+        _print_warnings()
         return 0
 
     print(f"check failed ({len(result.errors)} issue(s)):")
     for err in result.errors:
         print(f"  ✗ {err}")
+    _print_warnings()
     return 1

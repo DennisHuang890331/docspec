@@ -11,7 +11,7 @@ import yaml
 from dspx.audit import AuditError, AuditStore
 from dspx.glossary import load_glossary
 from dspx.layout import Layout
-from dspx.model import ModelError, keyed_list
+from dspx.model import ModelError, _load_yaml, keyed_list
 from dspx.roadmap import _load_entries
 
 
@@ -61,6 +61,41 @@ def test_loaders_legal_empty_or_correct(tmp_path, make_project):
     p = tmp_path / "audit.yaml"
     p.write_text(yaml.safe_dump({"findings": [{"id": "f1"}]}), encoding="utf-8")
     assert len(AuditStore.load(p).findings) == 1
+
+
+# ── F3：corpus YAML 重複 mapping key fail-loud ──────────────────────
+
+def test_load_yaml_duplicate_key_raises(tmp_path):
+    p = tmp_path / "decisions.yaml"
+    p.write_text("id: x\nstatement: first\nstatement: second\n", encoding="utf-8")
+    with pytest.raises(ModelError) as exc:
+        _load_yaml(p)
+    msg = str(exc.value)
+    assert "duplicate" in msg and "statement" in msg   # key 名
+    assert "line 3" in msg                              # 行號定位
+
+
+def test_load_yaml_duplicate_key_nested(tmp_path):
+    # 巢狀 mapping 內的重複 key 也要抓（不只頂層）
+    p = tmp_path / "x.yaml"
+    p.write_text("brief:\n  depth: a\n  depth: b\n", encoding="utf-8")
+    with pytest.raises(ModelError):
+        _load_yaml(p)
+
+
+def test_load_yaml_merge_key_not_flagged(tmp_path):
+    # 合法 YAML merge key `<<` 不該被當重複 key 誤報
+    p = tmp_path / "x.yaml"
+    p.write_text(
+        "defaults: &d\n  a: 1\nitem:\n  <<: *d\n  b: 2\n", encoding="utf-8")
+    data = _load_yaml(p)
+    assert data["item"] == {"a": 1, "b": 2}
+
+
+def test_load_yaml_clean_file_unchanged(tmp_path):
+    p = tmp_path / "x.yaml"
+    p.write_text("id: x\nstatement: only\nkind: normative\n", encoding="utf-8")
+    assert _load_yaml(p) == {"id": "x", "statement": "only", "kind": "normative"}
 
 
 # ── read_ledger 壞檔可見降級（非靜默） ──────────────────────────────

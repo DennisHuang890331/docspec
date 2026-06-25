@@ -101,11 +101,13 @@ You FLAG and classify; you NEVER edit the prose. The FIX loops back to `develop`
 - Hunt gaps (a missing sibling the set implies) and overlaps (two siblings that both own the same concern)
 - Check that each `brief` actually scopes a distinct slice
 - **Honor the coverage contract** — your aperture foregrounds each section's `must_cover` items and its declared `brief.layout`/`kind`. Rule each `must_cover` item **entailed / unsupported** by the rendered prose (a listed item the prose never delivers is a located finding), and flag a section whose rendered form fights its declared layout (e.g. a decision mandates a figure but the section ships only prose, or `layout: diagram` with no figure).
+- **Honor the coherence contract — the semantic counterpart to the staleness ledger.** Your aperture also foregrounds a COHERENCE CONTRACT: the pairs that MUST stay consistent — `concept.title` / concept framing ↔ the prose, this section's own `brief` (audience/depth) ↔ the ancestor briefs above, each `decision.statement`/`rationale` framing ↔ the prose, and a `.drawio` figure's framing ↔ the prose. Rule each pair **coherent or contradictory**. This is load-bearing because the engine's staleness ledger CANNOT see these: it only fingerprints content that *changed*, so a field that *should* have changed to stay consistent but didn't (a title left in the old framing after a re-pivot; a child brief still saying "for newcomers" under a parent re-aimed at specialists; a `decision.rationale` or a figure still drawn in a superseded framework) produces no signal and the section reports synced. Each contradiction is a located, non-blocking `docspec audit raise` finding (target the section; the fix is `develop` updating the metadata/asset). You flag, you never fix, and this is never a gate.
 
 **Hunt contradictions**
 - Cross-read sections for claims that cannot both be true
 - Compare prose against the decisions in the outline it supposedly realizes
 - Surface terms used two different ways
+- **Title-vs-prose drift on a deeply revised section** — when a section was re-pivoted or its thesis re-framed, check that `concept.title` and the document's root/overview framing still match the new argument. A title left unchanged while the prose moved is a real contradiction that NO engine gate catches (an unchanged title produces no staleness signal), so it is squarely yours: a heading or subtitle still naming the OLD framework while the body argues the new one is a located finding (target the section; the fix is `develop` updating `concept.title`).
 
 ---
 

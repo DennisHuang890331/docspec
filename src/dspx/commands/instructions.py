@@ -105,6 +105,7 @@ def run(argv: list[str]) -> int:
             "imageAssets": proj.image_assets,
             "documentMap": proj.document_map,
             "coverageContract": proj.coverage_contract,
+            "coherenceContract": proj.coherence_contract,
         }, ensure_ascii=False, indent=2))
         return 0
 
@@ -193,6 +194,24 @@ def run(argv: list[str]) -> int:
             print(f"  form: layout={cc.get('layout') or '—'}  kind={cc.get('kind') or '—'}")
         for item in cc.get("must_cover", []):
             print(f"  must cover: {item}")
+        print()
+
+    if proj.coherence_contract:
+        ch = proj.coherence_contract
+        print("── Coherence contract (pairs that MUST stay semantically consistent — rule each coherent/contradictory vs the rendered prose, and own-brief vs the ancestor briefs above; the hash ledger CANNOT see a field that should have changed but didn't, so raise a non-blocking `audit` finding on any contradiction) ──")
+        if ch.get("title"):
+            print(f"  title ↔ prose: \"{ch['title']}\"")
+        if ch.get("framing"):
+            print(f"  concept framing ↔ prose: {ch['framing']}")
+        if ch.get("own_brief"):
+            bd = ch["own_brief"]
+            print(f"  this section's brief ↔ ancestor briefs (above): "
+                  f"audience={bd.get('audience') or '—'} depth={bd.get('depth') or '—'}")
+        for d in ch.get("decisions", []):
+            extra = f" — rationale: {d['rationale']}" if d.get("rationale") else ""
+            print(f"  decision framing ↔ prose: [{d.get('id')}] {d.get('statement') or ''}{extra}")
+        for fig in ch.get("figures", []):
+            print(f"  figure framing ↔ prose: {fig} (is the diagram still drawn in the current framing?)")
         print()
 
     if proj.ancestor_normative:

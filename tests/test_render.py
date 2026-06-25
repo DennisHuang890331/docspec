@@ -325,3 +325,114 @@ def test_publish_aborts_when_nothing_drafted(make_project, write_leaf, monkeypat
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])  # 只有骨架、無散文
     assert publish_cmd.run(["g"]) == 1
+
+
+# ── F2：散文未重寫時 source 指紋不前進（保住 stale 信號） ────────────
+
+def _sync_of(home, article, section):
+    """重算某節的 sync 狀態（同 status._leaf_row 邏輯）。"""
+    from dspx.commands.status import _docs_hashes, _leaf_row
+    from dspx.layout import Layout
+    from dspx.model import decision_index, load_project
+    from dspx.schema import load_schema
+    layout = Layout(home)
+    leaves = load_project(layout)
+    by = {lf.section: lf for lf in leaves}
+    return _leaf_row(layout, by[section], load_schema(), True,
+                     _docs_hashes(layout, article), by, decision_index(leaves))["sync"]
+
+
+def test_f2_source_change_without_prose_rewrite_keeps_stale_signal(
+        make_project, write_leaf, monkeypatch):
+    """F2 核心：源改了但散文未重寫，再 render（哪怕只重生骨架）也 MUST 保住 stale-own
+    ——不被『現在源料』抹掉信號（修 false-green）。"""
+    from dspx.layout import Layout
+    from dspx.render import read_ledger
+    home = _setup(make_project, write_leaf)
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])
+    latest = _latest(home)
+    # draft：intro 寫散文 → render 定基準
+    latest.write_text(
+        latest.read_text("utf-8").replace("## 概覽\n", "## 概覽\n\n限流保護後端。\n"), "utf-8")
+    render_cmd.run(["g"])
+    assert _sync_of(home, "g", "g/intro") == "synced"
+    own_before = read_ledger(Layout(home), "g")["g/intro"]["own"]
+
+    # 改 intro 自己的源（concept），但散文一個字沒動
+    cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
+    cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（修訂）"), "utf-8")
+    assert _sync_of(home, "g", "g/intro") == "stale-own"     # 源改 → 該重寫
+
+    # 關鍵：再 render（散文仍未重寫）→ 信號 MUST 存活、own 指紋 MUST 凍住
+    render_cmd.run(["g"])
+    assert _sync_of(home, "g", "g/intro") == "stale-own"     # 不被抹成 synced（false-green）
+    assert read_ledger(Layout(home), "g")["g/intro"]["own"] == own_before  # 指紋未前進
+
+
+def test_f2_prose_rewrite_advances_fingerprints(make_project, write_leaf, monkeypatch):
+    """F2 對偶：散文真的重寫（基於新源）→ 指紋前進、回 synced。"""
+    from dspx.layout import Layout
+    from dspx.render import read_ledger
+    home = _setup(make_project, write_leaf)
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])
+    latest = _latest(home)
+    latest.write_text(
+        latest.read_text("utf-8").replace("## 概覽\n", "## 概覽\n\n舊散文。\n"), "utf-8")
+    render_cmd.run(["g"])
+    cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
+    cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（修訂）"), "utf-8")
+    assert _sync_of(home, "g", "g/intro") == "stale-own"
+    own_stale = read_ledger(Layout(home), "g")["g/intro"]["own"]
+
+    # 重寫散文 → render → 指紋前進、synced
+    latest.write_text(latest.read_text("utf-8").replace("舊散文。", "已對齊新源的散文。"), "utf-8")
+    render_cmd.run(["g"])
+    assert _sync_of(home, "g", "g/intro") == "synced"
+    assert read_ledger(Layout(home), "g")["g/intro"]["own"] != own_stale  # 前進
+
+
+# ── F5：--ack 給 stale-inherited 一個 acknowledge/重蓋章路徑（治 F2 副作用） ──
+
+def test_f5_ack_clears_stale_inherited(make_project, write_leaf, monkeypatch):
+    """祖先 brief 改了、但本節散文依設計合理不需改 → 普通 render 因 F2 卡 stale-inherited；
+    --ack 重蓋 anc 章 → 回 synced（不必捏造散文）。"""
+    home = make_project()
+    write_leaf(home, "doc/sec", concept={"id": "p1", "title": "Sec", "order": 1,
+                                         "concept": "父概念", "brief": {"受眾": "X"}})
+    write_leaf(home, "doc/sec/a", concept={"id": "c1", "title": "A", "order": 1})
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["doc"])
+    latest = home.parent / "docs" / "doc" / "_latest.md"
+    latest.write_text(latest.read_text("utf-8").replace("## A\n", "## A\n\n子散文。\n"), "utf-8")
+    render_cmd.run(["doc"])
+    assert _sync_of(home, "doc", "doc/sec/a") == "synced"
+
+    # 改父 brief → 子節 stale-inherited
+    sec = home / "corpus" / "doc" / "sec" / "concept.yaml"
+    sec.write_text(sec.read_text("utf-8").replace("受眾: X", "受眾: Y"), "utf-8")
+    assert _sync_of(home, "doc", "doc/sec/a") == "stale-inherited"
+    # 普通 render（不重寫散文）→ F2 沿用舊 anc → 仍卡 stale-inherited
+    render_cmd.run(["doc"])
+    assert _sync_of(home, "doc", "doc/sec/a") == "stale-inherited"
+    # --ack → 重蓋 anc → synced
+    assert render_cmd.run(["doc", "--ack", "doc/sec/a"]) == 0
+    assert _sync_of(home, "doc", "doc/sec/a") == "synced"
+
+
+def test_f5_ack_refused_on_stale_own(make_project, write_leaf, monkeypatch, capsys):
+    """守門：節其實 stale-own（自己源變了＝需重寫散文）→ --ack 拒絕、保住信號、警告。"""
+    home = _setup(make_project, write_leaf)
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])
+    latest = _latest(home)
+    latest.write_text(latest.read_text("utf-8").replace("## 概覽\n", "## 概覽\n\n內文。\n"), "utf-8")
+    render_cmd.run(["g"])
+    cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
+    cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（改）"), "utf-8")
+    assert _sync_of(home, "g", "g/intro") == "stale-own"
+    capsys.readouterr()
+    render_cmd.run(["g", "--ack", "g/intro"])          # 嘗試 ack
+    assert _sync_of(home, "g", "g/intro") == "stale-own"   # 仍 stale-own（沒被吞）
+    assert "refused" in capsys.readouterr().err

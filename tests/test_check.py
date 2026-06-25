@@ -414,3 +414,84 @@ def test_non_diagram_without_image_not_flagged(make_project, write_leaf):
     _write_latest(home, "a", "a/x", "X", "Just prose, no figure — and that's fine.")
     res = _check_with_layout(home)
     assert res.ok, res.errors
+
+
+# ── F1：跨節決策依賴漏接結構邊。sources 填內部 id=ERROR、散文順帶提及=WARN ──────
+
+def test_f1_sources_internal_id_is_error(make_project, write_leaf):
+    """sources 契約只放外部出處；出現內部 decision id 卻無結構邊 → ERROR（無聲漂移陷阱、fail-loud）。"""
+    home = make_project()
+    write_leaf(home, "a/owner", concept={"id": "co", "title": "Owner", "order": 1},
+               decisions=[{"id": "dec-split-plane", "kind": "normative",
+                           "status": "accepted", "statement": "Split planes."}])
+    write_leaf(home, "a/user", concept={"id": "cu", "title": "User", "order": 2,
+                                        "sources": ["Builds on dec-split-plane."]})
+    res = _check(home)
+    assert not res.ok                                        # ERROR 擋下
+    assert any("dec-split-plane" in e and "a/user" in e and "sources" in e for e in res.errors)
+
+
+def test_f1_prose_ref_without_edge_warns(make_project, write_leaf):
+    """A 的散文順帶明引 B 的決策 id，卻無結構邊 → 非阻塞 WARN（check 仍過）。"""
+    home = make_project()
+    write_leaf(home, "a/owner", concept={"id": "co", "title": "Owner", "order": 1},
+               decisions=[{"id": "dec-shard-by-job", "kind": "normative",
+                           "status": "accepted", "statement": "Shard by job id."}])
+    write_leaf(home, "a/user", concept={"id": "cu", "title": "User", "order": 2,
+                                        "concept": "We rely on dec-shard-by-job downstream."})
+    res = _check(home)
+    assert res.ok                                            # 非阻塞
+    assert any("dec-shard-by-job" in w and "a/user" in w for w in res.warnings)
+
+
+def test_f1_realizes_edge_suppresses_both(make_project, write_leaf):
+    """已用 realizes 指向 → 依賴可見、staleness 生效 → 即使 id 也在 sources/散文，皆不 ERROR/WARN。"""
+    home = make_project()
+    write_leaf(home, "a/owner", concept={"id": "co", "title": "Owner", "order": 1},
+               decisions=[{"id": "dec-shard-by-job", "kind": "normative",
+                           "status": "accepted", "statement": "Shard by job id."}])
+    write_leaf(home, "a/user", concept={"id": "cu", "title": "User", "order": 2,
+                                        "realizes": ["dec-shard-by-job"],
+                                        "sources": ["See dec-shard-by-job."],
+                                        "concept": "We rely on dec-shard-by-job downstream."})
+    res = _check(home)
+    assert res.ok
+    assert not any("dec-shard-by-job" in x for x in (*res.errors, *res.warnings))
+
+
+def test_f1_governed_by_edge_suppresses(make_project, write_leaf):
+    """引用的決策由 governed-by 的父節擁有 → 治理鏈已覆蓋 → 不報。"""
+    home = make_project()
+    write_leaf(home, "a/parent", concept={"id": "cp", "title": "Parent", "order": 1},
+               decisions=[{"id": "dec-policy", "kind": "normative",
+                           "status": "accepted", "statement": "Policy."}])
+    write_leaf(home, "b/child", concept={"id": "cc", "title": "Child", "order": 1,
+                                         "governed-by": ["cp"],
+                                         "sources": ["Per dec-policy."]})
+    res = _check(home)
+    assert res.ok and not any("dec-policy" in x for x in (*res.errors, *res.warnings))
+
+
+def test_f1_pure_semantic_prose_not_flagged(make_project, write_leaf):
+    """純語義散文（無真實 id）→ 不誤報、不 ERROR（語義切片不由引擎 gate）。"""
+    home = make_project()
+    write_leaf(home, "a/owner", concept={"id": "co", "title": "Owner", "order": 1},
+               decisions=[{"id": "dec-shard-by-job", "kind": "normative",
+                           "status": "accepted", "statement": "Shard by job id."}])
+    write_leaf(home, "a/user", concept={"id": "cu", "title": "User", "order": 2,
+               "concept": "Consolidates the decisions recorded in the root and subsystem sections."})
+    res = _check(home)
+    assert res.ok
+    assert res.warnings == []                                # 無真實 id → 不攔
+
+
+def test_f1_own_decision_ref_not_flagged(make_project, write_leaf):
+    """節引用自己擁有的決策 id → 非跨節 → 不報。"""
+    home = make_project()
+    write_leaf(home, "a/owner", concept={"id": "co", "title": "Owner", "order": 1,
+                                         "concept": "Per dec-self we shard.",
+                                         "sources": ["dec-self rationale."]},
+               decisions=[{"id": "dec-self", "kind": "normative",
+                           "status": "accepted", "statement": "Shard."}])
+    res = _check(home)
+    assert res.ok and res.warnings == []

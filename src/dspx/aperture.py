@@ -54,6 +54,7 @@ class Projection:
     image_assets: list = field(default_factory=list)  # 本節可用圖片（draft 放圖只能用這些；ref 形如 assets/<file>）
     document_map: list = field(default_factory=list)  # 本文件章節骨架（draft 看整篇架構：每節 section/title/order/role；只結構、不含 sibling 散文）
     coverage_contract: dict | None = None             # factcheck 完整性契約前景化：{must_cover:[...], layout, kind}（W3；餵非阻塞 audit）
+    coherence_contract: dict | None = None            # factcheck 語義一致性探針：列出該核對「該一致的對」（title/framing/own-brief/decision/figure ↔ prose/祖先 brief）；純 projection、餵非阻塞 audit、零 gate（revision-coherence-probes）
 
 # 注入寫作守則的 skill（連貫靠它替代跨節脈絡）
 _GUIDE_SKILLS = ("draft", "edit")
@@ -243,6 +244,33 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
             cc["kind"] = brief.get("kind")
         if cc:
             proj.coverage_contract = cc
+
+        # ── 語義一致性探針（revision-coherence-probes）：確定性列出「該保持一致的對」，
+        #    factcheck 逐對讀 prose（已在 reads[docs]）/祖先 brief（已在 parent_briefs）判矛盾、
+        #    非阻塞 audit raise。引擎只列、不判（語意判斷違鐵律1）。缺側者省略、不留空鷹架。
+        coh: dict = {}
+        title = leaf.concept.get("title")
+        if isinstance(title, str) and title.strip():
+            coh["title"] = title.strip()                       # ↔ 本節 prose
+        framing = leaf.concept.get("concept")
+        if isinstance(framing, str) and framing.strip():
+            coh["framing"] = framing.strip()                   # concept 一句話框架 ↔ prose
+        own_bd = {k: brief[k] for k in ("audience", "depth")
+                  if isinstance(brief.get(k), str) and brief.get(k).strip()}
+        if own_bd and proj.parent_briefs:                      # ↔ 祖先 brief（已在 parent_briefs）
+            coh["own_brief"] = own_bd
+        decs = [{"id": e.get("id"), "statement": e.get("statement"),
+                 "rationale": e.get("rationale")}
+                for e in leaf.decisions
+                if e.get("statement") or e.get("rationale")]
+        if decs:
+            coh["decisions"] = decs                            # statement/rationale 框架 ↔ prose
+        drawios = sorted(p.name for p in (leaf.dir / ASSET_DIR_NAME).glob("*.drawio")) \
+            if (leaf.dir / ASSET_DIR_NAME).is_dir() else []
+        if drawios:
+            coh["figures"] = [f"{ASSET_DIR_NAME}/{n}" for n in drawios]  # 圖框架 ↔ prose
+        if coh:
+            proj.coherence_contract = coh
 
     # ── 森林地圖（derive；只投 develop——確認本文件在森林位置/被誰治理/跟誰平行）──
     if skill == "develop":

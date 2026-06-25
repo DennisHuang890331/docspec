@@ -121,6 +121,27 @@ not from scratch.
   section must honour that ruling, give it a name for the **mechanism/responsibility** (e.g. "the
   safety board's veto") — `draft` invokes it by that name, never by a section number/id (it is blind
   to siblings); the `realizes` id is the machine binding, the mechanism name is the prose handle.
+  **The structured edge is load-bearing, not decorative** — express a cross-section decision
+  dependency ONLY through `realizes:` (or `governed-by:` for inherited governance), NEVER by leaving
+  it in prose or in the free-text `sources:` list. Only structured edges enter the staleness
+  fingerprints: a dependency that lives only in prose is invisible to `status`, so when the upstream
+  decision is later superseded, the consuming section is never restaled — its prose keeps asserting a
+  dead decision and passes every gate (a false-green). `sources:` is for **external provenance only**
+  (a standard, a paper, a dataset, "Author's design") — NEVER an internal cross-section dependency;
+  putting another section's decision id in `sources:` is a hard `check` ERROR (it is the silent-drift
+  trap large documents die on), and a prose mention of an internal id without the edge is a non-blocking
+  WARN — but author the edge here, don't wait for either.
+- **A pivot or supersede must sweep the metadata/asset layers, not just the prose.** When you shift an
+  ancestor `brief` (audience/depth/framing) or supersede a decision, "prose-clean" is NOT
+  "change-complete": the framework also lives in places the content-hash staleness ledger CANNOT see —
+  descendant sections' own `brief` fields, each section's `concept` framing text and `concept.title`,
+  `.drawio` figure assets, and `roadmap` entries. A child brief left saying "for newcomers" under a
+  parent re-aimed at specialists, a `decision.rationale` or a figure still drawn in the discarded
+  framing — none of these restale (their bytes didn't change), so they ship a contradiction silently.
+  You own this layer (`draft` is blind to it, `edit` touches only the deliverable prose), so the sweep
+  is yours: after a pivot/supersede, walk the descendants' briefs, framing fields, figures, and roadmap
+  and bring them onto the new framing. (`factcheck`'s coherence pass backstops you — but fix it at the
+  source, don't wait for the finding.)
 - **Own the document's shared style** — setting the document-wide tone and conventions is a develop
   decision, like the root brief; `edit`/`factcheck` only flag a new convention, you lift it in.
   **Fill the writing-guide's `Project conventions` zone — do NOT leave it as the empty template.**
