@@ -103,6 +103,39 @@ URL the user can open to view/export, or hand back the `.drawio` XML alone, and 
 agent rendering needs `docspec setup --with-drawio` (or a system draw.io install).
 
 ---
+## Layout & routing — the part that makes or breaks readability
+A structurally-correct but tangled diagram is a FAILED diagram. Two distinct jobs:
+
+**Placing nodes (when you control the layout).** Lay the graph out so edges mostly flow one way:
+- **Layer by data-flow direction.** Producers on one side, consumers on the other; commands flow one
+  way across the page, status/returns the other. The reader should SEE the flow, not hunt it.
+- **Align high-coupling pairs.** The two nodes that exchange the most edges go adjacent, on the same
+  row/column — their trunk becomes one short straight line, not a diagonal across the canvas.
+- **Render a chain as a straight line.** An A→B→C pipeline = one column (TB) or one row (LR); don't zigzag.
+- **Give a long return edge its own channel.** A feedback/status edge that travels far runs in a
+  dedicated horizontal/vertical lane *below or beside* the boxes — never back through the node cluster.
+- Past ~7–10 nodes the layout cannot stay clean (see the stance) — split into A/B/C with a shared seam node.
+
+**Re-routing on a FROZEN layout (the user says "keep my layout, just clean the lines").** You may move
+*edges* but NOT *boxes*:
+- **Parallel channels:** when several edges share a corridor, give each its own offset lane
+  (x = 400 / 460 / 520 …) so they run parallel instead of weaving through one another.
+- **Spread a node's connectors** across its perimeter with `exitX/exitY`/`entryX/entryY` — never let 3
+  edges enter one point and knot.
+- Separate the **eliminable** crossing (re-routable) from the **position-forced** one (the fixed boxes
+  make it unavoidable). Re-route the first; **jump** the second (`jumpStyle=arc`) and stop — chasing
+  zero crossings on a frozen layout is wasted effort, the boxes would have to move.
+- **Judge by the rendered image, NOT `validate.py`'s crossing count.** A frozen-layout re-route can
+  leave the count unchanged while turning a knot into clean parallel lanes — that IS the win. Use vision.
+
+**Label placement (raster text can't be nudged after export).** An edge label's position is
+`mxGeometry relative="1"` with **`x ∈ [-1, 1]`** = fraction *along* the edge (−1 = source end, 0 =
+middle, 1 = target end), plus an `<mxPoint as="offset">` = pixel nudge *perpendicular* to the edge.
+These are NOT absolute coordinates — writing a canvas coordinate there throws the label off-screen.
+When two edges share a corridor, push their labels apart with the `offset` so they don't stack. Verify
+every label in the render.
+
+---
 ## draw.io XML skeleton
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -179,10 +212,12 @@ Node, not as the app. Clear the inherited `ELECTRON_RUN_AS_NODE` env var before 
 (`env -u ELECTRON_RUN_AS_NODE drawio …` on POSIX; `$env:ELECTRON_RUN_AS_NODE=$null` then call it on
 Windows PowerShell) and retry.
 
-**Guardrail — wrong drawio version:** the CLI export flags (`-x -f`) need a recent draw.io. If
-`drawio --version` reports an old release (e.g. v24) and rejects `-x -f`, you picked up a stale
-system install. Prefer the docspec-managed binary from `docspec setup --with-drawio` (it pins and
-version-asserts the release); point `DOCSPEC_DRAWIO` at it if needed.
+**Guardrail — `bad option: -x` even after PATH/binary looks right:** the cause is almost always the
+`ELECTRON_RUN_AS_NODE` env var above, NOT the draw.io version — clear it FIRST and retry. The version
+is rarely the culprit: a managed draw.io reporting v24.x still accepts `-x -f` fine once the env var is
+cleared. Only after clearing `ELECTRON_RUN_AS_NODE` and STILL getting `bad option` should you suspect a
+genuinely stale/ancient system install — then prefer the docspec-managed binary from
+`docspec setup --with-drawio` (it pins the release) and point `DOCSPEC_DRAWIO` at it.
 
 ---
 ## Guardrails

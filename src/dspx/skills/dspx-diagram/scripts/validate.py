@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
 # Vendored from the Agents365 draw.io skill (MIT License, Copyright (c) 2026
-# Agents365-ai) — see scripts/NOTICE.md. Unmodified except this header.
+# Agents365-ai) — see scripts/NOTICE.md. MODIFIED by docspec (MIT permits it):
+#   - flag floating edge endpoints (edge="1" missing source/target id);
+#   - treat a vertex that geometrically encloses other leaves as a visual
+#     container, so its children no longer false-trigger overlap / routes-through;
+#   - suppress an edge-crossing warning when a crossing edge carries jumpStyle
+#     (the hop is intentional and renders legibly).
 """Deterministic structural linter for .drawio files.
 
 Catches the class of mistakes a vision self-check is slow and unreliable at:
-dangling edge endpoints, duplicate or reserved ids, broken parent references,
-and (as warnings) off-grid geometry, overlapping sibling nodes, and edge
-routing defects. Runs without launching draw.io, so it is a fast pre-check
-before the visual review step.
+dangling edge endpoints, FLOATING edge endpoints (an edge anchored to a fixed
+point instead of a node id — fragile: it dangles when a node moves), duplicate
+or reserved ids, broken parent references, and (as warnings) off-grid geometry,
+overlapping sibling nodes, and edge routing defects. Runs without launching
+draw.io, so it is a fast pre-check before the visual review step.
 
   python3 validate.py diagram.drawio
 
@@ -211,32 +217,68 @@ def routes_cross(pa, pb):
     return False
 
 
+def _encloses(outer, inner, eps=1.0):
+    """True if rect ``outer`` fully contains rect ``inner``."""
+    ox, oy, ow, oh = outer
+    ix, iy, iw, ih = inner
+    return (ox - eps <= ix and oy - eps <= iy
+            and ix + iw <= ox + ow + eps and iy + ih <= oy + oh + eps)
+
+
+def visual_containers(boxes):
+    """Ids of leaf vertices that geometrically enclose another leaf vertex.
+
+    draw.io has two container models: a *structural* container (children carry
+    ``parent=<container id>``) and a *visual grouping box* (a plain vertex drawn
+    around sibling nodes that all keep ``parent="1"``). The structural kind is
+    already excluded from leaf checks via the ``parents`` set, but the visual
+    kind is a sibling leaf — so without this, every edge crossing the group box
+    and every child sitting inside it false-triggers a warning. A leaf whose
+    rectangle encloses another leaf is treated as a visual container and dropped
+    from the overlap / routes-through leaf set.
+    """
+    cont = set()
+    for ida, ra in boxes:
+        for idb, rb in boxes:
+            if ida != idb and _encloses(ra, rb):
+                cont.add(ida)
+                break
+    return cont
+
+
 def geometry_warnings(cells, ids, parents):
     """Edge-through-vertex and edge-crossing warnings for waypointed edges."""
     warns = []
-    routed = []          # (edge_id, polyline, {source, target})
+    routed = []          # (edge_id, polyline, {source, target}, has_jump)
     for c in cells:
         if c.get("edge") == "1":
             pts = edge_route(c, ids)
             if pts:
                 routed.append((c.get("id"), pts,
-                               {c.get("source"), c.get("target")}))
+                               {c.get("source"), c.get("target")},
+                               "jumpStyle" in (c.get("style") or "")))
     # Edge routes through an unrelated leaf vertex (containers wrap children, so
-    # an edge legitimately traverses them — restrict to leaves, as overlap does).
+    # an edge legitimately traverses them — restrict to leaves, as overlap does,
+    # and drop visual grouping boxes that merely enclose siblings).
     leaves = [(c.get("id"), abs_rect(c, ids)) for c in cells
               if c.get("vertex") == "1" and c.get("id") not in parents
               and not is_edge_label(c)]
     leaves = [(vid, box) for vid, box in leaves if box]
-    for eid, pts, ends in routed:
+    containers = visual_containers(leaves)
+    leaves = [(vid, box) for vid, box in leaves if vid not in containers]
+    for eid, pts, ends, _ in routed:
         for vid, box in leaves:
             if vid not in ends and route_hits_rect(pts, box):
                 warns.append(f"edge {eid!r} routes through vertex {vid!r}")
-    # Edge-edge crossings (both routes known).
+    # Edge-edge crossings (both routes known). A crossing where either edge
+    # carries jumpStyle renders as a visible hop (intentional) — don't flag it.
     for i in range(len(routed)):
         for j in range(i + 1, len(routed)):
-            (ia, pa, _), (ib, pb, _) = routed[i], routed[j]
+            (ia, pa, _, ja), (ib, pb, _, jb) = routed[i], routed[j]
+            if (ja or jb):
+                continue
             if routes_cross(pa, pb):
-                warns.append(f"edges {ia!r} and {ib!r} cross")
+                warns.append(f"edges {ia!r} and {ib!r} cross (add jumpStyle=arc to hop)")
     return warns
 
 
@@ -267,6 +309,13 @@ def check_page(diagram):
             ref = c.get(end)
             if ref and ref not in ids:
                 errors.append(f"edge {cid!r} {end} {ref!r} does not exist")
+            elif is_e and ref is None:
+                # Floating endpoint: anchored to a fixed mxPoint, not a node id.
+                # Valid draw.io, but fragile — it silently dangles when a node
+                # moves. The dangling-edge check above only catches a ref to a
+                # *missing* id; a *missing ref* slips through without this.
+                warns.append(f"edge {cid!r} has a floating {end} endpoint "
+                             f"(no {end} id; bind it to a node so it can't dangle)")
         if (is_v or is_e) and cid in RESERVED:
             errors.append(f"cell {cid!r} reuses reserved id 0/1")
         if is_v and not is_edge_label(c):
@@ -279,10 +328,14 @@ def check_page(diagram):
                     warns.append(f"vertex {cid!r} non-positive size {w:g}x{h:g}")
                 if x < 0 or y < 0:
                     warns.append(f"vertex {cid!r} negative position ({x:g},{y:g})")
-    # Sibling overlap: only leaf vertices (containers legitimately wrap children).
+    # Sibling overlap: only leaf vertices (containers legitimately wrap children
+    # — both the structural kind, via ``parents``, and a visual grouping box that
+    # merely encloses siblings, via ``visual_containers``).
     boxes = [(c.get("id"), c.get("parent"), rect(c)) for c in cells
              if c.get("vertex") == "1" and c.get("id") not in parents and rect(c)
              and not any(v != v for v in rect(c))]
+    vis = visual_containers([(bid, r) for bid, _, r in boxes])
+    boxes = [(bid, p, r) for bid, p, r in boxes if bid not in vis]
     for i in range(len(boxes)):
         for j in range(i + 1, len(boxes)):
             (ia, pa, ra), (ib, pb, rb) = boxes[i], boxes[j]

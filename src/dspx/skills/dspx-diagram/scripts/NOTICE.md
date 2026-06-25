@@ -1,10 +1,14 @@
 # Vendored scripts — attribution
 
-`validate.py` and `encode_drawio_url.py` are vendored, essentially unmodified
-(only an attribution header added), from the **Agents365 draw.io skill**:
+`validate.py` and `encode_drawio_url.py` are vendored from the **Agents365
+draw.io skill**. `encode_drawio_url.py` is unmodified (attribution header only);
+`validate.py` has been **MODIFIED by docspec** (the MIT license permits this) —
+it adds floating-edge-endpoint detection, treats geometric grouping boxes as
+visual containers (to silence container false-positives), and makes the
+edge-crossing warning jumpStyle-aware. See the modification note in its header.
 
 - Source: https://github.com/Agents365-ai/drawio-skill
-- License: MIT License — Copyright (c) 2026 Agents365-ai
+- License: MIT License — Copyright (c) 2026 Agents365-ai (preserved below)
 
 The full MIT license text follows. docspec itself is distributed under
 PolyForm Noncommercial 1.0.0; the MIT license of these vendored files is
