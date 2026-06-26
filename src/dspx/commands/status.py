@@ -165,4 +165,7 @@ def run(argv: list[str]) -> int:
         drift = " ✎hand-edited(docspec diff)" if r.get("drifted") else ""
         print(f"  {r['section']:<28} {r['state']:<16} {r['sync']:<16} [{flags}]{drift}")
     print("\n  flags: c=concept d=decisions m=material v=develop h=history")
+    print("  sync → who picks it up: stale-own / stale-upstream → draft (re-render the section) · "
+          "stale-inherited → edit (narrative-align, or render --ack if no change needed) · "
+          "unwritten → draft · ✎ drifted → edit (reconcile the hand-edit)")
     return 0

@@ -23,7 +23,8 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   export-safety（Ve）＝把「匯出時才炸的機械問題」前移成 lint 事前驗證：交付物潔淨＝
   export-clean by construction。只收**機械 drift**（死連結、非標準語法、非中立圖記法）。
   ★Ve3 註記（隨 typst-default-dual-track 轉向更新）：交付物的圖必須是 **backend-neutral 嵌入圖片**
-  （`dspx-diagram` 的委派 subagent 把 drawio 渲成 SVG、`![](assets/…)` 嵌入；兩條 export 軌都吃）。
+  （`dspx-diagram` 的委派 subagent 把 drawio 渲成高解析 PNG、`![](assets/…)` 嵌入；兩條 export 軌都吃；
+   用 PNG 不用 SVG——drawio 的 SVG 在 Typst 軌變黑塊）。
   兩類機械 drift 在此 WARN：(a) ```mermaid——受控 toolchain 不渲染、只變佔位框；(b) raw `{=latex}`/
   `{=tex}` 區塊（舊 TikZ 寫法）——LaTeX-only、預設 Typst 軌會被剝掉而消失。兩者都非 backend-neutral，
   與 Ve2 的 @import 同類，故 WARN 前移、導向改用 drawio 圖片。字體/留白仍＝export 設定、不進此處。
@@ -54,6 +55,17 @@ _PLACEHOLDER_RE = re.compile(
 )
 # V12 GFM 警示/暫停旗（剝程式碼後、逐行）：blockquote 開頭的 [!NOTE|TIP|IMPORTANT|WARNING|CAUTION]。
 _ALERT_RE = re.compile(r"^\s*>\s*\[!(?:NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]", re.IGNORECASE | re.MULTILINE)
+# V13 保留範例/佔位 token 外洩（WARN，非阻塞）：RFC 2606 保留範例網域（example.com/net/org/edu，
+# 含 user@example.* 信箱）、`lorem ipsum`、NANP 虛構電話 555-01xx。這些是「保留給範例、天生喊著我是假的」
+# 的標準 token——agent 不知道作者/聯絡資料時被教用它們當明顯佔位（develop/draft stance），出現在發行
+# 交付物＝多半是還沒填的佔位。封閉、機械可判、低誤報（不碰 John Doe 這種有真名歧義的）。WARN 非 ERROR：
+# 一份「介紹 RFC 2606」的文件可能合法提及 example.com，留給人判斷。
+_RESERVED_EXAMPLE_RE = re.compile(
+    r"\bexample\.(?:com|net|org|edu)\b"   # RFC 2606 §3 保留網域（user@example.com 亦含）
+    r"|\blorem ipsum\b"                   # 標準佔位文
+    r"|\b555-01\d\d\b",                   # NANP 虛構電話段（555-0100..0199）
+    re.IGNORECASE,
+)
 # V10 數字一致：number+unit token 與同行最近的 snake_case 指涉（如 e_stop / task_assign）。
 # 封閉單位集抑制誤報；snake_case（至少一個底線）才當 key，排除 timeout/status 等裸詞與 CJK 鄰詞。
 _NUM_UNIT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(ms|s|Hz|%)\b")
@@ -115,6 +127,11 @@ def _lint_docs(layout: Layout, articles: list[str], all_ids: set[str]) -> list[F
             findings.append(Finding("V12", ERROR, where,
                                     "leftover GFM alert/admonition (e.g. `> [!WARNING]`) -- "
                                     "draft emits these as a stop-and-flag marker; never ship one"))
+        for m in dict.fromkeys(_RESERVED_EXAMPLE_RE.findall(body)):
+            findings.append(Finding("V13", WARN, where,
+                                    f"reserved example/placeholder token shipped \"{m.strip()}\" -- "
+                                    "RFC 2606 example.* domains / lorem ipsum / 555-01xx signal "
+                                    "unfilled placeholder data (e.g. an author/contact never filled in)"))
     return findings
 
 
@@ -232,8 +249,32 @@ def run_lint(layout: Layout, leaves: list[Leaf], schema: Schema) -> list[Finding
     findings.extend(_lint_glossary(layout, articles))
     findings.extend(_lint_export_safety(layout, articles))
     findings.extend(_lint_drift(layout, leaves))
+    findings.extend(_lint_orphan_assets(layout, leaves))
     findings.extend(_lint_freeze(layout))
     findings.extend(_lint_roadmap(layout, leaves))
+    return findings
+
+
+def _lint_orphan_assets(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
+    """V14 孤兒圖檔（WARN）：`corpus/<section>/assets/` 有圖檔（.png/.svg/.jpg…），但交付物完全沒
+    引用它的 basename ＝畫了/渲了卻忘了嵌入（或舊圖已換、殘留）。`.drawio` 源檔不算（asset_files 只收
+    可嵌入的圖格式、不含 .drawio）。WARN 非阻塞——暫存一張圖待用可能是刻意。"""
+    from dspx.render import find_image_refs
+    referenced: dict[str, set[str]] = {}
+    for article in sorted({lf.article for lf in leaves}):
+        path = layout.docs_latest(article)
+        referenced[article] = (
+            {ref.rsplit("/", 1)[-1] for ref in find_image_refs(path.read_text(encoding="utf-8"))}
+            if path.is_file() else set())
+    findings: list[Finding] = []
+    for leaf in leaves:
+        refs = referenced.get(leaf.article, set())
+        for asset in leaf.asset_files():
+            if asset.name not in refs:
+                findings.append(Finding(
+                    "V14", WARN, f"corpus/{leaf.section}/assets/{asset.name}",
+                    "image asset is not referenced by the deliverable "
+                    "(drawn/rendered but never embedded, or a stale leftover)"))
     return findings
 
 

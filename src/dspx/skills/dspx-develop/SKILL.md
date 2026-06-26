@@ -109,7 +109,7 @@ not from scratch.
   no-concept grouping nodes between them. Keep the section tree shallow — heading depth is capped at
   level 4 (`1.1.1.1`); `check` rejects anything deeper, so nest by meaning, not reflexively.
 - **Write each section's one-line concept as its ROLE in the whole** — `draft` is shown the document map (every section's role) so it can frame openers and seams; that only works if each `concept` one-liner states the section's job in the argument ("define the ODD boundary and derive fleet-level safety goals"), not just a topic label. Sanity-check the organizing axis reads as a progression: each section's conclusion is the next section's premise.
-- **Pick the PDF layout profile for the document's GENRE** — the delivered PDF has a typesetting profile (`export.profile` in config, or `docspec export --profile`): **academic** (paper / survey / report — serif body, sans headings, indented paragraphs, numbered headings), **manual** (software / technical manual — sans body, code- and admonition-friendly), **essay** (argumentative long-form — quiet unnumbered headings, serif), **novel** (fiction — first-line indent, `* * *` scene breaks, sunk chapter openers), or **default** (general). Set it once for the project to match what kind of document this is; the engine handles the genre's conventions (fonts, paragraph model, margins, chapter openers, scene breaks).
+- **Pick the PDF layout profile for the document's GENRE** — the delivered PDF has a typesetting profile (`export.profile` in config, or `docspec export --profile`). Match it to the genre: **academic** (single-column paper / survey / report), **paper** (two-column journal style, IEEE-like — for a survey/paper that wants the dense two-column look), **manual** (software / technical manual — sans body, code- and admonition-friendly), **essay** (argumentative long-form — quiet unnumbered headings), **novel** (fiction — first-line indent, scene breaks, sunk chapter openers), or **default** (general). Set it once for the project; the engine handles each genre's conventions (fonts, paragraph model, margins, columns). **The authoritative profile set lives in the engine — run `docspec export --help` for the current `--profile` choices** rather than trusting this list to stay complete.
 - **Capture normative choices as decisions** — the moment a choice is made, note BOTH the confirmed
   decision AND any rejected option with its *why*, so settled questions don't get re-litigated. For a
   *triggered* normative rule, prefer the EARS form in the statement ("WHEN <trigger> SHALL <response>")
@@ -142,6 +142,16 @@ not from scratch.
   is yours: after a pivot/supersede, walk the descendants' briefs, framing fields, figures, and roadmap
   and bring them onto the new framing. (`factcheck`'s coherence pass backstops you — but fix it at the
   source, don't wait for the finding.)
+- **Establish the byline once — never let it be invented downstream.** Who the document is authored
+  by (and the contact/affiliation that ships on its cover/front matter) is a develop-level decision,
+  like audience and scope — settle it up front and home it in the root section's `material`/front
+  matter, so `draft` renders it verbatim and `release` reads it for journal `--slots`. **If you do
+  not have the real author identity, fill it with an OBVIOUS reserved placeholder — an RFC 2606
+  example value (`author@example.com`, an `〔author TBD〕`-style name/affiliation) — NEVER a
+  plausible-looking fabricated name** (a made-up "real" person/affiliation ships looking authoritative
+  and no one notices it is fake; a reserved example token is self-evidently "to be filled" and `lint`
+  flags it before publish). The byline is the one place a blank looks worse than a placeholder, but a
+  *fake-real* placeholder is worse than either.
 - **Own the document's shared style** — setting the document-wide tone and conventions is a develop
   decision, like the root brief; `edit`/`factcheck` only flag a new convention, you lift it in.
   **Fill the writing-guide's `Project conventions` zone — do NOT leave it as the empty template.**

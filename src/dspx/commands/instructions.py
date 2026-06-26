@@ -212,6 +212,10 @@ def run(argv: list[str]) -> int:
             print(f"  decision framing ↔ prose: [{d.get('id')}] {d.get('statement') or ''}{extra}")
         for fig in ch.get("figures", []):
             print(f"  figure framing ↔ prose: {fig} (is the diagram still drawn in the current framing?)")
+        for r in ch.get("realized", []):
+            src = f" [{r['from_section']}]" if r.get("from_section") else ""
+            print(f"  realized shared truth ↔ prose: [{r.get('id')}]{src} {r.get('statement') or ''} "
+                  f"(does this section's prose still implement this upstream truth, or did it move?)")
         print()
 
     if proj.ancestor_normative:

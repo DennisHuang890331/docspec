@@ -269,6 +269,11 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
             if (leaf.dir / ASSET_DIR_NAME).is_dir() else []
         if drawios:
             coh["figures"] = [f"{ASSET_DIR_NAME}/{n}" for n in drawios]  # 圖框架 ↔ prose
+        if proj.realized:
+            # 本節 realizes 的跨文件共享真相 ↔ 本節 prose（多文件治理最易語義漂移處：上游 supersede
+            # 後下游散文仍實現舊真相；hash 帳本只在 statement bytes 變時觸發重渲、不判 prose 是否還對齊）。
+            coh["realized"] = [{"id": r.get("id"), "from_section": r.get("from_section"),
+                                "statement": r.get("statement")} for r in proj.realized]
         if coh:
             proj.coherence_contract = coh
 

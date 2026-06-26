@@ -405,3 +405,18 @@ def test_coherence_own_brief_omitted_without_ancestor(make_project, write_leaf):
     coh = _project(home, "factcheck", "solo").coherence_contract
     assert coh["title"] == "T" and coh["framing"] == "f"
     assert "own_brief" not in coh   # 無祖先 brief 可對照
+
+
+def test_coherence_contract_includes_realized_pair(make_project, write_leaf):
+    """#1：本節 realizes 別文件決策 → coherence_contract 列出 realized↔prose 對（多文件語義盲區）。"""
+    home = make_project()
+    write_leaf(home, "b/owner", concept={"id": "co", "title": "Owner", "order": 1},
+               decisions=[{"id": "dec-shared", "kind": "normative", "status": "accepted",
+                           "statement": "共享真相 X"}])
+    write_leaf(home, "a/user", concept={"id": "cu", "title": "User", "order": 1,
+                                        "concept": "用 X", "realizes": ["dec-shared"]})
+    coh = _project(home, "factcheck", "a/user").coherence_contract
+    assert coh is not None and "realized" in coh
+    r = coh["realized"][0]
+    assert r["id"] == "dec-shared" and r["statement"] == "共享真相 X"
+    assert r["from_section"] == "b/owner"

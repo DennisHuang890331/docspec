@@ -110,3 +110,47 @@ def test_v10_consistent_numbers_clean(make_project, write_leaf, monkeypatch):
     layout = _render(home, monkeypatch)
     _inject(layout, "a", "\n\ntask_assign 的 timeout 5000ms。\n\ntask_assign 表格列 5000ms。\n")
     assert not any(f.rule == "V10" for f in _lint(layout))
+
+
+# ── V13 保留範例/佔位 token 外洩（WARN）──────────────────────────────
+
+def test_v13_reserved_example_tokens_caught(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\nContact admin@example.com; see lorem ipsum dolor; call 555-0142.\n")
+    v13 = [f for f in _lint(layout) if f.rule == "V13"]
+    assert v13 and all(f.level == WARN for f in v13)
+    detail = " ".join(f.detail for f in v13)
+    assert "example.com" in detail
+
+
+def test_v13_clean_doc_no_finding(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n真實聯絡資料、無範例 token。\n")
+    assert not any(f.rule == "V13" for f in _lint(layout))
+
+
+# ── V14 孤兒圖檔（WARN）──────────────────────────────────────────────
+
+def _leaf_with_asset(write_leaf, home, name="fig.png"):
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "x",
+                                     "brief": {"audience": "a", "depth": "d",
+                                               "breadth": "b", "forbidden": ["f"]}})
+    adir = home / "corpus" / "a" / "x" / "assets"
+    adir.mkdir(parents=True, exist_ok=True)
+    (adir / name).write_bytes(b"\x89PNG\r\n\x1a\n")
+
+
+def test_v14_orphan_asset_caught(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf_with_asset(write_leaf, home)
+    layout = _render(home, monkeypatch)            # 不引用 fig.png
+    v14 = [f for f in _lint(layout) if f.rule == "V14"]
+    assert v14 and v14[0].level == WARN and "fig.png" in v14[0].where
+
+
+def test_v14_referenced_asset_not_flagged(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf_with_asset(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n![圖](assets/fig.png)\n")   # 有引用 → 非孤兒
+    assert not any(f.rule == "V14" for f in _lint(layout))
