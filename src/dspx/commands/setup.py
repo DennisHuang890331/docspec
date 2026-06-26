@@ -225,6 +225,11 @@ _DRAWIO_MANIFEST = {
         "darwin-arm64":  ("draw.io-arm64-30.2.4.zip",         "2e40b7c5b5034379a88998236fe6050224a5a5232e213c1a0393a86e8f65e5b3"),
     },
 }
+# 既有 binary 的版本檢查＝**最小門檻**（非精確匹配釘版）。理由：`-x -f png` 匯出旗標跨很廣的
+# draw.io 版本都能用（壓測在 v24.16.0 實證；當初「舊版拒旗標」其實是 ELECTRON_RUN_AS_NODE 在作怪、
+# 非版本）。故只要 ≥ 此下限就留著用、不重抓也不把更新版降級回 pinned；低於才重抓 pinned。
+# 保守值＝有硬證據可用的最低版本；單一常數、要放寬只改這行。下載端仍精確 pinned（見 _DRAWIO_MANIFEST）。
+_DRAWIO_MIN_VERSION = (24, 0, 0)
 
 
 # tlmgr 要補裝的 TeX 套件集——僅供 optional `--with-latex` 本機編譯期刊軌 emit 出的 `.tex`
@@ -822,6 +827,14 @@ def _check_linux_drawio_runtime(*, interactive: bool) -> None:
             pass
 
 
+def _version_tuple(ver: str | None) -> tuple[int, ...] | None:
+    """把 "30.2.4" 解析成 (30, 2, 4) 供門檻比較；None/非法 → None。"""
+    if not ver:
+        return None
+    m = re.search(r"(\d+)\.(\d+)\.(\d+)", ver)   # search＝容忍開頭的 "v" 等前綴
+    return tuple(int(g) for g in m.groups()) if m else None
+
+
 def _drawio_version(binary: str | Path) -> str | None:
     """跑 `<binary> --version` 取 draw.io 自報版本（如 "30.2.4"）。
     先剝掉繼承的 `ELECTRON_RUN_AS_NODE`——它會讓 Electron app 當 node 跑、拒 `-x -f`/版本旗標。
@@ -848,21 +861,28 @@ def _ensure_drawio(*, force: bool, no_download: bool, interactive: bool = False)
     plat = "windows" if pkey == "windows" else ("darwin" if pkey.startswith("darwin") else "linux")
     target = paths.drawio_managed_binary(plat)
     pinned = _DRAWIO_MANIFEST["tag"]
+    floor = ".".join(map(str, _DRAWIO_MIN_VERSION))
     if not force and target.is_file():
         ver = _drawio_version(target)
-        if ver is not None and ver != pinned:
-            if no_download:
-                sys.stderr.write(
-                    f"docspec: draw.io at {target} self-reports v{ver} but pinned v{pinned}; "
-                    f"--no-download given, keeping it (its CLI may reject -x -f export flags).\n")
-                _check_linux_drawio_runtime(interactive=interactive)
-                return True
-            print(f"  draw.io at {target} self-reports v{ver}, pinned v{pinned} — re-downloading")
-            # 落到下面重抓
-        else:
-            print(f"  draw.io already at {target} (v{ver or '?'}, skipping download)")
+        vt = _version_tuple(ver)
+        # 只有「確實探到版本且低於門檻」才重抓。夠新（≥門檻）即留、不降級；版本探不到也留——
+        # 探測失敗（逾時/headless 起不來）不是「壞 binary」的證據，硬重抓只會 churn 又修不了。
+        too_old = vt is not None and vt < _DRAWIO_MIN_VERSION
+        if not too_old:
+            note = (f"v{ver}, ≥ min v{floor}" if vt is not None
+                    else "version unprobed (keeping — a probe failure is not a bad binary)")
+            print(f"  draw.io already at {target} ({note}, skipping download)")
             _check_linux_drawio_runtime(interactive=interactive)
             return True
+        # 確實低於門檻 → 重抓 pinned。
+        if no_download:
+            sys.stderr.write(
+                f"docspec: draw.io at {target}: v{ver} is below the v{floor} floor; "
+                f"--no-download given, keeping it (its CLI may reject -x -f export flags).\n")
+            _check_linux_drawio_runtime(interactive=interactive)
+            return True
+        print(f"  draw.io at {target}: v{ver} below v{floor} floor — re-downloading pinned v{pinned}")
+        # 落到下面重抓
 
     if no_download:
         sys.stderr.write("docspec: --no-download given and no draw.io in data_dir — aborting.\n")

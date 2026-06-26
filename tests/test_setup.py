@@ -594,21 +594,20 @@ def test_drawio_version_strips_electron_env(monkeypatch):
     assert "ELECTRON_RUN_AS_NODE" not in seen["env"]   # 必須剝掉，否則 Electron 當 node 跑
 
 
-def test_ensure_drawio_redownloads_on_version_mismatch(monkeypatch, tmp_path):
+def test_ensure_drawio_keeps_mismatched_but_above_floor(monkeypatch, tmp_path):
+    """drawio-min-version-floor：版本 ≠ pinned 但 ≥ 門檻（v24.16.0 ≥ (24,0,0)）→ 留著、不重抓。
+    （舊行為＝精確匹配會重抓；新行為＝門檻內就用，免 churn、不降級。）"""
     target = tmp_path / "drawio" / "draw.io.exe"
     target.parent.mkdir(parents=True)
-    target.write_bytes(b"old v24 binary")
+    target.write_bytes(b"v24 binary, works fine")
     monkeypatch.setattr(setup_cmd, "_pandoc_platform_key", lambda: "windows")
     monkeypatch.setattr(paths, "drawio_managed_binary", lambda plat=None: target)
-    monkeypatch.setattr(setup_cmd, "_drawio_version", lambda b: "24.16.0")  # ≠ pinned 30.2.4
+    monkeypatch.setattr(setup_cmd, "_drawio_version", lambda b: "24.16.0")  # ≠ pinned 30.2.4，但 ≥ 門檻
     monkeypatch.setattr(setup_cmd, "_check_linux_drawio_runtime", lambda **k: None)
-    monkeypatch.setattr(paths, "cache_dir", lambda: tmp_path / "cache")
-    (tmp_path / "cache").mkdir()
     dl: list = []
-    monkeypatch.setattr(setup_cmd, "_download", lambda url, pkg, sha: dl.append(url) or True)
-    monkeypatch.setattr(setup_cmd, "_extract_drawio", lambda pkg, pkey: True)
+    monkeypatch.setattr(setup_cmd, "_download", lambda *a: dl.append(a) or True)
     assert setup_cmd._ensure_drawio(force=False, no_download=False) is True
-    assert dl, "version mismatch must trigger a re-download, not skip on file presence"
+    assert not dl, "≥ floor 即使 ≠ pinned 也不該重抓"
 
 
 def test_ensure_drawio_skips_when_version_matches(monkeypatch, tmp_path):
@@ -624,3 +623,79 @@ def test_ensure_drawio_skips_when_version_matches(monkeypatch, tmp_path):
     monkeypatch.setattr(setup_cmd, "_download", lambda *a: dl.append(a) or True)
     assert setup_cmd._ensure_drawio(force=False, no_download=False) is True
     assert not dl, "matching version must skip download"
+
+
+# ── drawio 最小版本門檻（drawio-min-version-floor）─────────────────
+
+def _put_managed_drawio(tmp_path, monkeypatch, body=b"stub"):
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path / "dd")
+    monkeypatch.setattr(setup_cmd, "_check_linux_drawio_runtime", lambda **k: None)
+    pkey = setup_cmd._pandoc_platform_key()
+    plat = "windows" if pkey == "windows" else ("darwin" if pkey.startswith("darwin") else "linux")
+    binp = paths.drawio_managed_binary(plat)
+    binp.parent.mkdir(parents=True, exist_ok=True)
+    binp.write_bytes(body)
+    return binp
+
+
+def _no_download(*a, **k):
+    raise AssertionError("不該下載")
+
+
+def test_ensure_drawio_keeps_version_at_or_above_floor(monkeypatch, tmp_path):
+    """版本 ≥ 門檻（含 = pinned、含比 pinned 更新）→ 留著、不重抓、不降級。"""
+    _put_managed_drawio(tmp_path, monkeypatch)
+    monkeypatch.setattr(setup_cmd.urllib.request, "urlopen", _no_download)
+    for ver in ("30.2.4", "31.5.0"):          # == pinned 與 > pinned 都要留
+        monkeypatch.setattr(setup_cmd, "_drawio_version", lambda b, _v=ver: _v)
+        assert setup_cmd._ensure_drawio(force=False, no_download=False) is True
+
+
+def test_ensure_drawio_keeps_unprobeable(monkeypatch, tmp_path):
+    """版本探不到（None）→ 留著（探測失敗≠壞 binary，可能 headless），不重抓。"""
+    _put_managed_drawio(tmp_path, monkeypatch)
+    monkeypatch.setattr(setup_cmd, "_drawio_version", lambda b: None)
+    monkeypatch.setattr(setup_cmd.urllib.request, "urlopen", _no_download)
+    assert setup_cmd._ensure_drawio(force=False, no_download=False) is True
+
+
+def test_ensure_drawio_redownloads_below_floor(monkeypatch, tmp_path):
+    """確實探到且 < 門檻 → 重抓 pinned。"""
+    monkeypatch.setattr(paths, "data_dir", lambda: tmp_path / "dd")
+    monkeypatch.setattr(setup_cmd, "_check_linux_drawio_runtime", lambda **k: None)
+    pkey = setup_cmd._pandoc_platform_key()
+    asset_name, _sha = setup_cmd._DRAWIO_MANIFEST["assets"][pkey]
+    archive = tmp_path / asset_name
+    _make_drawio_archive(archive, pkey)
+    payload = archive.read_bytes()
+    sha = hashlib.sha256(payload).hexdigest()
+    monkeypatch.setattr(setup_cmd, "_DRAWIO_MANIFEST",
+                        {"tag": "30.2.4", "assets": {pkey: (asset_name, sha)}})
+    plat = "windows" if pkey == "windows" else ("darwin" if pkey.startswith("darwin") else "linux")
+    binp = paths.drawio_managed_binary(plat)
+    binp.parent.mkdir(parents=True, exist_ok=True)
+    binp.write_bytes(b"old")
+    monkeypatch.setattr(setup_cmd, "_drawio_version", lambda b: "23.0.0")   # < (24,0,0)
+    called = []
+
+    class _Resp:
+        def __init__(self): self._b = payload
+        def read(self, n=-1):
+            b, self._b = self._b, b""
+            return b
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    def _urlopen(*a, **k):
+        called.append(1)
+        return _Resp()
+    monkeypatch.setattr(setup_cmd.urllib.request, "urlopen", _urlopen)
+    assert setup_cmd._ensure_drawio(force=False, no_download=False) is True
+    assert called, "版本低於門檻應重抓 pinned"
+
+
+def test_version_tuple_parsing():
+    assert setup_cmd._version_tuple("30.2.4") == (30, 2, 4)
+    assert setup_cmd._version_tuple("v24.16.0") == (24, 16, 0)
+    assert setup_cmd._version_tuple(None) is None
+    assert setup_cmd._version_tuple("garbage") is None
