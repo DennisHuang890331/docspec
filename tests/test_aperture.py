@@ -257,10 +257,8 @@ def test_non_develop_skills_have_no_roadmap(make_project, write_leaf):
 # ── 圖片資產（Stage A：figure-embedding）────────────────────────────
 
 def _add_asset(home, section, name, data=b"\x89PNG\r\n\x1a\n_fake"):
-    leaf = home / "corpus"
-    for part in section.split("/"):
-        leaf = leaf / part
-    adir = leaf / "assets"
+    # Model A：圖資產住交付側 docs/assets/（per-article layout：docs/<article>/assets/），非 corpus。
+    adir = Layout(home).docs_assets_dir(section.split("/")[0])
     adir.mkdir(parents=True, exist_ok=True)
     (adir / name).write_bytes(data)
     return adir / name
@@ -339,17 +337,18 @@ def test_document_map_only_for_draft(make_project, write_leaf):
     assert _project(home, "factcheck", "art").document_map == []
 
 
-def test_image_change_marks_section_stale(make_project, write_leaf):
-    """改圖片內容 → 該節 source_hash 變（staleness）。"""
+def test_image_change_does_not_stale_section(make_project, write_leaf):
+    """Model A：圖移到交付側 docs/assets/、**不再折入 corpus source_hash** → 改圖不改 source_hash
+    （圖是交付物、由 draft 流程刷新，非 corpus 源變動；corpus 源 hash 不得反向依賴交付物）。"""
     from dspx.model import load_project as _lp
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     asset = _add_asset(home, "a/x", "d.png", data=b"\x89PNG\r\n\x1a\nAAA")
     layout = Layout(home)
     before = {lf.section: lf.source_hash() for lf in _lp(layout)}["a/x"]
-    asset.write_bytes(b"\x89PNG\r\n\x1a\nBBB")   # 改圖
+    asset.write_bytes(b"\x89PNG\r\n\x1a\nBBB")   # 改圖（交付側）
     after = {lf.section: lf.source_hash() for lf in _lp(layout)}["a/x"]
-    assert before != after
+    assert before == after
 
 
 # ── revision-coherence-probes：factcheck 的語義一致性探針投影 ──
@@ -377,15 +376,16 @@ def test_factcheck_coherence_contract_lists_pairs(make_project, write_leaf):
 
 
 def test_coherence_figure_pair_only_when_drawio_present(make_project, write_leaf):
-    """節有 .drawio 圖資產 → 列 figure 對；無 → 省略。"""
+    """Model A：圖資產為文件層（docs/<article>/assets/）。有 .drawio 的文件 → 其節列 figure 對；
+    另一個無 .drawio 的文件 → 省略。"""
     home = make_project()
-    write_leaf(home, "g/withfig", concept={"id": "c1", "title": "T", "order": 1, "concept": "f"})
-    write_leaf(home, "g/nofig", concept={"id": "c2", "title": "T2", "order": 2, "concept": "f2"})
-    adir = home / "corpus" / "g" / "withfig" / "assets"
+    write_leaf(home, "g/sec", concept={"id": "c1", "title": "T", "order": 1, "concept": "f"})
+    write_leaf(home, "h/sec", concept={"id": "c2", "title": "T2", "order": 1, "concept": "f2"})
+    adir = Layout(home).docs_assets_dir("g")
     adir.mkdir(parents=True, exist_ok=True)
     (adir / "arch.drawio").write_text("<mxfile/>", encoding="utf-8")
-    assert _project(home, "factcheck", "g/withfig").coherence_contract.get("figures") == ["assets/arch.drawio"]
-    assert "figures" not in (_project(home, "factcheck", "g/nofig").coherence_contract or {})
+    assert _project(home, "factcheck", "g/sec").coherence_contract.get("figures") == ["assets/arch.drawio"]
+    assert "figures" not in (_project(home, "factcheck", "h/sec").coherence_contract or {})
 
 
 def test_coherence_contract_factcheck_only(make_project, write_leaf):
@@ -420,3 +420,66 @@ def test_coherence_contract_includes_realized_pair(make_project, write_leaf):
     r = coh["realized"][0]
     assert r["id"] == "dec-shared" and r["statement"] == "共享真相 X"
     assert r["from_section"] == "b/owner"
+
+
+def test_realized_superseded_decision_foregrounds_status_and_successor(make_project, write_leaf):
+    """FG-1 語義半：realizes 一個 superseded 決策 → aperture 帶 status＋接替決策（id＋statement），
+    讓 draft/factcheck 不被死真相誤導。活決策不帶 marker（回歸）。"""
+    home = make_project()
+    write_leaf(home, "b/owner", concept={"id": "co", "title": "Owner", "order": 1},
+               decisions=[{"id": "dec-old", "kind": "normative", "status": "superseded",
+                           "statement": "舊真相", "superseded-by": "dec-new"},
+                          {"id": "dec-new", "kind": "normative", "status": "accepted",
+                           "statement": "新真相", "supersedes": "dec-old"}])
+    write_leaf(home, "a/user", concept={"id": "cu", "title": "User", "order": 1,
+                                        "concept": "用真相", "realizes": ["dec-old"]})
+    # factcheck coherence realized pair carries status + successor
+    coh = _project(home, "factcheck", "a/user").coherence_contract
+    r = coh["realized"][0]
+    assert r["status"] == "superseded"
+    assert r["superseded_by"] == "dec-new"
+    assert r["successor_statement"] == "新真相"
+    # both draft and factcheck see the realized block with the successor data
+    for skill in ("draft", "factcheck"):
+        realized = _project(home, skill, "a/user").realized
+        assert realized and realized[0]["superseded_by"] == "dec-new"
+
+    # a LIVE realized decision carries no superseding marker (regression)
+    write_leaf(home, "a/user2", concept={"id": "cu2", "title": "User2", "order": 2,
+                                         "concept": "用新", "realizes": ["dec-new"]})
+    r2 = _project(home, "factcheck", "a/user2").coherence_contract["realized"][0]
+    assert r2["status"] == "accepted" and not r2.get("superseded_by")
+
+
+def test_realized_successor_walks_chain_to_first_live(make_project, write_leaf):
+    """Round-8 FINDING-1: the successor must be the FIRST LIVE decision in the supersede chain,
+    not a one-hop hop that lands on another dead decision."""
+    home = make_project()
+    # chain d1 -> d2 (also superseded) -> d3 (live)
+    write_leaf(home, "b/owner", concept={"id": "co", "title": "Owner", "order": 1},
+               decisions=[{"id": "d1", "kind": "normative", "status": "superseded",
+                           "statement": "v1 dead", "superseded-by": "d2"},
+                          {"id": "d2", "kind": "normative", "status": "superseded",
+                           "statement": "v2 dead", "superseded-by": "d3", "supersedes": "d1"},
+                          {"id": "d3", "kind": "normative", "status": "accepted",
+                           "statement": "v3 live", "supersedes": "d2"}])
+    write_leaf(home, "a/user", concept={"id": "cu", "title": "User", "order": 1,
+                                        "concept": "x", "realizes": ["d1"]})
+    r = _project(home, "factcheck", "a/user").coherence_contract["realized"][0]
+    assert r["status"] == "superseded"
+    assert r["superseded_by"] == "d3"            # terminal LIVE, not the dead d2
+    assert r["successor_statement"] == "v3 live"
+
+
+def test_realized_successor_none_when_chain_ends_dead(make_project, write_leaf):
+    """A superseded decision whose chain never reaches a live decision (here: no superseded-by)
+    must report no live successor — never print a dead statement as if live."""
+    home = make_project()
+    write_leaf(home, "b/owner", concept={"id": "co", "title": "Owner", "order": 1},
+               decisions=[{"id": "d1", "kind": "normative", "status": "superseded",
+                           "statement": "killed without replacement"}])
+    write_leaf(home, "a/user", concept={"id": "cu", "title": "User", "order": 1,
+                                        "concept": "x", "realizes": ["d1"]})
+    r = _project(home, "factcheck", "a/user").coherence_contract["realized"][0]
+    assert r["status"] == "superseded"
+    assert not r.get("superseded_by") and not r.get("successor_statement")

@@ -10,6 +10,7 @@ import json
 import sys
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_model
+from dspx.model import ancestor_leaves
 
 NAME = "impact"
 HELP = "Reverse view: where an id is defined and which sections realize/govern-by it (check the blast radius before changing it)"
@@ -36,10 +37,29 @@ def _analyze(leaves: list, the_id: str) -> dict:
             realized_by.append(leaf.section)
         if str(the_id) in [str(x) for x in (c.get("governed-by") or [])]:
             governed_by.append(leaf.section)
+
+    # 反向的「過期傳播」閉包：改一個 concept 的 brief/框架不只炸到直接 governed-by 它的節，
+    # 還順著治理鏈＋路徑父鏈遞移炸到所有「祖先集含本節」的下游（staleness 用同一 ancestor_leaves
+    # 算 stale-inherited）。只報直接邊＝深森林根節點的 blast radius 被低估（Round 9 LOW-2）。
+    # 對 decision id 不適用（realizes 是直接、非遞移的指標），故只在 concept 時算。
+    governed_transitive: list = []
+    if defined_at is not None and kind == "concept":
+        by_section = {lf.section: lf for lf in leaves}
+        concept_by_id = {lf.concept["id"]: lf for lf in leaves
+                         if lf.concept and lf.concept.get("id")}
+        direct = set(governed_by)
+        for lf in leaves:
+            if lf.section == defined_at or lf.section in direct:
+                continue
+            ancs = ancestor_leaves(lf.section, by_section, concept_by_id)
+            if any(a.section == defined_at for a, _is_gov in ancs):
+                governed_transitive.append(lf.section)
+
     return {
         "id": the_id, "definedAt": defined_at, "kind": kind,
         "realizedBy": sorted(realized_by),
         "governedBy": sorted(governed_by),
+        "governedTransitive": sorted(governed_transitive),
     }
 
 
@@ -67,10 +87,12 @@ def run(argv: list[str]) -> int:
     print(f"id: {args.id}")
     if info["definedAt"]:
         print(f"  defined at: {info['definedAt']} ({info['kind']})")
-    n = len(info["realizedBy"]) + len(info["governedBy"])
+    n = len(info["realizedBy"]) + len(info["governedBy"]) + len(info["governedTransitive"])
     print(f"\nBlast radius: {n} section(s) depend on it" + (" (changing it means redoing these)" if n else " (nothing depends on it)"))
     for s in info["realizedBy"]:
         print(f"  realizes ← {s}")
     for s in info["governedBy"]:
         print(f"  governed-by ← {s}")
+    for s in info["governedTransitive"]:
+        print(f"  inherited (transitive) ← {s}")
     return 0

@@ -104,6 +104,27 @@ so you do a **light alignment pass**, not a rewrite:
      the prose genuinely needs rewriting, which is `draft`'s job, not an acknowledge.)
    Then `docspec lint`/`docspec check` as usual.
 
+---
+## Restyle (the `stale-style` job)
+When `docspec status` reports a section as **`stale-style`**, nothing in its `concept`/`decisions`/
+`material`/ancestors moved — the **writing doctrine itself** did: the shared `writing-guide.md`
+(tone/structure/register conventions) or `glossary.yaml` (canonical terms) was rewritten since this
+section's prose was last rendered. Because the doctrine is document-wide, a doctrine change re-stales
+**every** written section at once — that list **is** your worklist (the engine cannot supply it any
+other way; the doctrine is not in any section's source hash, so this `stale-style` flag is the only
+signal you get that the deliverable still carries the old style). Same discipline as `stale-inherited`:
+this is a **restyle pass, not a rewrite**.
+
+1. `docspec instructions edit <section> --json` — gives the existing prose plus the updated
+   `writingGuide` and glossary index.
+2. Re-tune ONLY register/structure/terminology to the new doctrine — **facts, decisions, numbers,
+   claims stay byte-for-byte**. (A doctrine change is never a content change; if you find yourself
+   wanting to change a claim, that's `draft`/`develop`, flag it.)
+3. Re-stamp by the path that matches what you did, exactly as for `stale-inherited`:
+   - **prose changed** → `docspec render <article>` re-stamps the `style` fingerprint.
+   - **prose already conforms to the new doctrine** (no change needed) → `docspec render <article>
+     --ack <section>` (refused if the section is actually `stale-own`/`stale-upstream`).
+
 This is the only time `edit` consults the brief. Everything else below is plain copy-prep.
 
 ---

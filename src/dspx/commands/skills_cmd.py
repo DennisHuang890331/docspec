@@ -15,7 +15,7 @@
 （changelog：「Tool-specific instruction files (… AGENTS.md …) are no longer generated」）。
 ⚠️ codex 的 slash prompt 設計就是放 home（無專案內位置），故 command 寫到全域 $CODEX_HOME。
 
-`--tool all`（預設）＝三者都裝。已存在的檔預設「跳過、不覆寫」（保護手改）；--force 覆寫。
+`--tool`（預設 claude＝只裝你實際在用的那家）；`--tool all`＝三家都裝（僅當三家共享 memory 才合理）。已存在的檔預設「跳過、不覆寫」（保護手改）；--force 覆寫。
 """
 
 from __future__ import annotations
@@ -324,8 +324,9 @@ def run(argv: list[str]) -> int:
 
     p_install = sub.add_parser("install", help="generate skills into the project")
     p_install.add_argument(
-        "--tool", choices=("all", *_TOOLS), default="all",
-        help="target tool (default all = generate for all three)")
+        "--tool", choices=("all", *_TOOLS), default="claude",
+        help="target tool (default: claude; use the agent you actually run. "
+             "`all` installs every tool — only sensible if they share memory)")
     p_install.add_argument("--path", default=".", help="project root (default: current directory)")
     p_install.add_argument(
         "--force", action="store_true", help="overwrite existing files (default: skip)")

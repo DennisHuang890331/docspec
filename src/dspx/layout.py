@@ -29,6 +29,8 @@ CONCEPT_FILE = "concept.yaml"
 # corpus 內 `_` 開頭的目錄＝引擎隱形（退場封存區 _archive/ 等）：
 # status/check/render/draft 一律跳過，被退場的節不再被當活節掃出來。
 ARCHIVE_DIR_NAME = "_archive"
+LEDGER_DIR_NAME = ".ledger"   # 機器簿記（指紋帳本）住 docspec/ 內、不汙染 docs/（交付物）
+ASSET_DIR_NAME = "assets"     # 圖資產（drawio 源＋渲染圖）的資料夾名；交付側 docs/assets/
 
 
 _LEVELS = ("major", "minor", "patch")
@@ -114,6 +116,15 @@ class Layout:
     def docs_dir(self) -> Path:
         return self.project_root / "docs"
 
+    def docs_assets_dir(self, article: str | None = None) -> Path:
+        """圖資產（`.drawio` 源＋渲染圖）的家＝**交付側 `docs/assets/`**（非 corpus）。
+        drawio／圖是交付物，住 docs/；交付物 `docs/<article>_latest.md` 的扁平 `![](assets/<name>)`
+        相對解析即 `docs/assets/<name>`，使 .md 自足、`.drawio` 源也進交付集。
+        per-article docs layout 時為 `docs/<article>/assets/`（與該文件 _latest.md 同層）。"""
+        if self.docs_layout == "flat" or article is None:
+            return self.docs_dir / ASSET_DIR_NAME
+        return self.docs_dir / article / ASSET_DIR_NAME
+
     # ── section 路徑 ↔ 資料夾 ────────────────────────────────────
 
     def section_dir(self, section: str) -> Path:
@@ -148,8 +159,14 @@ class Layout:
         return self.docs_dir / article / "_latest.md"
 
     def docs_ledger(self, article: str) -> Path:
-        """隱藏 sidecar：存 render 記的各節指紋表（`sections` 帳本），與 `_latest.md` 分離
-        ——交付物開頭不再被一張巨大指紋表佔據（ISSUE-3）。人讀的是 `_latest.md`，這檔是機器簿記。"""
+        """機器簿記：存 render 記的各節指紋表（`sections` 帳本）。住在 **docspec/（planning_home）
+        底下的 `.ledger/`、不在 docs/**——docs/ 只放人讀的交付物，指紋表是引擎內部簿記、非交付物，
+        不該汙染交付資料夾。人讀的是 `docs/<article>_latest.md`，這檔純機器用。"""
+        return self.planning_home / LEDGER_DIR_NAME / f"{article}.sections.yaml"
+
+    def docs_ledger_legacy(self, article: str) -> Path:
+        """舊版指紋帳本位置（docs/ 底下的隱藏 sidecar）。read_ledger 用它做**自動遷移** fallback：
+        舊專案的帳本還在 docs/ 時照常讀得到，下次 render 會寫進新位置（docspec/.ledger/）。"""
         if self.docs_layout == "flat":
             return self.docs_dir / f".{article}.sections.yaml"
         return self.docs_dir / article / ".sections.yaml"

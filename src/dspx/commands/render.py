@@ -17,9 +17,10 @@ def run(argv: list[str]) -> int:
     parser.add_argument("article", help="name of the article to assemble")
     parser.add_argument(
         "--ack", action="append", default=[], metavar="SECTION", dest="ack",
-        help="acknowledge a stale-inherited SECTION as aligned (prose needs no change) and "
-             "re-stamp its ancestor fingerprint; refused if the section is actually "
-             "stale-own/upstream (rewrite its prose instead). Repeatable.")
+        help="acknowledge a stale-inherited / stale-style SECTION as aligned (prose needs no "
+             "change — already matches the moved ancestor brief or the updated writing-guide/"
+             "glossary) and re-stamp its ancestor + style fingerprints; refused if the section is "
+             "actually stale-own/upstream (rewrite its prose instead). Repeatable.")
     args = parser.parse_args(argv)
 
     try:
@@ -39,7 +40,7 @@ def run(argv: list[str]) -> int:
     print(f"  {total} section(s), of which {result['drafted']} have prose and "
           f"{total - result['drafted']} are unwritten.")
     if result.get("acked"):
-        print(f"  acknowledged (re-stamped, stale-inherited cleared): {', '.join(result['acked'])}")
+        print(f"  acknowledged (re-stamped, stale-inherited/stale-style cleared): {', '.join(result['acked'])}")
         # 非阻塞提醒：ack 清掉的是「祖先動了」的信號，但子節自己的 brief/concept 框架/圖
         # 是否仍與上游一致＝語義、staleness 照不到（revision-coherence-probes）。導向覆檢、非 gate。
         print("  ↳ also re-check these sections' own brief / concept framing / figures are still "

@@ -27,6 +27,25 @@ ASSET_DIR_NAME = "assets"
 IMAGE_EXTS = (".svg", ".png", ".jpg", ".jpeg", ".gif", ".pdf")
 
 
+def docs_asset_files(layout, article: str) -> list:
+    """交付側可嵌入圖檔（`docs/assets/` 下，依檔名排序）。Model A：圖（drawio＋PNG）住交付側
+    docs/、非 corpus。draft 的 aperture 投這些、check ⑨／export 對它解析 `![](assets/<name>)`。"""
+    adir = layout.docs_assets_dir(article)
+    if not adir.is_dir():
+        return []
+    return sorted((p for p in adir.iterdir()
+                   if p.is_file() and p.suffix.lower() in IMAGE_EXTS), key=lambda p: p.name)
+
+
+def docs_drawio_files(layout, article: str) -> list:
+    """交付側 `.drawio` 源檔（`docs/assets/` 下，依檔名排序）。drawio 源亦為交付物。"""
+    adir = layout.docs_assets_dir(article)
+    if not adir.is_dir():
+        return []
+    return sorted((p for p in adir.iterdir()
+                   if p.is_file() and p.suffix.lower() == ".drawio"), key=lambda p: p.name)
+
+
 class _DuplicateKeyError(yaml.YAMLError):
     """同一 mapping 內出現重複 key（PyYAML 預設會靜默只留最後一個、吞掉前面）。"""
 
@@ -86,19 +105,51 @@ def decision_index(leaves: list) -> dict:
         for e in leaf.decisions:
             if e.get("id"):
                 index[str(e["id"])] = {"section": leaf.section, "statement": e.get("statement"),
-                                       "kind": "decision", "status": e.get("status")}
+                                       "kind": "decision", "status": e.get("status"),
+                                       "superseded_by": e.get("superseded-by")}
         for e in leaf.history:
             if e.get("id"):
                 index[str(e["id"])] = {"section": leaf.section, "statement": e.get("statement"),
-                                       "kind": "history", "status": e.get("status")}
+                                       "kind": "history", "status": e.get("status"),
+                                       "superseded_by": e.get("superseded-by")}
     return index
+
+
+_DEAD_DECISION_STATUSES = ("superseded", "deprecated", "retired")
+
+
+def _is_dead_decision(rec: dict) -> bool:
+    """退場決策＝已搬進 history（kind=history）或 status 屬退場集。"""
+    return rec.get("kind") == "history" or rec.get("status") in _DEAD_DECISION_STATUSES
+
+
+def _live_successor(start_id, dindex: dict) -> dict | None:
+    """沿 `superseded_by` 鏈走，回第一個「活決策」（kind=decision 且 status 非退場）的
+    {id, statement}；走到頭仍無活決策（鏈尾仍死／接替已 retire／無 superseded_by）→ None。
+
+    一跳解析會把讀者導向另一個死決策（甚至導回已 retire 的原始真相）＝defeat FG-1，故必須
+    走到終端活決策。visited 防環（supersede 真環另由 check 抓）。
+    """
+    seen: set = set()
+    cur = start_id
+    while cur and str(cur) not in seen:
+        seen.add(str(cur))
+        rec = dindex.get(str(cur))
+        if rec is None:
+            return None
+        if not _is_dead_decision(rec):
+            return {"id": str(cur), "statement": rec.get("statement")}
+        cur = rec.get("superseded_by")
+    return None
 
 
 def realized_statements(leaf, dindex: dict) -> list:
     """本節 realizes 的決策（撈來源 statement＋status）；跨文件。
 
-    紀律：realizes 應指向真相最源頭（權威方的決策），故一跳即足。status 一併帶回——
-    supersede/deprecate 只改 status 不改 statement，下游須據此轉 stale（見 deps_fingerprint）。
+    紀律：realizes 應指向真相最源頭（權威方的決策）。status 一併帶回——supersede/deprecate
+    只改 status 不改 statement，下游須據此轉 stale（見 deps_fingerprint）。退場時 `superseded_by`/
+    `successor_statement` 帶**終端活接替**（沿鏈走、非一跳），讓 aperture 前景化活真相、不讓
+    draft/factcheck 默默錨回死真相（FG-1 語義半＋Round-8 FINDING-1 的鏈式修正）。
     """
     out = []
     if leaf.concept is None:
@@ -106,9 +157,12 @@ def realized_statements(leaf, dindex: dict) -> list:
     for rid in (leaf.concept.get("realizes") or []):
         rec = dindex.get(str(rid))
         if rec is not None:
+            succ = _live_successor(rec.get("superseded_by"), dindex) if _is_dead_decision(rec) else None
             out.append({"id": str(rid), "statement": rec["statement"],
                         "from_section": rec["section"], "kind": rec["kind"],
-                        "status": rec.get("status")})
+                        "status": rec.get("status"),
+                        "superseded_by": succ["id"] if succ else None,
+                        "successor_statement": succ["statement"] if succ else None})
     return out
 
 
@@ -223,6 +277,25 @@ def content_hash(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
 
 
+def style_fingerprint(layout) -> str:
+    """專案級寫作 doctrine 指紋＝`writing-guide.md` ＋ `glossary.yaml` 的內容雜湊。
+
+    這兩份是「跨節風格／術語一致性」的載體（draft/edit/factcheck 的 aperture 注入、全文件共用一份），
+    但歷史上**不在**任何節的 source_hash——改它們，節的 own/anc/deps/prose 全不動＝改寫作風格／改術語
+    對 staleness 完全隱形（風格換了、引擎不提示哪些節要重套，工作清單只能靠人腦）。這正是 anc 軸的同類
+    機械漂移（祖先 brief 也是「怎麼寫」的指導、卻**有**入指紋）——對稱地，doctrine 變了就該讓吃它的節
+    轉 stale。本指紋讓 doctrine 變更可被偵測：指紋變 → 吃它的節轉 **stale-style**（路由到 **edit** 就地
+    重套風格／對齊術語，**不**像 stale-own 那樣回 draft 重生散文＝不毀已寫內容）。
+
+    缺檔以空 bytes 入雜湊（缺也是一種穩定狀態）；回傳前 16 碼，與其他指紋同寬。
+    """
+    h = hashlib.sha256()
+    for path in (layout.writing_guide, layout.planning_home / "glossary.yaml"):
+        h.update(path.read_bytes() if path.is_file() else b"")
+        h.update(b"\0")
+    return h.hexdigest()[:16]
+
+
 @dataclass
 class Leaf:
     """一個末節：一組同目錄檔。"""
@@ -276,7 +349,9 @@ class Leaf:
         if self.has_material:
             files.append(self.dir / "material.md")
         files = [f for f in files if f.is_file()]
-        files.extend(self.asset_files())   # 圖片改動也算源變動 → 該節 stale
+        # 圖資產不再計入 source_hash：圖（drawio＋PNG）已移到交付側 docs/assets/（Model A），
+        # corpus 源 hash 不得反向依賴交付物。節的過期由 concept/decisions/material 驅動如常，
+        # 圖隨 draft 流程刷新（見 figure-embedding spec）。
         return files
 
     def source_hash(self) -> str:

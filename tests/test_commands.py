@@ -184,6 +184,37 @@ def test_instructions_glossary_block_is_lean(make_project, write_leaf, monkeypat
     assert "docspec show" in out         # 下鑽提示
 
 
+def test_instructions_backstage_projections_warn_against_narration(make_project, write_leaf, monkeypatch, capsys):
+    """報幕防漏：brief / coverage / coherence / ancestor 投影都帶『別唸進交付物』後台警告。"""
+    from dspx.commands import instructions as instr_cmd
+    home = make_project()
+    write_leaf(home, "art", concept={"id": "root", "title": "Art", "order": 1, "concept": "x",
+                                     "brief": {"audience": "a", "depth": "d", "breadth": "b"}},
+               decisions=[{"id": "dec-sot", "kind": "normative", "status": "accepted",
+                           "statement": "ICD is the only SoT"}])
+    write_leaf(home, "art/child",
+               concept={"id": "c2", "title": "Child", "order": 1, "concept": "y",
+                        "brief": {"audience": "a", "depth": "d", "breadth": "b",
+                                  "forbidden": ["不寫封包格式"]},
+                        "must_cover": ["黑通道定義"]},
+               decisions=[{"id": "d2", "kind": "normative", "status": "accepted", "statement": "規"}])
+    monkeypatch.chdir(home.parent)
+
+    # draft：自身 brief/sources（Readable）+ 父鏈 brief + 祖先 normative 都帶後台警告
+    assert instr_cmd.run(["draft", "art/child"]) == 0
+    out = capsys.readouterr().out
+    assert "constraints/provenance you OBEY" in out      # 自身 brief/sources
+    assert "本節規範" in out                              # 守護字串點名報幕句式
+    assert "obey these inherited constraints" in out      # 父鏈 brief
+    assert "backstage governance you OBEY" in out         # 祖先 normative
+
+    # factcheck：coverage + coherence 也帶後台警告
+    assert instr_cmd.run(["factcheck", "art/child"]) == 0
+    out2 = capsys.readouterr().out
+    assert "backstage completeness check" in out2         # coverage contract
+    assert "本節約束下游" in out2                          # coverage/coherence 守護點名
+
+
 def _write_roadmap_file(path, entries):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump({"entries": entries}, allow_unicode=True,

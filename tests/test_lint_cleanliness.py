@@ -137,7 +137,7 @@ def _leaf_with_asset(write_leaf, home, name="fig.png"):
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "x",
                                      "brief": {"audience": "a", "depth": "d",
                                                "breadth": "b", "forbidden": ["f"]}})
-    adir = home / "corpus" / "a" / "x" / "assets"
+    adir = Layout(home).docs_assets_dir("a")   # Model A：圖住交付側 docs/a/assets/，非 corpus
     adir.mkdir(parents=True, exist_ok=True)
     (adir / name).write_bytes(b"\x89PNG\r\n\x1a\n")
 
@@ -154,3 +154,58 @@ def test_v14_referenced_asset_not_flagged(make_project, write_leaf, monkeypatch)
     layout = _render(home, monkeypatch)
     _inject(layout, "a", "\n\n![圖](assets/fig.png)\n")   # 有引用 → 非孤兒
     assert not any(f.rule == "V14" for f in _lint(layout))
+
+
+# ── V15 撰寫工具/治理詞彙洩漏（ERROR）────────────────────────────────
+
+def test_v15_governance_topology_vocab_caught(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n本文件在三層森林中的定位明確，承接兩個治理父，governed-by 此概念。\n")
+    v15 = [f for f in _lint(layout) if f.rule == "V15"]
+    assert v15 and all(f.level == ERROR for f in v15)
+    hits = {f.detail.split('"')[1] for f in v15}
+    assert "治理父" in hits and "governed-by" in hits
+    assert any("森林" in h for h in hits)
+
+
+def test_v15_engine_command_leak_caught(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n不一致時應由 factcheck 提出，並 raise 一筆 finding。\n")
+    v15 = [f for f in _lint(layout) if f.rule == "V15"]
+    hits = {f.detail.split('"')[1] for f in v15}
+    assert "factcheck" in hits
+    assert any("finding" in h for h in hits)
+
+
+def test_v15_layer_labels_and_fanin_caught(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n本節是 L2a 至 L3 鑽石雙父 fan-in 的安全底線，屬 Tier-2 規格。\n")
+    hits = {f.detail.split('"')[1] for f in _lint(layout) if f.rule == "V15"}
+    assert "L2a" in hits and "雙父" in hits
+    assert any(h.lower() == "fan-in" for h in hits) and any("Tier" in h for h in hits)
+
+
+def test_v15_section_anchor_crossref_caught(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n詳見 §跨文件待修與介面清單。\n")
+    assert any(f.rule == "V15" and f.level == ERROR for f in _lint(layout))
+
+
+def test_v15_dual_use_domain_terms_not_flagged(make_project, write_leaf, monkeypatch):
+    """領域中合法的 上游/下游、§+標準條號 不該誤報。"""
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n演算法級實作移交下游車端安全規格與上游詳設，依 ISO 17757 §4.2。\n")
+    assert not any(f.rule == "V15" for f in _lint(layout))
+
+
+def test_v15_code_span_tool_token_exempt(make_project, write_leaf, monkeypatch):
+    """code 區段內的 governed-by:/factcheck 是欄位/指令範例，不該觸發 V15。"""
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n設定範例 `governed-by: c1`，指令 `docspec factcheck`。\n")
+    assert not any(f.rule == "V15" for f in _lint(layout))

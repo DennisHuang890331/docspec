@@ -21,6 +21,8 @@ from dspx.model import (
     Leaf,
     ancestor_leaves,
     decision_index,
+    docs_asset_files,
+    docs_drawio_files,
     realized_statements,
 )
 from dspx.schema import Schema
@@ -170,7 +172,8 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
 
     # ── 本節圖片資產（draft 放圖只能用這些、edit 核引用；ref 形如 assets/<file>，backend-neutral）──
     if skill in _ASSET_SKILLS:
-        proj.image_assets = [f"{ASSET_DIR_NAME}/{p.name}" for p in leaf.asset_files()]
+        proj.image_assets = [f"{ASSET_DIR_NAME}/{p.name}"
+                             for p in docs_asset_files(layout, leaf.article)]
 
     # ── 整篇章節骨架（draft：structure-visible / prose-blind）──
     # 投本文件每節的 section/title/order/role（concept 一句話），依 outline 順序；
@@ -265,15 +268,17 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
                 if e.get("statement") or e.get("rationale")]
         if decs:
             coh["decisions"] = decs                            # statement/rationale 框架 ↔ prose
-        drawios = sorted(p.name for p in (leaf.dir / ASSET_DIR_NAME).glob("*.drawio")) \
-            if (leaf.dir / ASSET_DIR_NAME).is_dir() else []
+        drawios = [p.name for p in docs_drawio_files(layout, leaf.article)]
         if drawios:
             coh["figures"] = [f"{ASSET_DIR_NAME}/{n}" for n in drawios]  # 圖框架 ↔ prose
         if proj.realized:
             # 本節 realizes 的跨文件共享真相 ↔ 本節 prose（多文件治理最易語義漂移處：上游 supersede
             # 後下游散文仍實現舊真相；hash 帳本只在 statement bytes 變時觸發重渲、不判 prose 是否還對齊）。
             coh["realized"] = [{"id": r.get("id"), "from_section": r.get("from_section"),
-                                "statement": r.get("statement")} for r in proj.realized]
+                                "statement": r.get("statement"), "status": r.get("status"),
+                                "kind": r.get("kind"), "superseded_by": r.get("superseded_by"),
+                                "successor_statement": r.get("successor_statement")}
+                               for r in proj.realized]
         if coh:
             proj.coherence_contract = coh
 

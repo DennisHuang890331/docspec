@@ -51,12 +51,26 @@ _WRITING_GUIDE = """\
 2. **Render independently, no cross-section references**: you cannot see other sections. Ban
    "as above", "the next section", "in summary", "below we will".
 3. **Inverted pyramid**: each section's first sentence is its conclusion; detail descends.
-4. **No filler**: ban throat-clearing openers (keep the deliverable-language list below).
+4. **No filler, no scaffolding-narration**: ban throat-clearing openers (keep the deliverable-language
+   list below); and NEVER narrate this section's own `brief` — don't announce its scope ("this section
+   specifies…"), exclusions ("not covered here"), verifiability ("verifiability:…"), or downstream /
+   governance constraints. The brief is a constraint you obey, not content you recite; open on the
+   payload (rule 3), and the section's role shows through the content, never declared. This applies to
+   the OVERVIEW / root section at the *document* level too: it orients by SUBJECT and key idea, NEVER
+   by narrating the document's own layout — no prose table of contents ("first… then… finally…",
+   「先以…再以…最後…」, 「各章環環相扣」) and no self-reference to the document as an artifact
+   ("this spec splits the work into…", 「本規範把這項工作拆成…／把…整合成一份…文件」). The chapter
+   order reveals itself as the reader proceeds; it is never announced.
 5. **Structure first**: rules / multi-dimensional data / state → table or list, not prose;
    obey the section's `brief.layout`.
 6. **Honor the brief**: don't exceed `breadth`, don't go below `depth`, never touch `forbidden`.
 7. **Normative force uses keywords** (see the deliverable-language dictionary below).
-8. **Clean**: the deliverable carries no id / internal code / anchors (`{#…}`) / draft markers.
+8. **Clean**: the deliverable carries no id / internal code / anchors (`{#…}`) / draft markers,
+   **and no authoring-tool / governance vocabulary** — it is for domain readers, not for operators
+   of this tool. Never surface backstage words (forest / governed-by / governance parent /
+   Tier-1·2·3 / L2a / diamond fan-in / module-section / factcheck / raise a finding / §back-ref).
+   Express document relationships in domain language instead: name the document (《…》), write "per
+   the principles in 《…》" or "see 《…》", and "the sections of this spec" — not "module-sections".
 9. **Density**: one idea per paragraph, 4–5 sentences max.
 10. **No metaphors / nicknames** → state responsibilities plainly.
 11. **No first-person colloquialism** → formal sentences with explicit subjects.
@@ -76,7 +90,12 @@ _WRITING_GUIDE = """\
   concrete face of backbone rule 12)
 - **Requirement keyword dictionary**: (deliverable-language tokens for MUST / MUST NOT / SHOULD / SHOULD NOT / MAY)
 - **Banned openers / filler**: (deliverable-language list for rule 4)
+- **No report-style section metadiscourse**: (deliverable-language ban for rule 4 — e.g. 不寫
+  「本節規範…／本節不寫…／可檢核性:…／本節約束下游…／設計依據:…」這類報幕句;每節直接從主旨切入,角色由內容浮現、不宣告)
 - **Global intro ownership**: (which section frames the whole document; others write no intro)
+- **No backstage vocabulary**: (deliverable-language replacements for any authoring-tool / governance
+  term — e.g. don't write 森林/治理父/governed-by/Tier-N/L2a/fan-in/factcheck/§<section>; name the
+  document and say "依據《…》" / "詳見《…》" instead)
 - **Other banned words / required phrasing**: (project-specific)
 """
 
@@ -99,6 +118,7 @@ terms: []
 
 # 可整合的 agent 工具（chatgpt＝codex 別名）
 _AGENTS = ("claude", "antigravity", "codex")
+DEFAULT_AGENT = "claude"   # 非互動預設只裝這一家（要全裝＝ `--tool all`）
 _ALIASES = {"chatgpt": "codex", "openai": "codex", "gpt": "codex"}
 
 
@@ -159,7 +179,9 @@ def run(argv: list[str]) -> int:
 
     is_reinit = config_path.is_file()   # 既有專案＝重新設定（照跑介面、不毀既有檔、刷新 skill）
 
-    # 選 agent：--tool 優先；沒給且是真人終端→動畫＋questionary 勾選；否則預設 all（不卡自動化）
+    # 選 agent：--tool 優先；沒給且是真人終端→動畫＋questionary 勾選；否則預設**單一 claude**
+    # （別灑三家＝避免 .claude/.agent/.codex 三份污染專案；三家 skill 各自獨立、不共享 memory，
+    #  故只該裝使用者實際在用的那家。要全裝＝明確 `--tool all`。）
     if args.tool is not None:
         tools = _resolve_tools(args.tool)
         if tools is None:
@@ -173,7 +195,7 @@ def run(argv: list[str]) -> int:
             sys.stderr.write("docspec: no tool selected, cancelled.\n")
             return 2
     else:
-        tools = _AGENTS   # 非 TTY（agent/CI/測試）：預設全部
+        tools = (DEFAULT_AGENT,)   # 非 TTY（agent/CI/測試）：預設單一 agent，不灑三家
 
     home.mkdir(parents=True, exist_ok=True)
     (home / CORPUS_DIR_NAME).mkdir(exist_ok=True)

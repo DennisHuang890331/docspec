@@ -13,6 +13,7 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   V10 跨文件數字一致             WARN   ← 同 snake_case 指涉的同單位值相互衝突（advisory、不阻塞）
   V11 凍結區（archive/）被竄改    ERROR  ← 已發行版本不可變（見 dspx.freeze）
   V12 docs 殘留 GFM 警示/暫停旗   ERROR  ← `> [!WARNING]` 等 alert；draft 撞決策衝突刻意產生、絕不該 ship
+  V15 docs 殘留撰寫工具/治理詞彙   ERROR  ← forest/governed-by/治理父/fan-in/factcheck/Tier-N/L2a/§回引…＝後台詞洩進交付物（補 V1 覆蓋缺口）
   Vg1/Vg2 術語一致               WARN
   Ve1 死錨點連結（export 破）     WARN  ← `](#x)` 對不上任何標題 slug → xelatex PDF 整份失敗
   Ve2 非標準 markdown（@import）  WARN  ← MPE 指令不會在 docx/PDF 渲染
@@ -73,6 +74,24 @@ _SNAKE_RE = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+")
 # V3 只抓 docspec 自己塞的鷹架佔位字（instructions 模板的 {id}/{title}/{order}/{name}）；
 # generic `<…>` 在技術散文太氾濫（KE 模板 <vehicle_id>、泛型 <T> 都合法），不再誤殺。
 _SCAFFOLD_RE = re.compile(r"\{(?:id|title|order|name)\}")
+# V15 撰寫工具／治理模型的後台詞彙（剝程式碼後、ERROR）：交付物是給領域讀者看的，不該洩漏操作
+# 撰寫工具的人才懂的內部語。封閉、高信心黑名單——補 V1（只抓 dec-… 之類的 id）的覆蓋缺口。
+# 刻意只收無歧義工具詞；領域雙關詞（上游/下游、ADR、裸 森林/鑽石）不機械擋，由 doctrine 節制。
+_TOOL_VOCAB_RE = re.compile(
+    r"governed-by"                                  # 治理邊（英文工具詞，常裸洩）
+    r"|fan-(?:in|out)"                              # fan-in／fan-out 拓樸詞
+    r"|factcheck"                                   # 引擎指令名洩進散文
+    r"|治理父"                                       # governance parent
+    r"|雙父"                                         # 鑽石雙父
+    r"|機制節"                                       # 工具結構詞（mechanism-section）
+    r"|文件森林"                                      # forest
+    r"|[一二三四五六七八九十百\d]+\s*層\s*(?:文件)?森林"   # 「三層森林」「三層文件森林」
+    r"|§\s*[一-鿿]+"                        # §回引 / §<中文章節名>（跨節指涉；§+數字＝標準條號不算）
+    r"|Tier-?\d"                                     # Tier-1/2/3 階層標籤
+    r"|\bL[123][ab]\b"                              # L1a/L2a/L2b/L3b 帶字母後綴層代號
+    r"|raise.{0,12}finding",                       # raise 一筆 finding（引擎工作流措辭）
+    re.IGNORECASE,
+)
 # 潔淨掃描（V1–V4）前剝掉程式碼：fenced ```…``` 與 inline `…` 內是內容（KE 模板/JSON/
 # 變數名/泛型），不是交付物洩漏的機械。同 V6 對 material code block 的處理。
 _FENCED_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
@@ -132,6 +151,14 @@ def _lint_docs(layout: Layout, articles: list[str], all_ids: set[str]) -> list[F
                                     f"reserved example/placeholder token shipped \"{m.strip()}\" -- "
                                     "RFC 2606 example.* domains / lorem ipsum / 555-01xx signal "
                                     "unfilled placeholder data (e.g. an author/contact never filled in)"))
+        for m in dict.fromkeys(_TOOL_VOCAB_RE.findall(body)):
+            findings.append(Finding("V15", ERROR, where,
+                                    f"leaked authoring-tool/governance vocabulary \"{m.strip()}\" -- "
+                                    "the deliverable is for domain readers, not for operators of the "
+                                    "authoring tool; express document relationships in domain language "
+                                    "(name the document, \"per 《…》\", \"see 《…》\"), not backstage "
+                                    "terms (forest / governed-by / governance parent / Tier-N / L2a / "
+                                    "fan-in / module-section / factcheck / raise a finding / §back-ref)"))
     return findings
 
 
@@ -256,25 +283,22 @@ def run_lint(layout: Layout, leaves: list[Leaf], schema: Schema) -> list[Finding
 
 
 def _lint_orphan_assets(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
-    """V14 孤兒圖檔（WARN）：`corpus/<section>/assets/` 有圖檔（.png/.svg/.jpg…），但交付物完全沒
-    引用它的 basename ＝畫了/渲了卻忘了嵌入（或舊圖已換、殘留）。`.drawio` 源檔不算（asset_files 只收
-    可嵌入的圖格式、不含 .drawio）。WARN 非阻塞——暫存一張圖待用可能是刻意。"""
+    """V14 孤兒圖檔（WARN）：**交付側 `docs/assets/`**（Model A：圖住交付側）有可嵌入圖檔
+    （.png/.svg/.jpg…），但該文件交付物完全沒引用它的 basename ＝渲了卻忘了嵌入（或舊圖已換、殘留）。
+    `.drawio` 源檔不算（docs_asset_files 只收可嵌入圖格式、不含 .drawio）。WARN 非阻塞。"""
     from dspx.render import find_image_refs
-    referenced: dict[str, set[str]] = {}
+    from dspx.model import docs_asset_files
+    findings: list[Finding] = []
     for article in sorted({lf.article for lf in leaves}):
         path = layout.docs_latest(article)
-        referenced[article] = (
-            {ref.rsplit("/", 1)[-1] for ref in find_image_refs(path.read_text(encoding="utf-8"))}
-            if path.is_file() else set())
-    findings: list[Finding] = []
-    for leaf in leaves:
-        refs = referenced.get(leaf.article, set())
-        for asset in leaf.asset_files():
+        refs = ({ref.rsplit("/", 1)[-1] for ref in find_image_refs(path.read_text(encoding="utf-8"))}
+                if path.is_file() else set())
+        for asset in docs_asset_files(layout, article):
             if asset.name not in refs:
                 findings.append(Finding(
-                    "V14", WARN, f"corpus/{leaf.section}/assets/{asset.name}",
+                    "V14", WARN, f"docs/assets/{asset.name}",
                     "image asset is not referenced by the deliverable "
-                    "(drawn/rendered but never embedded, or a stale leftover)"))
+                    "(rendered but never embedded, or a stale leftover)"))
     return findings
 
 

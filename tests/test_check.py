@@ -42,13 +42,43 @@ def test_dead_realizes_ref_fails(make_project, write_leaf):
     assert any("ghost" in e for e in res.errors)
 
 
-def test_realizes_to_history_is_not_dead(make_project, write_leaf):
+def test_realizes_to_retired_history_is_dead(make_project, write_leaf):
+    # FG-1: realizing a decision that has been RETIRED into history is a dangling edge
+    # (the consumer is anchored to a truth that no longer lives) — symmetric with the
+    # governed-by → deprecated guard. check MUST fail-loud.
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1,
                                       "realizes": ["d-old"]},
                history=[{"id": "d-old", "kind": "normative", "status": "superseded",
                          "statement": "old"}])
+    res = _check(home)
+    assert not res.ok
+    assert any("retired decision" in e and "d-old" in e for e in res.errors)
+
+
+def test_realizes_to_superseded_but_present_passes(make_project, write_leaf):
+    # A decision still living in decisions.yaml but marked superseded is a legitimate
+    # transient migration window — check does NOT block (staleness + aperture handle it).
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1,
+                                      "realizes": ["d-sup"]},
+               decisions=[{"id": "d-sup", "kind": "normative", "status": "superseded",
+                           "statement": "old but present", "superseded-by": "d-new"},
+                          {"id": "d-new", "kind": "normative", "status": "accepted",
+                           "statement": "new", "supersedes": "d-sup"}])
     assert _check(home).ok
+
+
+def test_realizes_to_concept_is_wrong_edge(make_project, write_leaf):
+    # realizes is for a shared decision; pointing it at a concept id is the wrong edge type
+    # (governance is governed-by). check MUST fail-loud.
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    write_leaf(home, "a/y", concept={"id": "c2", "title": "Y", "order": 2,
+                                     "realizes": ["c1"]})
+    res = _check(home)
+    assert not res.ok
+    assert any("concept id" in e and "c1" in e for e in res.errors)
 
 
 def test_supersede_cycle_fails(make_project, write_leaf):
@@ -282,6 +312,30 @@ def test_governs_cycle_fails(make_project, write_leaf):
     assert any("governs cycle" in e for e in res.errors)
 
 
+def test_governs_cycle_path_has_no_leadin(make_project, write_leaf):
+    """3-node 環，且有一個無辜下游節點當 DFS 引線：報出的環路徑必須從真正成環的節點起，
+    不得把引線節點印在最前端（深森林誤導，Round 9 LOW-1）。t0 -> t1 -> t2 -> t3 -> t1。"""
+    def gov(name, order, target):
+        write_leaf(home, name,
+                   concept={"id": f"c-{name}", "title": name.upper(), "order": order,
+                            "concept": "x", "brief": {"audience": "a", "depth": "d", "breadth": "b"},
+                            "governed-by": [target]})
+    home = make_project()
+    gov("t0", 1, "c-t1")   # 引線：t0 治於 t1，但 t0 不在環裡
+    gov("t1", 2, "c-t2")
+    gov("t2", 3, "c-t3")
+    gov("t3", 4, "c-t1")   # 環：t1 -> t2 -> t3 -> t1
+    res = _check(home)
+    assert not res.ok
+    cyc = next(e for e in res.errors if "governs cycle" in e)
+    path = cyc.split("governs cycle:", 1)[1].strip()
+    nodes = [p.strip() for p in path.split("→")]
+    # 引線 c-t0 不得出現；路徑頭尾相同（閉環）且只含環上三節點
+    assert "c-t0" not in nodes
+    assert nodes[0] == nodes[-1]
+    assert set(nodes) == {"c-t1", "c-t2", "c-t3"}
+
+
 # ── 圖片引用完整性（Stage A：figure-embedding，需 layout）───────────────
 
 def _check_with_layout(home):
@@ -300,10 +354,8 @@ def _write_latest(home, article, section, title, body):
 
 
 def _add_asset(home, section, name, data=b"\x89PNG\r\n\x1a\n_fake"):
-    leaf = home / "corpus"
-    for part in section.split("/"):
-        leaf = leaf / part
-    adir = leaf / "assets"
+    # Model A：圖資產住交付側 docs/assets/（per-article：docs/<article>/assets/），非 corpus。
+    adir = Layout(home).docs_assets_dir(section.split("/")[0])
     adir.mkdir(parents=True, exist_ok=True)
     (adir / name).write_bytes(data)
 
@@ -334,14 +386,14 @@ def test_external_image_ref_not_validated(make_project, write_leaf):
     assert res.ok, res.errors
 
 
-def test_cross_section_asset_basename_collision_fails_check(make_project, write_leaf):
-    """兩節各有同 basename 的 asset 且都被引用 → 扁平命名空間無法區分、export 會嵌錯圖。
-    check ⑨ MUST fail-loud（治在源頭），叫人改名。"""
+def test_shared_asset_referenced_by_multiple_sections_passes(make_project, write_leaf):
+    """Model A：圖集中在單一 `docs/assets/`。多節引用同一 `assets/diagram.svg`（同一實體檔）→
+    無「扁平命名空間指向多節各自的檔」歧義（per-section 模型才有），check ⑨ 放行。
+    撞名守門在 Model A 已消除（一個 basename 就是一個檔）。"""
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     write_leaf(home, "a/y", concept={"id": "c2", "title": "Y", "order": 2})
-    _add_asset(home, "a/x", "diagram.svg", b"\x89PNG\r\n\x1a\nXXX")
-    _add_asset(home, "a/y", "diagram.svg", b"\x89PNG\r\n\x1a\nYYY")  # 同名、不同檔
+    _add_asset(home, "a/x", "diagram.svg")   # Model A：寫進 docs/a/assets/diagram.svg（單一檔）
     layout = Layout(home)
     latest = layout.docs_latest("a")
     latest.parent.mkdir(parents=True, exist_ok=True)
@@ -349,26 +401,6 @@ def test_cross_section_asset_basename_collision_fails_check(make_project, write_
         "---\narticle: a\n---\n"
         "<!-- dspx:section a/x -->\n# X\n\n![d](assets/diagram.svg)\n\n"
         "<!-- dspx:section a/y -->\n# Y\n\n![d](assets/diagram.svg)\n",
-        encoding="utf-8")
-    res = _check_with_layout(home)
-    assert not res.ok
-    assert any("owned by multiple sections" in e and "diagram.svg" in e for e in res.errors)
-
-
-def test_same_basename_only_one_referenced_passes(make_project, write_leaf):
-    """兩節各有同名 asset，但只有一節真的引用 → 無撞名、不誤報。"""
-    home = make_project()
-    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
-    write_leaf(home, "a/y", concept={"id": "c2", "title": "Y", "order": 2})
-    _add_asset(home, "a/x", "diagram.svg")
-    _add_asset(home, "a/y", "diagram.svg")
-    layout = Layout(home)
-    latest = layout.docs_latest("a")
-    latest.parent.mkdir(parents=True, exist_ok=True)
-    latest.write_text(
-        "---\narticle: a\n---\n"
-        "<!-- dspx:section a/x -->\n# X\n\n![d](assets/diagram.svg)\n\n"
-        "<!-- dspx:section a/y -->\n# Y\n\nno image here.\n",
         encoding="utf-8")
     res = _check_with_layout(home)
     assert res.ok, res.errors

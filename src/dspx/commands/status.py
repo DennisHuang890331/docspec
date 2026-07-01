@@ -8,7 +8,13 @@ import json
 from dspx.check import run_check, run_file_check
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
 from dspx.layout import Layout
-from dspx.model import Leaf, ancestor_brief_fingerprint, decision_index, deps_fingerprint
+from dspx.model import (
+    Leaf,
+    ancestor_brief_fingerprint,
+    decision_index,
+    deps_fingerprint,
+    style_fingerprint,
+)
 from dspx.schema import Schema
 
 NAME = "status"
@@ -67,15 +73,19 @@ def _leaf_row(layout: Layout, leaf: Leaf, schema: Schema, check_ok: bool,
         rec_own = recorded.get("own") if isinstance(recorded, dict) else recorded
         rec_anc = recorded.get("anc") if isinstance(recorded, dict) else None
         rec_deps = recorded.get("deps") if isinstance(recorded, dict) else None
+        rec_style = recorded.get("style") if isinstance(recorded, dict) else None
         own_now = leaf.source_hash()
         anc_now = ancestor_brief_fingerprint(leaf.section, by_section)
         deps_now = deps_fingerprint(leaf, dindex)
+        style_now = style_fingerprint(layout)
         if rec_own != own_now:
             sync = "stale-own"          # 自己的源改了 → draft 重渲染
         elif rec_deps is not None and rec_deps != deps_now:
             sync = "stale-upstream"     # realizes 的共享真相改了 → draft 重渲染
         elif rec_anc is not None and rec_anc != anc_now:
             sync = "stale-inherited"    # 只有祖先 brief 改了 → edit 敘事性對齊
+        elif rec_style is not None and rec_style != style_now:
+            sync = "stale-style"        # 寫作 doctrine（writing-guide/glossary）改了 → edit 就地重套風格/對齊術語
         else:
             sync = "synced"
 
@@ -167,5 +177,7 @@ def run(argv: list[str]) -> int:
     print("\n  flags: c=concept d=decisions m=material v=develop h=history")
     print("  sync → who picks it up: stale-own / stale-upstream → draft (re-render the section) · "
           "stale-inherited → edit (narrative-align, or render --ack if no change needed) · "
+          "stale-style → edit (restyle / terminology-align to the updated writing-guide/glossary, "
+          "or render --ack if the prose already conforms) · "
           "unwritten → draft · ✎ drifted → edit (reconcile the hand-edit)")
     return 0

@@ -294,14 +294,14 @@ def test_export_latest_preview(make_project, monkeypatch):
 # ── 圖片資產：export 把被引用的 assets/<file> copy 進 build dir（嵌圖才渲得出）──────
 
 def _setup_with_asset(make_project, write_leaf):
-    """建一個帶圖片資產的最小專案：corpus 末節 + assets/diagram.svg + 引用它的快照。"""
+    """建一個帶圖片資產的最小專案：Model A 圖住交付側 docs/<article>/assets/ + 引用它的快照。"""
     home = make_project()
     write_leaf(home, "art/intro", concept={"concept": "art/intro"})
-    leaf = home / "corpus" / "art" / "intro"
-    (leaf / "assets").mkdir(exist_ok=True)
-    (leaf / "assets" / "diagram.svg").write_text(
-        '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"></svg>', encoding="utf-8")
     layout = Layout(home, "per-article")
+    adir = layout.docs_assets_dir("art")   # Model A：圖住交付側、非 corpus
+    adir.mkdir(parents=True, exist_ok=True)
+    (adir / "diagram.svg").write_text(
+        '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"></svg>', encoding="utf-8")
     snap = layout.docs_snapshot("art", "1.0.0")
     snap.parent.mkdir(parents=True, exist_ok=True)
     snap.write_text("# 標題\n\n內文。\n\n![圖](assets/diagram.svg)\n", encoding="utf-8")

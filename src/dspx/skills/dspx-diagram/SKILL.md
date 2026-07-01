@@ -19,7 +19,7 @@ metadata:
 > **If `docspec` is not found** — it IS installed (via `uv tool`); your shell's PATH just predates the install (a freshly-launched or sandboxed agent shell). Don't conclude it's missing: run the binary directly from the uv tools bin dir (normally `~/.local/bin/docspec`, Windows `%USERPROFILE%\.local\bin\docspec.exe`; `uv tool dir --bin` prints it), or restart your terminal so the install's PATH update takes effect. **For the draw.io CLI:** prefer the docspec-managed binary (`docspec setup --with-drawio`) or point `DOCSPEC_DRAWIO` at it.
 
 You are a **delegated subagent**. The main agent gave you the diagram's *intent* (what it must
-show) and the *target section* (`corpus/<section>/assets/`). Your job: produce one `.drawio`
+show) and the deliverable asset dir (`docs/assets/`, where the diagram is delivered). Your job: produce one `.drawio`
 source plus a rendered **PNG** image there, then hand the image path back. You do NOT edit the
 deliverable prose, place the figure in the document, or assign a figure number — the renderer
 numbers figures at export, and `draft` writes the `![caption](assets/<file>)` reference. You make
@@ -38,7 +38,7 @@ The two vendored helpers live next to this file:
 ---
 ## The Stance — the iron laws
 - **One picture, rendered to a high-resolution PNG.** The output is a `.drawio` source + a
-  rendered **PNG** (high-DPI raster). Store BOTH in the section's `assets/` dir — the PNG is what
+  rendered **PNG** (high-DPI raster). Store BOTH in the deliverable-side `docs/assets/` dir — the PNG is what
   the deliverable embeds, the `.drawio` is the editable source that makes the image regenerable.
   **Why PNG, not SVG:** draw.io's SVG export wraps labels in `foreignObject` (HTML) or packs the
   whole canvas as one base64 `<image>` PNG; the default Typst track's renderer (resvg) does NOT
@@ -78,10 +78,10 @@ The two vendored helpers live next to this file:
 1. **Plan.** Identify the shapes, the relationships, the layout direction (LR or TB), and the
    groups (tiers/layers). Keep it to what the intent needs — docspec diagrams are architecture /
    flow / sequence / state figures, not decorative art.
-2. **Generate** the `.drawio` XML to `corpus/<section>/assets/<name>.drawio`. Hand-place
+2. **Generate** the `.drawio` XML to `docs/assets/<name>.drawio`. Hand-place
    coordinates (snap to multiples of 10; scale spacing with node count). Use the draw.io XML
    skeleton below.
-3. **Validate** — `python3 scripts/validate.py corpus/<section>/assets/<name>.drawio`. Fix every
+3. **Validate** — `python3 scripts/validate.py docs/assets/<name>.drawio`. Fix every
    error (warnings are advisory). Re-run until clean.
 4. **Render a preview** — `drawio -x -f png --width 2000 -o /tmp/<name>.png <name>.drawio`
    (NO `-e`; cap width so vision can read it).
@@ -89,7 +89,7 @@ The two vendored helpers live next to this file:
    connections, off-canvas shapes, **edges that occlude an unrelated node/label, and crossings rendered
    without a jump** (ambiguous intersections). Apply targeted XML fixes (waypoints, spread exit/entry,
    add `jumpStyle`) and re-render. Max 2 rounds, then proceed. (No vision model → skip this step.)
-6. **Final render → PNG** — `drawio -x -f png --width 2400 -o corpus/<section>/assets/<name>.png
+6. **Final render → PNG** — `drawio -x -f png --width 2400 -o docs/assets/<name>.png
    <name>.drawio` (high-DPI raster; no `-e` — that's SVG/PDF-only). The deliverable embeds the
    PNG; the `.drawio` stays beside it as the regenerable source of truth.
 7. **Hand back** the PNG path + a one-line description of what the diagram shows. If the diagram
@@ -225,7 +225,7 @@ genuinely stale/ancient system install — then prefer the docspec-managed binar
 - Take the intent + target section from the main agent; produce ONE `.drawio` + its rendered PNG.
 - Run `scripts/validate.py` before rendering; fix every error.
 - Render a width-capped preview and self-check it with vision before the final PNG.
-- Store BOTH the `.drawio` source and the rendered PNG in `corpus/<section>/assets/`.
+- Store BOTH the `.drawio` source and the rendered PNG in `docs/assets/`.
 - Hand back the PNG path + a one-line description; let the main agent place the figure.
 - Degrade to the browser URL / XML-only and SAY SO when the CLI is unavailable.
 

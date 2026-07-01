@@ -144,9 +144,24 @@ def test_install_skips_existing_then_force_overwrites(tmp_path, capsys):
 
 
 def test_install_works_anywhere_no_project_required(tmp_path):
-    """install 不需既有 docspec 專案（bootstrap-free，給 init 場景）。"""
+    """install 不需既有 docspec 專案（bootstrap-free，給 init 場景）。預設只裝單一 claude。"""
     assert skills_cmd.run(["install", "--path", str(tmp_path)]) == 0
-    assert (tmp_path / ".codex" / "skills" / "dspx-develop" / "SKILL.md").is_file()
+    assert (tmp_path / ".claude" / "skills" / "dspx-develop" / "SKILL.md").is_file()
+
+
+def test_install_default_is_single_agent_not_all(tmp_path):
+    """預設只裝 claude 一家，不灑 .agent/.codex（三家不共享 memory，別污染專案）。"""
+    assert skills_cmd.run(["install", "--path", str(tmp_path)]) == 0
+    assert (tmp_path / ".claude").is_dir()
+    assert not (tmp_path / ".agent").exists()
+    assert not (tmp_path / ".codex").exists()
+
+
+def test_install_tool_all_installs_every_agent(tmp_path):
+    """明確 `--tool all` 才裝三家（共享 memory 的場景）。"""
+    assert skills_cmd.run(["install", "--tool", "all", "--path", str(tmp_path)]) == 0
+    for d in (".claude", ".agent", ".codex"):
+        assert (tmp_path / d / "skills" / "dspx-develop" / "SKILL.md").is_file()
 
 
 def test_skills_registered_in_cli():

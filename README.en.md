@@ -104,7 +104,7 @@ It's a loop, not a pipeline. When factcheck finds a problem, it goes back to dev
 PDF delivery is one of docspec's main features. Add the export dependencies, then run `docspec setup` once — it downloads the controlled typesetting assets into your user data dir, without touching your system environment:
 
 ```bash
-uv tool install --from . docspec --with pdfplumber --with pypdfium2 --with pypandoc_binary
+uv tool install --from ".[export]" docspec
 docspec setup
 ```
 
@@ -113,7 +113,7 @@ docspec setup
 - **Typst track (default)** — docspec-owned template, bundled compile, full fidelity / byte-lock checks.
 - **Journal LaTeX track (BYO, emit-only)** — for journal submission, docspec feeds your content through the journal's own pandoc template via a **slot contract** (title / authors / abstract / keywords / …) and emits a `.tex`; you compile it in Overleaf / the journal toolchain. Example IEEE and Elsevier adapters ship in-box: `docspec export <article> --journal {ieee,elsevier}`.
 
-**Diagrams = drawio images**: during `draft`, a delegated subagent (loading the `dspx-diagram` skill) authors a `.drawio` and renders it to SVG, embedded into the deliverable (both tracks consume the same image). draw.io is an optional asset — run `docspec setup --with-drawio` when you want diagram rendering.
+**Diagrams = drawio images**: during `draft`, a delegated subagent (loading the `dspx-diagram` skill) authors a `.drawio` and renders it to a **high-resolution PNG**, embedded into the deliverable (both tracks consume the same image; PNG, not SVG — a drawio SVG collapses to a black box on the Typst track). draw.io is an optional asset — run `docspec setup --with-drawio` when you want diagram rendering.
 
 Then use the release skill in your agent to typeset interactively: export → review page images → tune layout knobs → re-export until it looks right. (The underlying `docspec export` is an agent command driven by the skill — you don't run it by hand.)
 

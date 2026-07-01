@@ -49,6 +49,22 @@ def _contract_lines(f: dict, indent: str = "  ") -> list[str]:
     return lines
 
 
+def _realized_mark(r: dict) -> str:
+    """前景化一個 realized 決策的退場狀態＋接替（FG-1 語義半）。活決策回空字串。
+    退場（kind=history／status superseded|deprecated|retired）時提示重指活接替，避免
+    draft/factcheck 只看 aperture 就把散文錨回死真相。"""
+    status = r.get("status")
+    retired = r.get("kind") == "history"
+    if not retired and status not in ("superseded", "deprecated", "retired"):
+        return ""
+    label = "RETIRED (now in history)" if retired else str(status).upper()
+    succ = r.get("superseded_by")   # terminal LIVE successor (chain-resolved) or None
+    if succ:
+        ss = r.get("successor_statement")
+        return f"  ⚠ {label} → superseded by {succ}" + (f": {ss}" if ss else "")
+    return f"  ⚠ {label} (no live successor in the supersede chain — repoint realizes to the live truth or drop the edge)"
+
+
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec instructions", description=HELP)
     parser.add_argument("skill", help="develop / draft / edit / factcheck / publish / release")
@@ -117,6 +133,7 @@ def run(argv: list[str]) -> int:
     if proj.forest is not None:
         f = proj.forest
         print("── Forest map (this document's place in the forest / who governs it / who it parallels; set governed-by against this) ──")
+        print("   (backstage — wire structure with these, but NEVER write forest/governed-by/Tier-N/L2a/fan-in into the deliverable; name the document in domain language)")
         for d in f.get("documents", []):
             print(f"  [{d['article']}] {d.get('oneLiner') or ''}")
         for h in f.get("hierarchy", []):
@@ -174,6 +191,8 @@ def run(argv: list[str]) -> int:
 
     if proj.parent_briefs:
         print("── Parent-chain brief ──")
+        print("   (backstage — obey these inherited constraints; NEVER narrate them as prose"
+              " e.g. 「本節約束下游…」)")
         for pb in proj.parent_briefs:
             print(f"  [{pb['section']}] {pb.get('concept') or ''}")
             if pb.get("brief"):
@@ -181,6 +200,10 @@ def run(argv: list[str]) -> int:
         print()
 
     print("── Readable (within the aperture; this is all you can see) ──")
+    print("   (the concept's `brief` — breadth/depth/forbidden — and `sources` are constraints/"
+          "provenance you OBEY, NOT content to recite: never write 「本節規範…／本節不寫…」 or a rote"
+          " per-section 「設計依據:…」 tag; open on the payload and cite a standard inline only where the"
+          " substance needs it. material.md / decisions here ARE your source content.)")
     if not proj.reads:
         print("  (none — this section has no readable content yet)")
     for art_id, content in proj.reads.items():
@@ -190,6 +213,8 @@ def run(argv: list[str]) -> int:
     if proj.coverage_contract:
         cc = proj.coverage_contract
         print("── Coverage contract (this section's completeness + form contract — rule each item entailed/unsupported; flag a rendered form that fights the declared layout) ──")
+        print("   (backstage completeness check — satisfy each item in the substance; do NOT write a"
+              " 「可檢核性:…」 / verification section into the deliverable)")
         if cc.get("layout") or cc.get("kind"):
             print(f"  form: layout={cc.get('layout') or '—'}  kind={cc.get('kind') or '—'}")
         for item in cc.get("must_cover", []):
@@ -199,6 +224,8 @@ def run(argv: list[str]) -> int:
     if proj.coherence_contract:
         ch = proj.coherence_contract
         print("── Coherence contract (pairs that MUST stay semantically consistent — rule each coherent/contradictory vs the rendered prose, and own-brief vs the ancestor briefs above; the hash ledger CANNOT see a field that should have changed but didn't, so raise a non-blocking `audit` finding on any contradiction) ──")
+        print("   (backstage consistency check — these pairs are checked, not written: never narrate"
+              " them as 「本節規範…／本節約束下游…」 prose)")
         if ch.get("title"):
             print(f"  title ↔ prose: \"{ch['title']}\"")
         if ch.get("framing"):
@@ -214,12 +241,13 @@ def run(argv: list[str]) -> int:
             print(f"  figure framing ↔ prose: {fig} (is the diagram still drawn in the current framing?)")
         for r in ch.get("realized", []):
             src = f" [{r['from_section']}]" if r.get("from_section") else ""
-            print(f"  realized shared truth ↔ prose: [{r.get('id')}]{src} {r.get('statement') or ''} "
+            print(f"  realized shared truth ↔ prose: [{r.get('id')}]{src} {r.get('statement') or ''}{_realized_mark(r)} "
                   f"(does this section's prose still implement this upstream truth, or did it move?)")
         print()
 
     if proj.ancestor_normative:
         print("── Ancestor-chain normative decisions (check inheritance consistency: this section must not contradict / overstep; non-blocking finding) ──")
+        print("   (backstage governance you OBEY; NEVER narrate as 「本節約束下游…／設計依據…」 prose)")
         for a in proj.ancestor_normative:
             for d in a["decisions"]:
                 print(f"  • [{a['section']} · {d['id']}] {d.get('statement') or ''}")
@@ -228,7 +256,7 @@ def run(argv: list[str]) -> int:
     if proj.realized:
         print("── Shared truth this section realizes (cross-document; must be realized / must not be violated) ──")
         for r in proj.realized:
-            print(f"  • [{r['id']} ← {r['from_section']}] {r['statement']}")
+            print(f"  • [{r['id']} ← {r['from_section']}] {r['statement']}{_realized_mark(r)}")
         print()
 
     if proj.writes:

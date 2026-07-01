@@ -159,28 +159,21 @@ def _fix_typst_math(typst_src: str) -> str:
 
 
 def _collect_referenced_assets(layout: Layout, article: str, body_md: str) -> dict[str, Path]:
-    """收集正文引用、且實際存在的圖片資產：{`assets/<file>` → corpus 源檔路徑}。
+    """收集正文引用、且實際存在的圖片資產：{`assets/<file>` → 交付側 docs/assets/ 源檔路徑}。
 
-    交付物以扁平 `assets/<file>` 引用圖片（backend-neutral，Stage A）；實體檔住各節
-    `corpus/<section>/assets/`。export 必須把被引用的圖檔 copy 進 build dir 的 `assets/`，
-    typst/xelatex 才找得到（否則嵌圖渲不出）。引用了但 corpus 找不到的，交給 `docspec check`
-    ⑨ 完整性閘擋（這裡只 copy 找得到的、不重複報錯）。
+    交付物以扁平 `assets/<file>` 引用圖片（backend-neutral）；實體圖檔住**交付側 `docs/assets/`**
+    （Model A：圖是交付物、住 docs/）。export 把被引用的圖檔 copy 進 build dir 的 `assets/`，
+    typst/xelatex 才找得到。引用了但 docs/assets/ 找不到的，交給 `docspec check` ⑨ 閘擋
+    （這裡只 copy 找得到的、不重複報錯）。
     """
     from dspx.render import find_image_refs
+    from dspx.model import docs_asset_files
     refs = [r for r in find_image_refs(body_md) if r.startswith("assets/")]
     if not refs:
         return {}
-    try:
-        from dspx.commands._shared import load_model
-        leaves = load_model(layout)
-    except Exception:  # noqa: BLE001 — 載入失敗就不 copy（check 仍會擋斷引用）
-        return {}
-    name_to_path: dict[str, Path] = {}
-    for lf in leaves:
-        if getattr(lf, "article", None) != article:
-            continue
-        for p in lf.asset_files():
-            name_to_path[f"assets/{p.name}"] = p
+    name_to_path: dict[str, Path] = {
+        f"assets/{p.name}": p for p in docs_asset_files(layout, article)
+    }
     return {r: name_to_path[r] for r in dict.fromkeys(refs) if r in name_to_path}
 
 

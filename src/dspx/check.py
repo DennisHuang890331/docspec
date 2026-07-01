@@ -184,7 +184,27 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
         if leaf.concept is None:
             continue
         sec = leaf.section
-        check_ref(sec, "concept.realizes", leaf.concept.get("realizes"))
+        # realizes 不能 reuse check_ref：目標必須是「存在的決策（kind=decision）」。指向 history
+        # （已 retire）的死決策＝下游默默錨在搬進 history 的死真相上（FG-1）；指向 concept＝錯邊
+        # 類型（治理用 governed-by）。superseded-but-present 刻意放行＝過渡遷移窗，由 staleness
+        # （deps_fingerprint 納 status）＋ aperture 前景化負責，不卡死下游整份 check。
+        rz = leaf.concept.get("realizes")
+        if rz is not None:
+            for t in (rz if isinstance(rz, list) else [rz]):
+                t = str(t)
+                rec = seen.get(t)
+                if rec is None:
+                    errors.append(f"{sec}: concept.realizes points to nonexistent id \"{t}\"")
+                elif rec.kind == "history":
+                    errors.append(
+                        f"{sec}: concept.realizes points to a retired decision \"{t}\" "
+                        f"(it now lives in history — repoint to its live successor or drop the edge)"
+                    )
+                elif rec.kind == "concept":
+                    errors.append(
+                        f"{sec}: concept.realizes points to a concept id \"{t}\" "
+                        f"(realizes is for a shared decision; use governed-by for inherited governance)"
+                    )
         # governed-by 不能 reuse check_ref：必須是活 concept id，非任意 id（decision/history 不行）。
         gb = leaf.concept.get("governed-by")
         if gb is not None:
@@ -242,10 +262,14 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
 
 def _validate_image_refs(layout, leaves: list[Leaf]) -> list[str]:
     """圖片引用完整性（fail-loud；backend-neutral）：交付 `_latest.md` 內每個
-    `![](assets/…)` 都必須對應到該節 `corpus/<section>/assets/` 下實際存在的圖檔。
-    斷掉＝check error，不靜默推遲到 export 或讀者。只驗本地 `assets/` 引用；
-    http(s)/相對上層/絕對路徑不在範圍。未 render（無 _latest.md）→ 無引用可驗、跳過。"""
+    `![](assets/…)` 都必須對應到**交付側 `docs/assets/`**（Model A：圖住交付側、非 corpus）下
+    實際存在的圖檔。斷掉＝check error，不靜默推遲到 export 或讀者。只驗 `assets/` 引用；
+    http(s)/相對上層/絕對路徑不在範圍。未 render（無 _latest.md）→ 無引用可驗、跳過。
+
+    撞名守門已不需要：圖集中在單一 `docs/assets/`，一個 `assets/<basename>` 就是一個實體檔、
+    無「扁平命名空間指向多節各自的檔」歧義（per-section 模型才有的問題，Model A 消除之）。"""
     from dspx.render import find_image_refs, parse_section_bodies
+    from dspx.model import docs_asset_files
 
     by_section = {lf.section: lf for lf in leaves}
     errs: list[str] = []
@@ -253,16 +277,12 @@ def _validate_image_refs(layout, leaves: list[Leaf]) -> list[str]:
         latest = layout.docs_latest(art)
         if not latest.is_file():
             continue
+        available = {f"assets/{p.name}" for p in docs_asset_files(layout, art)}
         bodies = parse_section_bodies(latest.read_text(encoding="utf-8"))
-        # 交付物以**扁平** `assets/<name>` 引用，但實體檔住各節 assets/。若兩節各有同 basename
-        # 的 asset 且都被引用，扁平命名空間無法區分 → export 收集時會默默用後出現那節的檔（嵌錯圖、
-        # 過所有閘）。在此（有 section marker、逐節）偵測撞名並 fail-loud，治在源頭。
-        ref_sources: dict[str, set[str]] = {}   # `assets/<name>` → {解析到的源節}
         for section, body in bodies.items():
             leaf = by_section.get(section)
             if leaf is None:
                 continue
-            available = {f"assets/{p.name}" for p in leaf.asset_files()}
             asset_refs = 0
             for ref in find_image_refs(body):
                 if not ref.startswith("assets/"):
@@ -271,10 +291,9 @@ def _validate_image_refs(layout, leaves: list[Leaf]) -> list[str]:
                 if ref not in available:
                     errs.append(
                         f"{section}: image reference \"{ref}\" does not resolve to an asset in "
-                        f"corpus/{section}/assets/ (add the file, fix the path, or remove the reference)"
+                        f"docs/assets/ (render the diagram into docs/assets/, fix the path, "
+                        f"or remove the reference)"
                     )
-                else:
-                    ref_sources.setdefault(ref, set()).add(section)
             # diagram-intent：節自己宣告 brief.layout=diagram 卻零張圖 ref＝宣告版面 vs 交付物的機械
             # 落差（吃封閉 enum；不解析 decision 文字＝那是語義、留 audit/skill，鐵律1）。
             brief = leaf.concept.get("brief")
@@ -282,14 +301,6 @@ def _validate_image_refs(layout, leaves: list[Leaf]) -> list[str]:
                 errs.append(
                     f"{section}: declared brief.layout=diagram but the deliverable embeds no image "
                     f"— embed the diagram with ![](assets/<file>) or change the layout"
-                )
-        for ref, srcs in sorted(ref_sources.items()):
-            if len(srcs) > 1:
-                errs.append(
-                    f"{art}: image reference \"{ref}\" is owned by multiple sections "
-                    f"({', '.join(sorted(srcs))}); the flat deliverable namespace cannot tell them "
-                    f"apart and export would embed the wrong one — rename one section's asset so each "
-                    f"`assets/<file>` basename is unique within the article"
                 )
     return errs
 
@@ -657,7 +668,12 @@ def _find_cycle(graph: dict[str, list[str]], label: str) -> list[str]:
             if nxt not in color:  # 指到圖外（死引用已另報）
                 continue
             if color[nxt] == GRAY:
-                cycle = " → ".join(stack + [node, nxt])
+                # 只報真正成環的節點：從 nxt（回邊指向、必在 stack 上）首次出現處起，
+                # 砍掉前面那段「進入環的引線」（DFS 從別處走進環的 lead-in，本身不在環裡，
+                # 否則深森林裡會把無辜的下游節點印在環路徑最前端、誤導讀者）。
+                path = stack + [node]
+                start = path.index(nxt)
+                cycle = " → ".join(path[start:] + [nxt])
                 errors.append(f"{label} cycle: {cycle}")
             elif color[nxt] == WHITE:
                 visit(nxt, stack + [node])

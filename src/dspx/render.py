@@ -17,18 +17,25 @@ import yaml
 
 from dspx.frontmatter import FrontmatterError, parse_frontmatter, render_frontmatter
 from dspx.layout import Layout
-from dspx.model import Leaf, ancestor_brief_fingerprint, decision_index, deps_fingerprint
+from dspx.model import (
+    Leaf,
+    ancestor_brief_fingerprint,
+    decision_index,
+    deps_fingerprint,
+    style_fingerprint,
+)
 
 
 def read_ledger(layout: Layout, article: str) -> dict:
     """讀某文章的指紋帳本（各節 own/anc/deps/prose）。
 
-    來源優先序：① 隱藏 sidecar `docs/<article>/.sections.yaml`（現行格式）；② 舊格式 fallback
-    ＝`_latest.md` frontmatter 的 `sections`（自動相容；下次 render 會把它搬進 sidecar＝遷移）。
-    都沒有 → {}。"""
+    來源優先序：① 機器簿記 `docspec/.ledger/<article>.sections.yaml`（現行位置）；② 舊位置 sidecar
+    `docs/.../.sections.yaml`（自動遷移：下次 render 會寫進 ①）；③ 更舊格式 ＝`_latest.md`
+    frontmatter 的 `sections`。都沒有 → {}。"""
     import sys
-    ledger = layout.docs_ledger(article)
-    if ledger.is_file():
+    for ledger in (layout.docs_ledger(article), layout.docs_ledger_legacy(article)):
+        if not ledger.is_file():
+            continue
         try:
             data = yaml.safe_load(ledger.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as exc:
@@ -40,7 +47,7 @@ def read_ledger(layout: Layout, article: str) -> dict:
             return {}
         sections = data.get("sections") if isinstance(data, dict) else None
         return dict(sections) if isinstance(sections, dict) else {}
-    # 舊格式 fallback：frontmatter 內的 sections（遷移前的舊交付物）
+    # 更舊格式 fallback：frontmatter 內的 sections（遷移前的舊交付物）
     latest = layout.docs_latest(article)
     if latest.is_file():
         try:
@@ -198,9 +205,10 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     """同步 docs/<article>/_latest.md 骨架；保留已寫散文；回報統計。
 
     `ack_sections`（F5）：作者確認這些節已對齊上游（散文依設計合理不需改）→ 重蓋其
-    `anc` 指紋至現值、清掉 `stale-inherited`。守門：若該節其實 `stale-own`/`stale-upstream`
-    （own/deps 真的變了＝需重寫散文），ack **拒絕**並保住信號——ack 只清「祖先動了但本節散文
-    合理不變」這一類，不能拿來吞掉真正的 re-draft 需求。
+    `anc`＋`style` 指紋至現值、清掉 `stale-inherited`／`stale-style`。守門：若該節其實
+    `stale-own`/`stale-upstream`（own/deps 真的變了＝需重寫散文），ack **拒絕**並保住信號——ack 只清
+    「祖先 brief／寫作 doctrine 動了但本節散文合理不需改（已符新風格／術語）」這一類，不能拿來吞掉
+    真正的 re-draft 需求。
 
     回傳 {sections, drafted, written_path, acked, ack_refused}。
     """
@@ -231,6 +239,9 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     # 上次帳本：F2——指紋綁「散文上次基於什麼源料寫」。散文未重寫時沿用舊源指紋，
     # 不被「現在源料」抹掉 stale-own/stale-upstream 信號（sidecar 優先、舊 frontmatter fallback）。
     prior_ledger = read_ledger(layout, article)
+    # 專案級寫作 doctrine（writing-guide＋glossary）指紋：全文件共用一份，整輪 render 算一次。
+    # 散文未重寫時沿用舊值（保住 stale-style 信號）；散文重寫/首次撰寫才記現值（見下方 _current）。
+    style_now = style_fingerprint(layout)
 
     # 根節（section==article）＝文章標題＋全域導言；存在就由它當 `#`，
     # 否則退回印一行純標題（導言由人/文類決定，render 不強制生）。
@@ -280,13 +291,19 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
                     "own": lf.source_hash(),
                     "anc": ancestor_brief_fingerprint(lf.section, by_section),
                     "deps": deps_fingerprint(lf, dindex),
+                    "style": style_now,
                     "prose": prose_now,
                 }
 
             def _reuse_or_current() -> dict:
                 if isinstance(prev, dict) and prev.get("prose") == prose_now:
+                    # 散文未重寫：own/anc/deps/style 全沿用舊值＝保住既有 stale 信號（含 stale-style）。
+                    # 例外＝舊帳本沒有 style 欄（本軸上線前寫的）：以現值補基準（遷移用，視既有內容為
+                    # 「當前 doctrine 已對齊」，往後 doctrine 變更才會把它標 stale-style）。
                     return {"own": prev.get("own"), "anc": prev.get("anc"),
-                            "deps": prev.get("deps"), "prose": prose_now}
+                            "deps": prev.get("deps"),
+                            "style": prev.get("style") or style_now,
+                            "prose": prose_now}
                 return _current()
 
             if lf.section in ack_sections:

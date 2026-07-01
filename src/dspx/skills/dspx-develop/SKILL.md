@@ -44,11 +44,17 @@ pausing is a TEST-ONLY mode.)
 ## The Stance
 - **Frame the whole before the parts** — every document needs an orienting OVERVIEW that states, in
   a few plain sentences, what this document IS: what it defines, the scope boundary (what it covers
-  and explicitly does NOT), and who it is for. Home it as the **root section** (`section == article`,
-  which render uses as the document's intro) or a leading scope section — never drop the reader
-  straight into the first detailed clause. A reader who can't tell what the document is about from
-  its opening has been failed before the content starts. The overview orients; it does not dump the
-  mission's specifics (those live in their own section).
+  and explicitly does NOT), and who it is for, anchored on the SUBJECT's core framing idea (the
+  central tension or principle the document turns on). Home it as the **root section**
+  (`section == article`, which render uses as the document's intro) or a leading scope section — never
+  drop the reader straight into the first detailed clause. A reader who can't tell what the document
+  is about from its opening has been failed before the content starts. The overview orients; it does
+  not dump the mission's specifics (those live in their own section). **"Frame the whole" is NOT
+  "describe the layout"** — do NOT let the overview's `brief`/`must_cover` demand a chapter
+  walkthrough, a "reading path", or "how the parts connect" (e.g. "風險評鑑為起點…驗證收尾"). That
+  forces `draft` to emit a prose table of contents — 報幕 / scaffolding-narration that reads as
+  machine-translated. Frame by substance (the topic and the key idea); the structure shows itself as
+  the reader proceeds.
 - **Audience-first** — a section's depth and breadth are set by who reads it, never by what is
   interesting to write.
 - **Ruthless about scope** — decide what NOT to cover. An empty `forbidden` is an unfinished
@@ -90,9 +96,13 @@ not from scratch.
 - **Descend** — per section set its brief (inherit the parent, write only the diff), draft its
   one-sentence controlling idea, then split into MECE children or call it a leaf.
 - **Open with an orienting overview** — give the document a root/scope section whose brief is "frame
-  the whole": what this document defines, its boundary, its audience. Set its `concept`/`brief` like
-  any section so `draft` renders an orientation, not a dive into specifics. Without it the deliverable
-  jumps title → first detailed clause and the reader never learns what the document is.
+  the whole": what this document defines, its boundary, its audience, anchored on the subject's core
+  framing idea. Set its `concept`/`brief` like any section so `draft` renders an orientation, not a
+  dive into specifics. Without it the deliverable jumps title → first detailed clause and the reader
+  never learns what the document is. **Keep the layout OUT of the brief** — its `breadth`/`must_cover`
+  must not call for the chapter sequence, a "reading path", or "how the parts connect"; that turns the
+  opening into a prose table of contents (報幕). Demand the substance — the topic and the key idea —
+  not a map of the document.
 - **Choose the layout** — note when a section's content should be a TABLE, LIST, or **diagram** rather
   than prose. Logic, rules, and state belong in structure, not paragraphs; mark it now so `draft`
   doesn't prose it up. When you mark a diagram, mark it as a **drawio image** (a high-DPI raster PNG

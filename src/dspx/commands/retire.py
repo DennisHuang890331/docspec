@@ -126,9 +126,9 @@ def run(argv: list[str]) -> int:
 
     # 先寫 history（additive），再寫 decisions（removal）：中途失敗留重複而非遺失
     _dump_entries(history_path, history,
-                  "# 退場決策結構帳（docspec retire 搬入；散文 why 在 history.md）。draft 不讀。\n")
+                  "# Retired-decision structure ledger (moved in by docspec retire; prose why in history.md). draft does not read this.\n")
     _dump_entries(decisions_path, keep,
-                  "# 本節活著的決策。append / supersede，退場的搬去 history。\n")
+                  "# This section's live decisions. append / supersede; retired ones move to history.\n")
 
     print(f"retire: {args.section} moved {len(to_retire)} decision(s) -> history.yaml (prose why -> history.md)")
     for e in to_retire:

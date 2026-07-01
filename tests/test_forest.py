@@ -8,6 +8,7 @@ import yaml
 from dspx.aperture import project
 from dspx.check import run_check
 from dspx.commands import impact as impact_cmd
+from dspx.commands.impact import _analyze
 from dspx.forest import forest_view
 from dspx.layout import Layout
 from dspx.model import load_project
@@ -59,6 +60,31 @@ def test_impact_governed_by_json(make_project, write_leaf, monkeypatch, capsys):
     assert impact_cmd.run(["c-t1", "--json"]) == 0
     info = json.loads(capsys.readouterr().out)
     assert info["governedBy"] == ["t2"]
+
+
+def test_impact_governed_by_is_transitive(make_project, write_leaf, monkeypatch, capsys):
+    """深森林 blast radius：改 t1（頂層）不只炸到直接 governed-by 它的 t2，還遞移炸到
+    governed-by t2 的 t3（staleness 用同一 ancestor_leaves 算 stale-inherited）。Round 9 LOW-2。"""
+    home = make_project()
+    write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1,
+                                    "status": "draft", "concept": "T1 主旨", "brief": {"範圍": "一"}})
+    write_leaf(home, "t2", concept={"id": "c-t2", "title": "T2", "order": 1,
+                                    "status": "draft", "concept": "T2 主旨",
+                                    "brief": {"範圍": "二"}, "governed-by": ["c-t1"]})
+    write_leaf(home, "t3", concept={"id": "c-t3", "title": "T3", "order": 1,
+                                    "status": "draft", "concept": "T3 主旨",
+                                    "brief": {"範圍": "三"}, "governed-by": ["c-t2"]})
+    info = _analyze(_leaves(home), "c-t1")
+    assert info["governedBy"] == ["t2"]               # 直接
+    assert info["governedTransitive"] == ["t3"]       # 遞移（過去被漏算 → blast radius 低估）
+
+    # CLI blast radius 計入遞移 = 2（t2 直接 + t3 遞移），且 t3 標 inherited (transitive)
+    monkeypatch.chdir(home.parent)
+    assert impact_cmd.run(["c-t1"]) == 0
+    out = capsys.readouterr().out
+    assert "Blast radius: 2 section(s)" in out
+    assert "governed-by ← t2" in out
+    assert "inherited (transitive) ← t3" in out
 
 
 # ── derive（無第二份）：刪掉 governed-by → hierarchy 立刻消失 ──
