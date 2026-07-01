@@ -341,6 +341,18 @@ def bundled_typst_template_dir() -> Path | None:
         return None
 
 
+def bundled_reference_dir() -> Path | None:
+    """套件隨包、與模板包無關的通用參考資料夾（src/dspx/assets/reference/）。
+    現存 `writing.md`（中/英文寫作道地化參考索引，`docspec reference writing-{zh,en}`）；
+    非模板包 escape-hatch gate 範圍（該 gate 只掃 assets/templates/ 下）。"""
+    try:
+        from importlib.resources import files
+        p = Path(str(files("dspx").joinpath("assets", "reference")))
+        return p if p.is_dir() else None
+    except Exception:
+        return None
+
+
 PACK_HASHES_FILE = ".pack-hashes.json"
 
 

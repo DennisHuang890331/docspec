@@ -61,13 +61,57 @@ def test_reference_template_missing_dir_errors(tmp_path, capsys):
     assert "does not exist" in capsys.readouterr().err
 
 
-def test_reference_pack_without_reference_is_advisory(tmp_path, capsys):
-    """A --template pack that ships no reference.md → advisory message, exit 0."""
+def test_reference_pack_without_reference_is_advisory(tmp_path, capsys, monkeypatch):
+    """A --template pack that ships no reference.md, and no bundled writing reference either →
+    advisory message, exit 0."""
+    monkeypatch.setattr(ref_cmd.paths, "bundled_reference_dir", lambda: None)
     pack = tmp_path / "minimal-pack"
     pack.mkdir()
     assert ref_cmd.run(["--template", str(pack)]) == 0
     out = capsys.readouterr().out
     assert "craft" in out or "reference" in out.lower()
+
+
+# ── docspec reference: docspec-bundled writing topics (independent of template pack) ──
+
+def _writing_dir(tmp_path, body):
+    d = tmp_path / "writing-ref"
+    d.mkdir()
+    (d / "writing.md").write_text(body, encoding="utf-8")
+    return d
+
+
+def test_reference_writing_topics_available_regardless_of_pack(tmp_path, monkeypatch, capsys):
+    """docspec-bundled writing-zh/writing-en topics show up in the index and print, even when
+    the active template pack ships no craft reference at all."""
+    wdir = _writing_dir(
+        tmp_path,
+        "<!-- topic: writing-zh -->\n# 中文\n動詞當家。\n"
+        "<!-- topic: writing-en -->\n# English\nActive voice.\n")
+    monkeypatch.setattr(ref_cmd.paths, "bundled_reference_dir", lambda: wdir)
+    pack = tmp_path / "minimal-pack"
+    pack.mkdir()
+
+    assert ref_cmd.run(["--template", str(pack)]) == 0
+    out = capsys.readouterr().out
+    assert "writing-zh" in out and "writing-en" in out
+
+    assert ref_cmd.run(["writing-zh", "--template", str(pack)]) == 0
+    assert "動詞當家" in capsys.readouterr().out
+
+
+def test_reference_writing_and_pack_topics_merge(tmp_path, monkeypatch, capsys):
+    """Bundled writing topics and a template pack's own craft topics coexist in one index."""
+    wdir = _writing_dir(tmp_path, "<!-- topic: writing-en -->\n# English\nActive voice.\n")
+    monkeypatch.setattr(ref_cmd.paths, "bundled_reference_dir", lambda: wdir)
+    pack = _pack_with_reference(tmp_path, "<!-- topic: tables -->\n# Tables\nuse a grid.\n")
+
+    assert ref_cmd.run(["--template", str(pack)]) == 0
+    out = capsys.readouterr().out
+    assert "writing-en" in out and "tables" in out
+
+    assert ref_cmd.run(["tables", "--template", str(pack)]) == 0
+    assert "use a grid." in capsys.readouterr().out
 
 
 # ── docspec measure-fonts ─────────────────────────────────────────

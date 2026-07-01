@@ -62,3 +62,46 @@ def test_init_bad_tool(tmp_path, monkeypatch):
     monkeypatch.chdir(proj)
     assert init_cmd.run(["--tool", "bogus"]) == 2
     assert not (proj / "docspec").exists()     # 非法 → 不建
+
+
+# ── writing-guide.md naturalness seed（依 --lang 種通用規則，非「10 檔 genre profile」機械種入）──
+
+def test_build_writing_guide_seeds_zh_naturalness():
+    guide = init_cmd.build_writing_guide("zh-TW")
+    assert "docspec reference writing-zh" in guide
+    assert "動詞當家" in guide and "被字句" in guide and "禁報幕" in guide
+    assert "docspec reference writing-en" not in guide.split("## Project conventions")[1]
+
+
+def test_build_writing_guide_seeds_en_naturalness():
+    guide = init_cmd.build_writing_guide("en")
+    assert "docspec reference writing-en" in guide
+    assert "Verb-centric" in guide and "Active voice" in guide and "AI-ism" in guide
+    assert "動詞當家" not in guide
+
+
+def test_build_writing_guide_unknown_lang_keeps_placeholder():
+    guide = init_cmd.build_writing_guide("fr")
+    assert "docspec ships no bundled reference for this language yet" in guide
+    assert "動詞當家" not in guide and "Verb-centric" not in guide
+
+
+def test_init_default_lang_seeds_zh(tmp_path, monkeypatch):
+    """No --lang → default is zh-TW → writing-guide.md is seeded, not left as an empty scaffold."""
+    proj = tmp_path / "p5"
+    proj.mkdir()
+    monkeypatch.chdir(proj)
+    assert init_cmd.run([]) == 0
+    guide = (proj / "docspec" / "writing-guide.md").read_text(encoding="utf-8")
+    assert "動詞當家" in guide
+    assert "docspec reference writing-zh" in guide
+
+
+def test_init_lang_en_seeds_en(tmp_path, monkeypatch):
+    proj = tmp_path / "p6"
+    proj.mkdir()
+    monkeypatch.chdir(proj)
+    assert init_cmd.run(["--lang", "en"]) == 0
+    guide = (proj / "docspec" / "writing-guide.md").read_text(encoding="utf-8")
+    assert "Verb-centric" in guide
+    assert "docspec reference writing-en" in guide

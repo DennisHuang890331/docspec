@@ -29,7 +29,7 @@ purpose:                      # overall goal of the whole forest/project, a sent
 # 語言（套 concept.brief 慣例「鍵英文/值專案語言」）：通用骨架＝英文一份（語言中性 doctrine，
 # 英文寫照樣產任何語言交付）；語言特定的東西（禁開場語、需求關鍵字字典、交付語言）留到 develop
 # 時用「交付語言」填進「Project conventions」區——故交付語言是 develop 決策、不在 init 定。
-_WRITING_GUIDE = """\
+_WRITING_GUIDE_BACKBONE = """\
 # Writing guide
 
 > Shared by the whole document. `draft` blind-renders each section against THIS file; `edit`
@@ -78,16 +78,94 @@ _WRITING_GUIDE = """\
     phrase it: natural idiom, varied sentence openings and length. NEVER calque English structure
     word-for-word — formal register is not stiff translationese. This matters most when the
     deliverable language is not English; the rules above are expository defaults, not a license to
-    write translated-sounding prose.
+    write translated-sounding prose. Chinese-translationese and AI-sounding-English are two
+    different diseases with two different fixes, not the same rule in two languages — the naturalness
+    bullet below is pre-seeded for zh-TW/en from `docspec reference writing-<lang>`; for any other
+    language run that command yourself (or `docspec reference` for the index) and write the
+    language's own defect list here — don't guess at what "sounds native" from this rule's name alone.
 
+"""
+
+# 自然度 bullet 種子＝docspec reference writing-{zh,en} 的濃縮版（動作句、非長篇論證+出處；論證/出處
+# 留給 reference 指令查）。只有「語言本身」的通用規則（不分文類都成立）才進這裡；文類特有的東西
+# （附錄A 規範詞/EARS、特定領域禁詞）留給 develop 依實際文類另外補——這條線是「通用 vs 文類特化」，
+# 不是舊版「10 檔 genre×language profile」那種整份預寫文案（設計理由見
+# openspec/changes/2026-06-30-chinese-writing-profiles/design.md「被否決的路」）。
+_ZH_NATURALNESS_SEED = """\
+- **Deliverable-language naturalness** (seeded from `docspec reference writing-zh`; re-run it for
+  the full reasoning/citations, or if this is a normative/spec document also pull in the 規範詞
+  與需求句紀律 table):
+  - 動詞當家：把「進行/作出/予以/加以＋名詞」還原成動詞（「進行查核」→「查核」）；同類弱動詞
+    （施加/執行/實施/造成/受到）逐個判斷，別無腦改。
+  - 被字句只用在真正不如意的事：中性/正面的事不加「被」（「他被升為營長」→「他升為營長」）。
+  - 「的」不連三層以上：定語堆疊三層以上拆成後置短句。
+  - 連接詞只留扛邏輯的：純裝飾的「和／由於…所以／當…的時候」能省則省，因果/條件接榫
+    （因為…所以、若…則）留著。
+  - 冗詞與空範疇詞直接刪：「有很多問題存在」→「問題很多」；「作為一個…」通常是英文直譯可刪。
+  - 結構性內容交給版面：規則/介面/狀態機用表格條列，不用散文扛三層條件。
+  - 段落用內容銜接：指前文用「上述兩道措施」，不要「如前所述」這種報幕式連結。
+  - 禁報幕：不寫「本節規範…／本節說明…／可驗證性:／設計依據:」這類元敘述，直接給結論/規定/事實。
+  - 語域一以貫之：選定正式度後不中途轉口語/行銷腔。
+"""
+
+_EN_NATURALNESS_SEED = """\
+- **Deliverable-language naturalness** (seeded from `docspec reference writing-en`; re-run it for
+  the full reasoning/citations, or for the RFC 2119 requirement-keyword table on a normative
+  document):
+  - Verb-centric: turn nominalizations back into verbs ("make a decision" → "decide"); scan
+    `-tion`/`-ment`/`-ity` stacked with a weak verb (*is, has, undergoes*).
+  - Active voice by default: "the system validates the request", not "the request is validated by
+    the system"; use the passive only when the actor is unknown or irrelevant.
+  - Cut the hedge-and-inflate pattern: say the claim directly, or mark it `[TBD]` — don't
+    manufacture false modesty around a claim you're actually making.
+  - Avoid the AI-ism word list: delve, tapestry, realm, leverage (as a verb), utilize, seamless,
+    robust, boasts, testament to — prefer the plain, shorter word.
+  - Em-dash / "not just X — it's Y" only for a genuine interruption or emphasis, never as default
+    connective tissue between clauses.
+  - No throat-clearing openers or closers: cut "In today's fast-paced world" and generic
+    "In conclusion, X is a multifaceted topic" restatements.
+  - No self-narration of the document's own structure: state the content directly, don't announce
+    "this section will discuss X" or "first... then... finally...".
+  - Default to prose for explanation; reserve lists for genuinely enumerable, parallel items
+    (avoid bullet-itis).
+"""
+
+_GENERIC_NATURALNESS_PLACEHOLDER = """\
+- **Deliverable-language naturalness**: (fill-in guidance — this is the concrete face of backbone
+  rule 12: docspec ships no bundled reference for this language yet. (1) run `docspec reference`
+  to confirm, and check `writing-zh`/`writing-en` for the shape a reference doc takes; (2) draft
+  concrete bad→good pairs for THIS project's language and genre, citing a real, checkable source
+  — never invent an example or an equivalence a source doesn't actually make; (3) ask the human to
+  confirm or adjust before treating this bullet as final — writing-guide.md is shared, load-bearing
+  doctrine, not something to silently auto-fill)
+"""
+
+
+def _naturalness_seed(lang: str) -> str:
+    """語言已知（zh-TW/zh-CN 等 zh 系、en）→ 種通用規則濃縮版；其他語言→維持填寫指引佔位。"""
+    norm = lang.strip().lower()
+    if norm.startswith("zh"):
+        return _ZH_NATURALNESS_SEED
+    if norm == "en" or norm.startswith("en-") or norm.startswith("en_"):
+        return _EN_NATURALNESS_SEED
+    return _GENERIC_NATURALNESS_PLACEHOLDER
+
+
+def build_writing_guide(lang: str) -> str:
+    """組出完整 writing-guide.md：語言中性 backbone（不變）＋ Project Conventions（自然度 bullet
+    依 `--lang` 種對應語言的通用規則濃縮版；其餘 bullet 維持文類特化的填寫佔位，因為文類要 develop
+    才決定）。"""
+    deliverable_language_hint = (
+        f"{lang} (confirm/adjust during develop; which terms keep their original language)"
+        if lang.strip() else "(e.g. zh-TW / English; which terms keep their original language)"
+    )
+    return _WRITING_GUIDE_BACKBONE + f"""\
 ## Project conventions (fill during `develop`, in the deliverable language)
 <!-- The only zone that grows. One concrete imperative per bullet; refine in place —
      supersede, don't stack near-duplicates. Machine-checkable term identity goes to
      glossary.yaml, not here. -->
-- **Deliverable language**: (e.g. zh-TW / English; which terms keep their original language)
-- **Deliverable-language naturalness**: (when the language is not English, name the translationese
-  phrasings to avoid and their natural replacements; note sentence-rhythm habits — this is the
-  concrete face of backbone rule 12)
+- **Deliverable language**: {deliverable_language_hint}
+{_naturalness_seed(lang)}\
 - **Requirement keyword dictionary**: (deliverable-language tokens for MUST / MUST NOT / SHOULD / SHOULD NOT / MAY)
 - **Banned openers / filler**: (deliverable-language list for rule 4)
 - **No report-style section metadiscourse**: (deliverable-language ban for rule 4 — e.g. 不寫
@@ -204,7 +282,7 @@ def run(argv: list[str]) -> int:
     # writing-guide 的 Project conventions 區，config.language 先放 --lang 預設提示。
     for fname, body in (
         (CONFIG_FILE_NAME, _CONFIG_TEMPLATE.replace("{lang}", lang)),
-        ("writing-guide.md", _WRITING_GUIDE),
+        ("writing-guide.md", build_writing_guide(lang)),
         ("glossary.yaml", _GLOSSARY_TEMPLATE),
     ):
         p = home / fname
