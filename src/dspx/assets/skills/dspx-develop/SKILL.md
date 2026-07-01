@@ -164,12 +164,25 @@ not from scratch.
   *fake-real* placeholder is worse than either.
 - **Own the document's shared style** — setting the document-wide tone and conventions is a develop
   decision, like the root brief; `edit`/`factcheck` only flag a new convention, you lift it in.
-  **Fill the writing-guide's `Project conventions` zone — do NOT leave it as the empty template.**
-  When the deliverable language is not English this is mandatory, not optional: the backbone is
-  English expository doctrine, so without project conventions `draft` renders the deliverable
-  language against English-shaped rules and produces translationese. At minimum fill the
-  deliverable language, the **deliverable-language naturalness** notes (phrasings no native writer
-  would use → their natural form), the requirement-keyword dictionary, and the banned openers.
+  **Fill the writing-guide's `Project conventions` zone — do NOT leave any bullet as the empty
+  template.** When the deliverable language is not English this is mandatory, not optional: the
+  backbone is English expository doctrine, so without project conventions `draft` renders the
+  deliverable language against English-shaped rules and produces translationese. `init` already
+  seeds the **deliverable-language naturalness** bullet with the language-generic rules from
+  `docspec reference writing-<lang>` (zh-TW/en today) — READ what's there, don't assume it's empty.
+  Your job is to **review it, then add what's genre-specific**: if this is a normative/spec
+  document, pull in the requirement-keyword table and requirement-sentence discipline from the same
+  `docspec reference writing-<lang>` (the seed omits it — not every document needs it); add any
+  domain-specific banned words the seed can't know about; and still fill the requirement-keyword
+  dictionary and banned openers bullets, which are NOT pre-seeded (they depend on this project's
+  genre). If the project's language has no bundled reference (anything other than zh-TW/en), the
+  naturalness bullet is still the empty fill-in-guidance template — run `docspec reference` to
+  confirm, then draft it from a real, checkable source (never invent an example). **Whatever you
+  add or change, propose it to the human and wait for a nod (or a correction) before treating it as
+  final** — this zone is shared, load-bearing doctrine every section's prose is checked against,
+  not a scratch field to silently auto-fill, and inventing a cross-language equivalence a source
+  doesn't actually make is forbidden (Chinese-translationese and AI-sounding-English are two
+  different diseases, not the same rule per language).
 
 ---
 ## The Brief — the cure for word salad

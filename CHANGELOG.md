@@ -40,9 +40,9 @@ a minor bump.
   as an alternative).
 - **Slot contract** (`dspx.slots`) — a validated, closed named set (title / subtitle / authors /
   date / version / abstract / keywords / shorttitle / shortauthors / body) both emitters honor.
-- **Image embedding** (Stage A) — sections embed images from `corpus/<section>/assets/`; a
-  pre-render integrity check fails loud on a missing image reference; image hashes fold into the
-  section's staleness fingerprint.
+- **Image embedding** (Stage A; superseded by Model A below — kept for history) — sections
+  originally embedded images from `corpus/<section>/assets/`; a pre-render integrity check failed
+  loud on a missing image reference; image hashes folded into the section's staleness fingerprint.
 
 ### Fixed — Typst typography
 
@@ -74,3 +74,115 @@ a minor bump.
   export's LaTeX build path, and the format-config cas-sc LaTeX-emit functions (format_config.py now
   exposes only `validate_format_config` / `compile_typst_vars` / `pandoc_highlight_style` /
   `pandoc_table_metavars` plus helpers).
+
+### Added — delivery quality, multi-document governance, and skill truthfulness
+
+- **Content-based language detection** (`config.detect_language`) drives changelog i18n and
+  export lang/region instead of a static project setting; changelog level labels (major/minor/
+  patch) are localized to match.
+- **`group.yaml` gets an optional `order`** — render honors it for grouping-node sort instead of
+  always alphabetical.
+- Journal `.tex` emits to `docs/exports/journals/<id>/` (no collision with the Typst-track output).
+- `export` keeps only the latest PDF by default (`--keep` to retain older ones).
+- **Multi-document staleness closes real gaps**: `deps_fingerprint` now folds a realized
+  decision's `status`, so superseding it correctly restales every consumer across documents;
+  `ancestor_brief_fingerprint` spans the full `governed-by` closure (not just the same-tree path),
+  so a governance parent's brief change restales its cross-tree children too; `check` rejects a
+  `governed-by` edge into a `deprecated` concept.
+- `draft` receives ancestor normative rulings and the project purpose in its aperture; `factcheck`'s
+  projection foregrounds the coverage contract (`must_cover` + layout/kind).
+- Article-root cover title now reads from `corpus/<article>/group.yaml` (fixes a CJK document
+  cover showing a romanized slug instead of its real title).
+- Skills no longer claim engine enforcement that doesn't exist, or hardcode specific lint rule
+  codes in prose (codes drift; skills now describe the behavior). The STEP-0 recovery paragraph is
+  byte-identical across all skills (test-guarded, so it can't drift skill-to-skill).
+- Typst document-type profiles (paper/manual/essay/novel/academic/default) plus accumulated
+  typography fixes: two-column paper layout, table column-width balancing, heading-level tuning.
+
+### Fixed — revision integrity (staleness false-greens + semantic coherence)
+
+- `concept.sources` is now external-provenance-only: `check` ERRORs if it holds an internal
+  decision id (that belongs in `realizes`/`governed-by`, which staleness actually tracks) and WARNs
+  on a prose-only cross-section reference with no structural edge.
+- **The single biggest staleness false-green**: `render` used to re-stamp a section's fingerprint
+  on every render even when its prose hadn't actually been rewritten, silently clearing a real
+  `stale-own`/`stale-upstream` signal. It now reuses the prior fingerprint when the prose is
+  unchanged, so the signal survives until someone actually rewrites the section.
+- The corpus YAML loader fails loud on a duplicate mapping key (previously PyYAML silently kept the
+  last one, corrupting a decision record without any warning).
+- `render --ack <section>` clears `stale-inherited` when the prose genuinely needs no change
+  (refused if the section is actually `stale-own`/`stale-upstream` — rewrite it instead).
+- `edit`/`factcheck` re-examine the document's title/framing on a deep revision, not just the
+  touched section.
+- **Non-blocking semantic coherence** (no new engine gate): `factcheck`'s aperture projects a
+  coherence contract — title/framing/own-brief/decision/figure checked against the current prose
+  and the ancestor brief — and raises non-blocking audit findings on a contradiction; `develop`
+  sweeps the metadata/asset layers (not just prose) on a brief pivot or decision supersede;
+  `render --ack` prints a non-blocking reminder to re-check coherence.
+
+### Added — `dspx-diagram` hardening + managed drawio install policy
+
+- `validate.py` (vendored, MIT, modified) now flags a floating edge endpoint, treats a vertex that
+  geometrically encloses other leaves as a visual container (cut 30 false-positive warnings to 3 on
+  a real architecture diagram), and makes the edge-crossing warning jumpStyle-aware.
+- `dspx-diagram/SKILL.md` gains a Layout & routing section (layer by flow, re-routing on a frozen
+  layout, label positioning) and corrects a misattributed v24 guardrail — the real blocker for
+  draw.io CLI exports was the `ELECTRON_RUN_AS_NODE` environment variable, not the drawio version.
+- `setup`'s managed drawio install now treats its pinned version as a **minimum floor, not an exact
+  pin**: it keeps any installed binary at or above the verified-working floor and only re-downloads
+  the pinned, sha256-verified release when a probed version is below that floor (an unprobeable
+  version — e.g. headless/timeout — is left alone rather than treated as bad).
+- `.gitattributes` pins LF line endings repo-wide, stopping Windows-checkout CRLF churn.
+
+### Added — authoring-guidance completeness (byline, placeholder hygiene, publish checklist)
+
+- **Byline is a `develop`-level decision**: when the real author identity is unknown, fill an
+  obvious RFC 2606 reserved placeholder (`author@example.com`) — never a plausible-looking
+  fabricated name. Lint **V13** (WARN) backstops this mechanically: it flags reserved
+  example/placeholder tokens (`example.*` domains, lorem ipsum, `555-01xx` numbers) shipped in the
+  deliverable.
+- Lint **V14** (WARN): an image asset that exists in the assets folder but is never embedded by the
+  deliverable (orphan asset).
+- The coherence contract gains a cross-document pair: `factcheck` now also checks a `realized`
+  decision's statement against the consuming section's prose, catching prose that still implements
+  a since-superseded upstream truth.
+- `publish` runs a whole-document convergence checklist before the trigger, so an agent can't
+  declare victory right after `draft` and skip `edit`/`factcheck`.
+- `docspec status` projects the sync-state → skill-routing legend (which skill picks up which
+  staleness flag).
+
+### Fixed — forest governance, staleness axes, and deliverable-cleanliness (backstage-leak family)
+
+- **`realizes` liveness**: `check` now rejects a `realizes` edge into a retired or misrouted
+  (concept-kind) target instead of silently accepting it; a superseded-but-present target is still
+  allowed through as a legal transition window. `aperture` surfaces the live/superseded status of a
+  realized decision and walks the supersede chain to its terminal live successor, instead of
+  silently anchoring `draft`'s output on dead truth.
+- **Transitive blast radius**: `docspec impact <concept>` now reports the *transitive*
+  `governed-by` blast radius (every downstream document, not just direct children) — this matches
+  what `status` actually re-stales, so `impact` no longer under-reports the effect of a change.
+  Cycle-path reporting trims the DFS lead-in so only the real cycle prints, not an unrelated
+  upstream path fragment.
+- **New `stale-style` ledger axis**: a `style_fingerprint` (hash of `writing-guide.md` +
+  `glossary.yaml`) means restyling the shared writing guide is no longer invisible to staleness —
+  every section written against the old style is flagged `stale-style` (lowest-priority axis: own >
+  upstream > inherited > style) and routes through `edit`, clearable via `render --ack`.
+- **Diagram assets move to the delivery side (Model A)**: `.drawio` sources and their rendered PNGs
+  now live under `docs/assets/` (or `docs/<article>/assets/` in a per-article layout), not
+  `corpus/<section>/assets/` — diagrams are a deliverable, not backstage authoring source. This
+  supersedes the Stage-A image-embedding note above. The per-section asset-basename-collision guard
+  in `check` is dropped (moot once every article's assets live in one place); `export`/`check` read
+  from `docs/assets/`.
+- **Ledger moves out of `docs/`**: the section-fingerprint ledger (staleness bookkeeping) moves from
+  a `docs/` sidecar file into `docspec/.ledger/<article>.sections.yaml` — `docs/` now holds only
+  deliverables, no machine bookkeeping. `docspec skills install` defaults to `--tool claude` only
+  (was: all three agent integrations) — pass `--tool all` to install every integration.
+- **Lint V15** (ERROR, closed blocklist): authoring-tool/governance vocabulary (`forest`,
+  `governed-by`, `Tier-N`, `factcheck`, `raise a finding`, …) leaking into deliverable prose.
+  Writing-guide backbone rule 8 names the ban and requires a domain-language replacement.
+- **Backstage brief/coverage projections carry a non-narration guard**: `instructions` marks the
+  backstage brief/coverage/coherence/ancestor-normative blocks it projects to `draft`/`develop` as
+  "obey, never narrate" — `draft`/`develop` no longer open a section with a
+  "this section establishes…" role-framing announcement. Extended to the whole-document overview
+  level: the root/overview section may not narrate the document's own chapter structure or refer to
+  the document as a self-made artifact ("this spec splits the work into…").

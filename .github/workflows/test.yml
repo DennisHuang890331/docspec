@@ -6,19 +6,23 @@ on:
 
 jobs:
   test:
-    name: pytest (${{ matrix.os }})
+    name: pytest (${{ matrix.os }}, py${{ matrix.python-version }})
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        # pyproject.toml declares requires-python = ">=3.11" with no upper bound; test the
+        # floor plus the two newest stable releases so a regression on a newer interpreter
+        # doesn't ship silently.
+        python-version: ["3.11", "3.12", "3.13"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up uv + Python 3.11
+      - name: Set up uv + Python ${{ matrix.python-version }}
         uses: astral-sh/setup-uv@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python-version }}
 
       # Runs the engine test suite. The PDF-pipeline tests (export/proof) require the
       # controlled TinyTeX + fonts installed by `docspec setup` and a pandoc binary;

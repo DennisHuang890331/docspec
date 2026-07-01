@@ -1,7 +1,8 @@
 """內建 skill 的盤點與讀取。
 
-5 個權威 skill 原始檔以套件資料形式隨 dspx 散布
-（`src/dspx/skills/<name>/SKILL.md`，仿 schema 的 `schemas/`）。
+權威 skill 原始檔以套件資料形式隨 dspx 散布（`src/dspx/assets/skills/<name>/SKILL.md`——
+住 `assets/` 底下，跟 `assets/templates/`／`assets/fonts/`／`assets/reference/` 同一類：
+出貨資料，非可執行程式碼；模組同名的 `src/dspx/skills.py` 才是讀它的程式碼，兩者不要混淆）。
 本模組只負責「列出有哪些、讀出 frontmatter＋本文」；安裝/產生到三工具
 （Claude／Antigravity／Codex）的邏輯在 commands/skills_cmd.py。
 """
@@ -67,8 +68,8 @@ def _fold(value: str) -> str:
 
 
 def builtin_skills_root() -> Path:
-    """內建 skill 資料夾（套件資料）。"""
-    return Path(str(files("dspx").joinpath("skills")))
+    """內建 skill 資料夾（套件資料，住 assets/ 底下）。"""
+    return Path(str(files("dspx").joinpath("assets", "skills")))
 
 
 def _load_one(skill_dir: Path) -> Skill:

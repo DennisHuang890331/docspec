@@ -4,10 +4,29 @@ version = "0.1.0"
 description = "docspec — 文件 SDD 工具（doc-driven spec development）"
 readme = "README.md"
 requires-python = ">=3.11"
+authors = [{ name = "Yao-Jiun Huang" }]
+keywords = ["documentation", "spec-driven-development", "sdd", "cli", "agentic", "typst", "pdf"]
 # PolyForm Noncommercial 1.0.0 — source-available, free for noncommercial use, commercial
 # use requires a separate license. NOT an OSI open-source license. See LICENSE.
 license = { file = "LICENSE" }
-classifiers = ["License :: Free for non-commercial use"]
+# "License :: Free for non-commercial use" IS a real PyPI trove classifier (verified against
+# pypa/trove-classifiers) — not a placeholder, keep as-is.
+classifiers = [
+    "License :: Free for non-commercial use",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Topic :: Documentation",
+    "Topic :: Software Development :: Documentation",
+    "Topic :: Text Processing :: Markup :: Markdown",
+]
+# [project.urls] intentionally omitted — this repo has no public remote yet (see
+# CONTRIBUTING.md / repo-organization backlog); add Repository/Issues once one exists rather
+# than invent a URL that doesn't resolve.
 # platformdirs：解析每平台 data_dir（%LOCALAPPDATA%\docspec／~/.local/share/docspec／
 # ~/Library/Application Support/docspec），供 `docspec setup` 落地受控 TinyTeX＋字型、
 # export/proof 解析它們（Phase B；字型移出 wheel）。
