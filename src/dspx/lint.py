@@ -14,6 +14,7 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   V11 凍結區（archive/）被竄改    ERROR  ← 已發行版本不可變（見 dspx.freeze）
   V12 docs 殘留 GFM 警示/暫停旗   ERROR  ← `> [!WARNING]` 等 alert；draft 撞決策衝突刻意產生、絕不該 ship
   V15 docs 殘留撰寫工具/治理詞彙   ERROR  ← forest/governed-by/治理父/fan-in/factcheck/Tier-N/L2a/§回引…＝後台詞洩進交付物（補 V1 覆蓋缺口）
+  V16 規範語句逃避詞（同句 應/不得）WARN  ← 最好／儘量／酌情／如有可能／視情況／最大限度（必要時故意排除，見下）
   Vg1/Vg2 術語一致               WARN
   Ve1 死錨點連結（export 破）     WARN  ← `](#x)` 對不上任何標題 slug → xelatex PDF 整份失敗
   Ve2 非標準 markdown（@import）  WARN  ← MPE 指令不會在 docx/PDF 渲染
@@ -92,6 +93,20 @@ _TOOL_VOCAB_RE = re.compile(
     r"|raise.{0,12}finding",                       # raise 一筆 finding（引擎工作流措辭）
     re.IGNORECASE,
 )
+# V16 規範逃避詞（WARN，同句 應/不得）：封閉 6 詞——最好／儘量／酌情／如有可能／視情況／
+# 最大限度——與規範關鍵字（應／不得）同一「偽句」（。！？；ㄧ切界）出現＝作者把該寫成可驗收的
+# 規定軟化成無法驗收的裁量。`必要時` 刻意排除：它有合法的 EARS 條件觸發讀法（「必要時 X」＝
+# 「當 X 情境發生時」），與其餘 6 詞「本質上就是無結構裁量/程度」不同——ground-truthing 在真實
+# 語料中找到 10/10 的 `必要時` 都是合法條件觸發（含兩例正好與 `不得` 同句，本該是設計最強訊號的
+# 情境，結果相反）。封閉詞表在真實語料尚未有任何命中（未被驗證有效，也未被證偽）——見 change
+# deliverable-cleanliness-normative-escape-hatch design.md。WARN 非 ERROR：命中只代表「像是作者
+# 迴避了可驗收的規定」，逃避詞的前提條件仍可能在文件別處被獨立、封閉地定義，那是人的判斷。
+_ESCAPE_HATCH_RE = re.compile(r"最好|儘量|酌情|如有可能|視情況|最大限度")
+_NORMATIVE_KEYWORD_RE = re.compile(r"應|不得")
+# 偽句切分（V16 專用、不共用）：僅供本規則判定「同句」，非通用中文斷句器，不需 material 的
+# 表格/條列/程式碼感知——只在乎標點界定的子句。
+_PSEUDO_SENTENCE_SPLIT_RE = re.compile(r"[。！？；]")
+
 # 潔淨掃描（V1–V4）前剝掉程式碼：fenced ```…``` 與 inline `…` 內是內容（KE 模板/JSON/
 # 變數名/泛型），不是交付物洩漏的機械。同 V6 對 material code block 的處理。
 _FENCED_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
@@ -159,6 +174,19 @@ def _lint_docs(layout: Layout, articles: list[str], all_ids: set[str]) -> list[F
                                     "(name the document, \"per 《…》\", \"see 《…》\"), not backstage "
                                     "terms (forest / governed-by / governance parent / Tier-N / L2a / "
                                     "fan-in / module-section / factcheck / raise a finding / §back-ref)"))
+        seen_escape_hatch: set[str] = set()
+        for sentence in _PSEUDO_SENTENCE_SPLIT_RE.split(body):
+            if not _NORMATIVE_KEYWORD_RE.search(sentence):
+                continue
+            for m in _ESCAPE_HATCH_RE.findall(sentence):
+                if m in seen_escape_hatch:
+                    continue
+                seen_escape_hatch.add(m)
+                findings.append(Finding("V16", WARN, where,
+                                        f"normative escape-hatch hedge word \"{m}\" in the same sentence "
+                                        "as a normative keyword (應/不得) -- looks like an unconditional, "
+                                        "testable requirement was softened into an unverifiable one; "
+                                        "either state a closed condition or drop the hedge"))
     return findings
 
 

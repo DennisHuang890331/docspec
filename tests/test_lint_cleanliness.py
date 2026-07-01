@@ -209,3 +209,45 @@ def test_v15_code_span_tool_token_exempt(make_project, write_leaf, monkeypatch):
     layout = _render(home, monkeypatch)
     _inject(layout, "a", "\n\n設定範例 `governed-by: c1`，指令 `docspec factcheck`。\n")
     assert not any(f.rule == "V15" for f in _lint(layout))
+
+
+# ── V16 規範逃避詞（WARN、同句 應/不得）──────────────────────────────
+
+def test_v16_hedge_word_with_normative_keyword_caught(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n系統應視情況重新啟動。本模組不得儘量避免記錄失敗事件。\n")
+    v16 = [f for f in _lint(layout) if f.rule == "V16"]
+    assert v16 and all(f.level == WARN for f in v16)
+    hits = {f.detail.split('"')[1] for f in v16}
+    assert "視情況" in hits and "儘量" in hits
+
+
+def test_v16_hedge_word_without_normative_keyword_not_flagged(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n維運人員最好熟悉現場環境，酌情安排巡檢排班。\n")
+    assert not any(f.rule == "V16" for f in _lint(layout))
+
+
+def test_v16_biyaoshi_never_flagged_even_next_to_budebu(make_project, write_leaf, monkeypatch):
+    """必要時故意排除：即使同句緊鄰 不得，也不該觸發 V16。"""
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n非經雙邊確認握手不得自行解除，必要時另行處理。\n")
+    assert not any(f.rule == "V16" for f in _lint(layout))
+
+
+def test_v16_different_pseudo_sentences_not_flagged(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n系統應於逾時後停止服務。維護排程視情況調整。\n")
+    assert not any(f.rule == "V16" for f in _lint(layout))
+
+
+def test_v16_code_span_tokens_exempt(make_project, write_leaf, monkeypatch):
+    """code 區段內的 應/視情況 是內容範例，不該觸發 V16。"""
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n範例片段：`系統應視情況重新啟動`，僅供說明格式。\n")
+    assert not any(f.rule == "V16" for f in _lint(layout))
