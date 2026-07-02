@@ -2,7 +2,7 @@
 
 <img src="docs/assets/logo.png" alt="docspec logo" width="200">
 
-# docspec — 跟 AI agent 一起寫長篇技術文件，愈寫愈長也不走樣，最後匯出乾淨的 Markdown 或排版完整的 PDF
+### docspec — 跟 AI agent 一起寫長篇技術文件，愈寫愈長也不走樣，最後匯出乾淨的 Markdown 或排版完整的 PDF
 
 ![CI](https://github.com/DennisHuang890331/docspec/actions/workflows/test.yml/badge.svg) ![Python](https://img.shields.io/badge/python-%E2%89%A53.11-blue) ![License](https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-orange) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 
