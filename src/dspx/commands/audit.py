@@ -90,6 +90,12 @@ def run(argv: list[str]) -> int:
     p_show = sub.add_parser("show", help="view a finding (with its red-team thread)")
     p_show.add_argument("id")
 
+    p_sum = sub.add_parser("summary", help="mechanical convergence summary of the audit store "
+                                           "(explicit zero-state; never a gate)")
+    p_sum.add_argument("article", nargs="?", default=None,
+                       help="scope to this article (its doc store + forest findings touching it)")
+    p_sum.add_argument("--json", action="store_true", dest="sum_json")
+
     # 預設（無 op）= 彙總列出
     parser.add_argument("--article", dest="list_article", default=None,
                         help="list only a document store's findings (doc:<article>)")
@@ -152,6 +158,61 @@ def run(argv: list[str]) -> int:
         if args.as_json:
             print(json.dumps(f, ensure_ascii=False, indent=2)); return 0
         _render_finding(store.store, f)
+        return 0
+
+    if args.op == "summary":
+        # 涵蓋規則＝mirror publish._count_open_findings：doc store ＝ doc:<article>，
+        # **加上** targets 觸及該文章的 forest findings（distinct_articles）。刻意不沿用
+        # 預設列表 `--article` 的 doc-store-only 過濾——那會漏算 factcheck 最需要看的跨文件 finding。
+        from dspx.audit import distinct_articles
+        rows = []
+        for f in all_findings(layout, leaves):
+            if args.article:
+                store = f.get("_store", "")
+                in_scope = (
+                    store == f"doc:{args.article}"
+                    or (store == "forest"
+                        and args.article in distinct_articles(f.get("targets") or [], leaves)))
+                if not in_scope:
+                    continue
+            rows.append(f)
+
+        statuses = ("open", "fixed", "rejected", "waived", "closed")
+        by_status = {s: 0 for s in statuses}
+        for r in rows:
+            s = str(r.get("status"))
+            by_status[s] = by_status.get(s, 0) + 1
+        open_rows = [r for r in rows if r.get("status") == "open"]
+        open_by_sev: dict[str, int] = {}
+        open_by_face: dict[str, int] = {}
+        for r in open_rows:
+            open_by_sev[str(r.get("severity"))] = open_by_sev.get(str(r.get("severity")), 0) + 1
+            open_by_face[str(r.get("face"))] = open_by_face.get(str(r.get("face")), 0) + 1
+        by_verdict = {"contradicted": 0, "unsupported": 0, "none": 0}
+        for r in rows:
+            v = str(r.get("verdict") or "").strip() or "none"
+            by_verdict[v] = by_verdict.get(v, 0) + 1
+
+        if args.sum_json:
+            print(json.dumps({"article": args.article, "byStatus": by_status,
+                              "openBySeverity": open_by_sev, "openByFace": open_by_face,
+                              "byVerdict": by_verdict, "open": len(open_rows)},
+                             ensure_ascii=False, indent=2))
+            return 0
+
+        scope = f"article \"{args.article}\"" if args.article else "the project"
+        print(f"audit summary — {scope}")
+        for s in statuses:
+            print(f"  {s}: {by_status[s]}")
+        if open_rows:
+            print("  open by severity: "
+                  + "  ".join(f"{k}:{v}" for k, v in sorted(open_by_sev.items())))
+            print("  open by face: "
+                  + "  ".join(f"{k}:{v}" for k, v in sorted(open_by_face.items())))
+        print("  verdict: " + "  ".join(f"{k}:{v}" for k, v in by_verdict.items()))
+        if not open_rows:
+            target = f"\"{args.article}\"" if args.article else "the project"
+            print(f"0 open finding(s) — nothing unresolved for {target}")
         return 0
 
     # ── 預設：彙總 ──

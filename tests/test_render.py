@@ -440,3 +440,103 @@ def test_f5_ack_refused_on_stale_own(make_project, write_leaf, monkeypatch, caps
     render_cmd.run(["g", "--ack", "g/intro"])          # 嘗試 ack
     assert _sync_of(home, "g", "g/intro") == "stale-own"   # 仍 stale-own（沒被吞）
     assert "refused" in capsys.readouterr().err
+
+
+# ── 13b：關閉式標記剝除（凍結快照）＋不掩蓋手改 ─────────────────────────
+
+
+def test_strip_markers_drops_closing_form_lines():
+    """7.1a/c：關閉式 `<!-- /dspx… -->` 行被剝除；開啟式剝除行為不變、散文保留。"""
+    text = ("<!-- dspx:section g/x -->\n## T\n\n內文。\n"
+            "<!-- /dspx:section g/x -->\n"
+            "<!-- / dspx:group g -->\n"
+            "<!-- dspx:group g -->\n尾。\n")
+    out = strip_markers(text)
+    assert "dspx" not in out                       # 開啟式＋關閉式全剝
+    assert "內文。" in out and "尾。" in out and "## T" in out
+
+
+def test_closing_marker_in_body_still_counts_as_prose_drift(make_project, write_leaf,
+                                                            monkeypatch):
+    """7.1b：手加關閉式標記行仍算該節散文（parse 刻意不剝）→ prose 指紋變、diff 報漂移。"""
+    from dspx.layout import Layout
+    from dspx.render import detect_drift
+    home = _setup(make_project, write_leaf)
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])
+    latest = _latest(home)
+    latest.write_text(latest.read_text("utf-8").replace("## 概覽\n", "## 概覽\n\n內文。\n"), "utf-8")
+    render_cmd.run(["g"])                              # 記 prose 指紋
+    assert detect_drift(Layout(home), "g") == []
+    latest.write_text(latest.read_text("utf-8").replace(
+        "內文。\n", "內文。\n<!-- /dspx:section g/intro -->\n"), "utf-8")
+    assert [d["section"] for d in detect_drift(Layout(home), "g")] == ["g/intro"]
+
+
+# ── 13a：CJK 封面 stderr 提示（Decision 9）──────────────────────────────
+
+
+def test_cjk_slug_cover_hint_fires_only_with_cjk_prose(make_project, write_leaf,
+                                                       monkeypatch, capsys):
+    """7.2a/d：CJK 散文＋slug 封面 → stderr 提示、輸出檔不變；空文章（無散文）→ 沉默。"""
+    home = make_project()
+    write_leaf(home, "gongyuan/x", concept={"id": "c1", "title": "節", "order": 1})
+    monkeypatch.chdir(home.parent)
+    assert render_cmd.run(["gongyuan"]) == 0           # 空文章：fallback "en" → 無提示
+    assert "cover title falls back" not in capsys.readouterr().err
+    latest = home.parent / "docs" / "gongyuan" / "_latest.md"
+    latest.write_text(latest.read_text("utf-8").replace("## 節\n", "## 節\n\n中文內文散文。\n"),
+                      "utf-8")
+    assert render_cmd.run(["gongyuan"]) == 0
+    err = capsys.readouterr().err
+    assert ('cover title falls back to the humanized slug "Gongyuan" '
+            "but the article's content is CJK") in err
+    assert "corpus/gongyuan/group.yaml" in err and "title:" in err
+    text = latest.read_text("utf-8")
+    assert "cover title falls back" not in text        # 提示只上 stderr、不進輸出檔
+    assert "# Gongyuan" in text                        # 封面照舊 humanize fallback（無行為變更）
+
+
+def test_cjk_cover_hint_silent_with_group_title(make_project, write_leaf, monkeypatch, capsys):
+    """7.2b：group.yaml title 在 → 無提示、封面在地化。"""
+    home = make_project()
+    write_leaf(home, "art/x", concept={"id": "c1", "title": "節", "order": 1})
+    (home / "corpus" / "art" / "group.yaml").write_text(
+        yaml.safe_dump({"title": "在地化標題"}, allow_unicode=True), encoding="utf-8")
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["art"])
+    latest = home.parent / "docs" / "art" / "_latest.md"
+    latest.write_text(latest.read_text("utf-8").replace("## 節\n", "## 節\n\n中文散文內容。\n"),
+                      "utf-8")
+    capsys.readouterr()
+    assert render_cmd.run(["art"]) == 0
+    assert "cover title falls back" not in capsys.readouterr().err
+    assert "# 在地化標題" in latest.read_text("utf-8")
+
+
+def test_cjk_cover_hint_silent_with_root_section(make_project, write_leaf, monkeypatch, capsys):
+    """7.2c：root 節存在（封面＝root 標題、非 fallback）→ 無提示。"""
+    home = make_project()
+    write_leaf(home, "art", concept={"id": "c1", "title": "根", "order": 1})
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["art"])
+    latest = home.parent / "docs" / "art" / "_latest.md"
+    latest.write_text(latest.read_text("utf-8").replace("# 根\n", "# 根\n\n中文導言散文。\n"),
+                      "utf-8")
+    capsys.readouterr()
+    assert render_cmd.run(["art"]) == 0
+    assert "cover title falls back" not in capsys.readouterr().err
+
+
+def test_cjk_cover_hint_silent_for_english_prose(make_project, write_leaf, monkeypatch, capsys):
+    """7.2e：英文散文 → 非 CJK 多數 → 無提示。"""
+    home = make_project()
+    write_leaf(home, "gateway/x", concept={"id": "c1", "title": "Node", "order": 1})
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["gateway"])
+    latest = home.parent / "docs" / "gateway" / "_latest.md"
+    latest.write_text(latest.read_text("utf-8").replace(
+        "## Node\n", "## Node\n\nEnglish prose body for the section.\n"), "utf-8")
+    capsys.readouterr()
+    assert render_cmd.run(["gateway"]) == 0
+    assert "cover title falls back" not in capsys.readouterr().err

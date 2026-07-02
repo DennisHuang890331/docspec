@@ -143,10 +143,13 @@ def run(argv: list[str]) -> int:
         print("   (backstage — wire structure with these, but NEVER write forest/governed-by/Tier-N/L2a/fan-in into the deliverable; name the document in domain language)")
         for d in f.get("documents", []):
             print(f"  [{d['article']}] {d.get('oneLiner') or ''}")
+            for a in d.get("anchors", []):
+                print(f"    anchor: {a['id']} — {a.get('title') or ''}  ({a['section']})")
         for h in f.get("hierarchy", []):
             print(f"  {h['childDoc']} → {h['parentDoc']}")
         for pair in f.get("parallel", []):
             print(f"  {pair[0]} ∥ {pair[1]}")
+        print("  (full concept catalogue of a document: docspec list <article> --json)")
         print()
 
     if proj.roadmap is not None:

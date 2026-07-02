@@ -281,3 +281,83 @@ def test_factcheck_coverage_contract_projected(make_project, write_leaf):
     assert cc and cc["must_cover"] == ["項目甲", "項目乙"]
     assert cc["layout"] == "prose" and cc["kind"] == "reference"
     assert _project(home, "draft", "doc/sec").coverage_contract is None
+
+
+# ── anchors：root concept ∪ 已被 governed-by 指到的 concept（Decision 4）──────
+
+
+def _anchor_forest(make_project, write_leaf, *, edge=True):
+    """文件 a：root（c-a-root）＋深路徑 anchor（c-a-anchor）＋無人指的 c-a-other；
+    文件 b：root（c-b），edge=True 時 governed-by c-a-anchor。"""
+    home = make_project()
+    write_leaf(home, "a", concept={"id": "c-a-root", "title": "A根", "order": 1,
+                                   "status": "draft", "concept": "A 主旨",
+                                   "brief": {"範圍": "一"}})
+    write_leaf(home, "a/deep/anchor", concept={"id": "c-a-anchor", "title": "深錨",
+                                               "order": 1, "status": "draft",
+                                               "concept": "深層治理錨點"})
+    write_leaf(home, "a/other", concept={"id": "c-a-other", "title": "其他", "order": 2,
+                                         "status": "draft", "concept": "無人指"})
+    b_concept = {"id": "c-b", "title": "B", "order": 1, "status": "draft",
+                 "concept": "B 主旨", "brief": {"範圍": "二"}}
+    if edge:
+        b_concept["governed-by"] = ["c-a-anchor"]
+    write_leaf(home, "b", concept=b_concept)
+    return home
+
+
+def test_forest_anchors_root_and_targeted_listed(make_project, write_leaf):
+    """6.1a：root concept ＋ 已被 governed-by 指到的非 root concept 都在 anchors（依 section 排序）；
+    6.1b：無人指的非 root concept 不在。"""
+    home = _anchor_forest(make_project, write_leaf)
+    docs = {d["article"]: d for d in forest_view(_leaves(home))["documents"]}
+    anchors = docs["a"]["anchors"]
+    assert [a["id"] for a in anchors] == ["c-a-root", "c-a-anchor"]   # section 排序：a < a/deep/…
+    assert anchors[1] == {"id": "c-a-anchor", "title": "深錨", "section": "a/deep/anchor"}
+    assert all(a["id"] != "c-a-other" for a in anchors)               # 未被指到 → 不列
+    assert [a["id"] for a in docs["b"]["anchors"]] == ["c-b"]         # b 只有 root
+
+
+def test_forest_anchor_disappears_with_only_edge(make_project, write_leaf):
+    """6.1c：移除唯一指向非 root anchor 的 governed-by → anchor 從候選消失（derive 自單一來源）。"""
+    home = _anchor_forest(make_project, write_leaf, edge=False)
+    docs = {d["article"]: d for d in forest_view(_leaves(home))["documents"]}
+    assert [a["id"] for a in docs["a"]["anchors"]] == ["c-a-root"]
+
+
+def test_develop_forest_map_prints_anchors_and_catalogue_hint(make_project, write_leaf,
+                                                              monkeypatch, capsys):
+    """6.2：instructions develop 的 Forest map 印 anchor 行＋目錄指引；非 develop 不投。"""
+    home = _anchor_forest(make_project, write_leaf)
+    monkeypatch.chdir(home.parent)
+    from dspx.commands import instructions as instr
+    assert instr.run(["develop", "b"]) == 0
+    out = capsys.readouterr().out
+    assert "    anchor: c-a-root — A根  (a)" in out
+    assert "    anchor: c-a-anchor — 深錨  (a/deep/anchor)" in out
+    assert "  (full concept catalogue of a document: docspec list <article> --json)" in out
+    # 非 develop skill：forest=None → 無 anchor 行、無目錄指引
+    assert instr.run(["draft", "b"]) == 0
+    out2 = capsys.readouterr().out
+    assert "anchor:" not in out2 and "full concept catalogue" not in out2
+
+
+# ── impact 零命中訊息（Decision 12 / 13d）─────────────────────────────────────
+
+
+def test_impact_zero_blast_message_not_orphan(make_project, write_leaf, monkeypatch, capsys):
+    """10.1：未被消費的活 concept → 訊息說 not-yet-consumed／no inbound，非裸孤兒句；
+    有下游時非零分支不變。"""
+    home = make_project()
+    write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1, "status": "draft",
+                                    "concept": "新 anchor", "brief": {"範圍": "一"}})
+    monkeypatch.chdir(home.parent)
+    assert impact_cmd.run(["c-t1"]) == 0
+    out = capsys.readouterr().out
+    assert "not-yet-consumed" in out and "no inbound" in out
+    assert "(nothing depends on it)" not in out
+    write_leaf(home, "t2", concept={"id": "c-t2", "title": "T2", "order": 1, "status": "draft",
+                                    "concept": "子", "brief": {"範圍": "二"},
+                                    "governed-by": ["c-t1"]})
+    assert impact_cmd.run(["c-t1"]) == 0
+    assert "(changing it means redoing these)" in capsys.readouterr().out

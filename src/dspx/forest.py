@@ -19,19 +19,41 @@ from dspx.model import Leaf
 def forest_view(leaves: list[Leaf]) -> dict:
     # concept.id → 擁有它的 leaf 的 article（rollup 用：governed-by 目標 → parentDoc）
     cid_to_article: dict[str, str] = {}
+    # concept.id → (title, section)：anchors 投影用（下游作者接 governed-by 時可發現目標 id）
+    cid_info: dict[str, tuple] = {}
     for lf in leaves:
         if lf.concept and lf.concept.get("id"):
-            cid_to_article[str(lf.concept["id"])] = lf.article
+            cid = str(lf.concept["id"])
+            cid_to_article[cid] = lf.article
+            cid_info[cid] = (lf.concept.get("title"), lf.section)
+
+    # anchor 候選＝root concept ∪「已被任一 leaf 的 governed-by 列為目標」的 concept（Decision 4）。
+    # 不限跨文件邊——被列為治理目標＝定義上就是 anchor；刻意不列全部 concept（round-11 單文件
+    # 30 葉＝投影洪水），完整目錄由 `docspec list <article> --json` 提供。
+    governed_targets: set[str] = set()
+    for lf in leaves:
+        if lf.concept:
+            for target in (lf.concept.get("governed-by") or []):
+                governed_targets.add(str(target))
 
     # documents：每個 root（section == article）且有 concept
     documents = []
     for lf in leaves:
         if lf.section == lf.article and lf.concept:
+            root_cid = lf.concept.get("id")
+            anchor_ids = {str(root_cid)} if root_cid else set()
+            anchor_ids |= {cid for cid in governed_targets
+                           if cid_to_article.get(cid) == lf.article}
+            anchors = sorted(
+                ({"id": cid, "title": cid_info[cid][0], "section": cid_info[cid][1]}
+                 for cid in anchor_ids if cid in cid_info),
+                key=lambda a: a["section"])
             documents.append({
                 "article": lf.article,
                 "conceptId": lf.concept.get("id"),
                 "oneLiner": lf.concept.get("concept"),
                 "status": lf.concept.get("status"),
+                "anchors": anchors,
             })
 
     # hierarchy：doc-level rollup（childDoc, parentDoc）→ via:[(childCid, parentCid)…]

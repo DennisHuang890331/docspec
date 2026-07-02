@@ -555,3 +555,87 @@ def test_publish_changelog_language_detected_not_config(make_project, write_leaf
     assert "| Version | Date | Level | Summary |" in cl   # 英文表頭
     assert "版本" not in cl                                # 無中文殘留（雖 config 是 zh-TW）
     assert "(no summary)" in cl
+
+
+# ── publish --dry-run（8.1，Decision 8）───────────────────────────────
+
+
+def _watch_state(paths):
+    return {str(p): (p.read_bytes() if p.is_file() else None) for p in paths}
+
+
+def test_publish_dry_run_green_zero_writes(make_project, write_leaf, monkeypatch, capsys):
+    """8.1a：全綠 → exit 0；_latest/帳本/changelog/快照夾全部位元不變。"""
+    from dspx.layout import Layout
+    home = make_project()
+    docs = _render_and_draft(home, monkeypatch, write_leaf, "內文。")
+    layout = Layout(home)
+    watch = [docs / "_latest.md", layout.docs_ledger("g"), layout.docs_changelog("g")]
+    before = _watch_state(watch)
+    capsys.readouterr()
+    assert publish_cmd.run(["g", "--dry-run"]) == 0
+    out = capsys.readouterr().out
+    assert "✓ check" in out and "✓ lint" in out and "✓ coverage" in out
+    assert "no-op: skipped (no prior version)" in out
+    assert "version preview: v1.0.0" in out
+    assert "dry-run verdict: GO" in out
+    assert _watch_state(watch) == before               # 零寫入
+    assert not (docs / "archive").exists()             # 無快照
+
+
+def test_publish_dry_run_red_lint_prints_consolidated_report(make_project, write_leaf,
+                                                             monkeypatch, capsys):
+    """8.1b：lint ERROR → exit 1、零寫入，且**彙總報告照印**（含 lint fail 行＋其餘閘行；
+    舊單閘 abort 訊息不出現＝分支點在既有閘區塊之前）。"""
+    from dspx.commands import render as render_cmd
+    home = make_project()
+    write_leaf(home, "g/x", concept={"id": "sec-leak", "title": "X", "order": 1})
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])
+    docs = home.parent / "docs" / "g"
+    latest = docs / "_latest.md"
+    latest.write_text(                                 # 散文洩漏內部 id → lint ERROR
+        latest.read_text(encoding="utf-8").replace("## X\n", "## X\n\n洩漏 sec-leak。\n"),
+        encoding="utf-8")
+    before = latest.read_bytes()
+    capsys.readouterr()
+    assert publish_cmd.run(["g", "--dry-run"]) == 1
+    captured = capsys.readouterr()
+    assert "✗ lint:" in captured.out and "ERROR finding(s)" in captured.out
+    assert "✓ check" in captured.out and "coverage" in captured.out   # 彙總、非 early-return
+    assert "dry-run verdict: NO-GO" in captured.out
+    assert "publish aborted" not in captured.err       # 舊 abort 訊息不得出現
+    assert latest.read_bytes() == before
+    assert not (docs / "archive").exists()
+
+
+def test_publish_dry_run_no_prose_is_nogo(make_project, write_leaf, monkeypatch, capsys):
+    """8.1c：零散文 → coverage 閘 fail、exit 1。"""
+    from dspx.commands import render as render_cmd
+    home = make_project()
+    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])                              # 只有骨架
+    capsys.readouterr()
+    assert publish_cmd.run(["g", "--dry-run"]) == 1
+    out = capsys.readouterr().out
+    assert "✗ coverage: no written sections yet" in out
+    assert "dry-run verdict: NO-GO" in out
+
+
+def test_publish_dry_run_noop_gate_and_allow_noop(make_project, write_leaf, monkeypatch, capsys):
+    """8.1d：內容與前版位元相同 → no-op 行＋exit 1；--allow-noop → 該閘標 skipped。"""
+    home = make_project()
+    docs = _render_and_draft(home, monkeypatch, write_leaf, "內文。")
+    assert publish_cmd.run(["g"]) == 0                 # 真發行 v1.0.0
+    capsys.readouterr()
+    assert publish_cmd.run(["g", "--dry-run"]) == 1
+    out = capsys.readouterr().out
+    assert "✗ no-op: content is byte-identical to v1.0.0" in out
+    assert publish_cmd.run(["g", "--dry-run", "--allow-noop"]) == 0
+    out = capsys.readouterr().out
+    assert "no-op: skipped (--allow-noop)" in out
+    assert "dry-run verdict: GO" in out
+    # dry-run 全程不動檔：仍只有 v1.0.0
+    assert (docs / "archive" / "v1.0.0.md").is_file()
+    assert not (docs / "archive" / "v1.0.1.md").exists()

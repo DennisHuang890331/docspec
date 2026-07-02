@@ -88,7 +88,7 @@ def run(argv: list[str]) -> int:
     if info["definedAt"]:
         print(f"  defined at: {info['definedAt']} ({info['kind']})")
     n = len(info["realizedBy"]) + len(info["governedBy"]) + len(info["governedTransitive"])
-    print(f"\nBlast radius: {n} section(s) depend on it" + (" (changing it means redoing these)" if n else " (nothing depends on it)"))
+    print(f"\nBlast radius: {n} section(s) depend on it" + (" (changing it means redoing these)" if n else " (nothing depends on it yet — no inbound realizes/governed-by edges; for a new anchor this means not-yet-consumed, not unused)"))
     for s in info["realizedBy"]:
         print(f"  realizes ← {s}")
     for s in info["governedBy"]:

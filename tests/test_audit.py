@@ -324,3 +324,77 @@ def test_check_catches_missing_required_concept_field(make_project):
     res = run_check(load_project(layout), load_schema(), layout=layout)
     assert not res.ok
     assert any("required" in e for e in res.errors)
+
+
+# ── summary：收斂訊號（9.1，Decision 2）─────────────────────────────
+
+
+def test_audit_summary_zero_state_line(make_project, write_leaf, monkeypatch, capsys):
+    """9.1a：無 finding 的文章／專案 → 明確 0-open 收斂行、exit 0。"""
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    monkeypatch.chdir(home.parent)
+    assert audit_cmd.run(["summary", "a"]) == 0
+    assert '0 open finding(s) — nothing unresolved for "a"' in capsys.readouterr().out
+    assert audit_cmd.run(["summary"]) == 0
+    assert "0 open finding(s) — nothing unresolved for the project" in capsys.readouterr().out
+
+
+def test_audit_summary_counts_statuses_severities_verdicts(make_project, write_leaf,
+                                                           monkeypatch, capsys):
+    """9.1b/d：status／open severity／face／verdict 分佈；有 open finding 也 exit 0。"""
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    monkeypatch.chdir(home.parent)
+    assert audit_cmd.run(["raise", "--target", "a/x", "--face", "logic", "--sev", "high",
+                          "--finding", "甲", "--verdict", "contradicted"]) == 0
+    assert audit_cmd.run(["raise", "--target", "a/x", "--face", "consistency", "--sev", "med",
+                          "--finding", "乙"]) == 0
+    assert audit_cmd.run(["resolve", "F2", "--status", "fixed"]) == 0
+    capsys.readouterr()
+    assert audit_cmd.run(["summary", "a"]) == 0            # open finding 在也 exit 0
+    out = capsys.readouterr().out
+    assert "open: 1" in out and "fixed: 1" in out
+    assert "open by severity: high:1" in out
+    assert "open by face: logic:1" in out
+    assert "contradicted:1" in out and "none:1" in out
+    assert "0 open finding(s)" not in out
+
+
+def test_audit_summary_includes_forest_findings_touching_article(make_project, write_leaf,
+                                                                 monkeypatch, capsys):
+    """9.1c：forest finding 觸及文章 A → 計入 summary A（mirror publish 涵蓋規則、
+    非預設列表的 doc-store-only 過濾）。"""
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    write_leaf(home, "b", concept=_root("cb", "B", 2))
+    monkeypatch.chdir(home.parent)
+    assert audit_cmd.run(["raise", "--target", "a", "--target", "b", "--face", "consistency",
+                          "--sev", "high", "--finding", "跨文件不一致"]) == 0
+    capsys.readouterr()
+    assert audit_cmd.run(["summary", "a"]) == 0
+    out = capsys.readouterr().out
+    assert "open: 1" in out                                # forest finding 計入
+    assert "0 open finding(s)" not in out
+
+
+def test_audit_summary_json_keys(make_project, write_leaf, monkeypatch, capsys):
+    """9.1e：--json 鍵形＝{article, byStatus, openBySeverity, openByFace, byVerdict, open}。"""
+    import json
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    monkeypatch.chdir(home.parent)
+    assert audit_cmd.run(["raise", "--target", "a/x", "--face", "logic", "--sev", "low",
+                          "--finding", "丙"]) == 0
+    capsys.readouterr()
+    assert audit_cmd.run(["summary", "a", "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    assert set(data) == {"article", "byStatus", "openBySeverity", "openByFace",
+                         "byVerdict", "open"}
+    assert data["article"] == "a" and data["open"] == 1
+    assert data["byStatus"]["open"] == 1
+    assert data["openBySeverity"] == {"low": 1}
+    assert data["openByFace"] == {"logic": 1}
+    assert data["byVerdict"]["none"] == 1

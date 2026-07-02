@@ -65,6 +65,9 @@ def run(argv: list[str]) -> int:
     parser.add_argument("--allow-noop", action="store_true",
                         help="allow freezing a snapshot byte-identical to the previous version "
                              "(by default publish refuses a no-op version bump)")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="print a consolidated go/no-go pre-publish report and exit without "
+                             "writing anything (no render, no version stamp, no snapshot, no changelog)")
     args = parser.parse_args(argv)
 
     try:
@@ -77,6 +80,11 @@ def run(argv: list[str]) -> int:
     if not any(lf.article == args.article for lf in leaves):
         sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n")
         return 1
+
+    # ── --dry-run：分支在既有閘區塊**之前**（閘紅時舊 abort 訊息會 early-return、
+    #    彙總報告永遠印不出來）；dry-run 自己跑全部閘、印彙總、零寫入。──
+    if args.dry_run:
+        return _dry_run(layout, schema, leaves, args)
 
     # ── 閘 ──
     check = run_check(leaves, schema, layout)
@@ -176,6 +184,93 @@ def run(argv: list[str]) -> int:
     print(f"  changelog: {changelog}")
     print(f"  {result['drafted']} section(s) published.")
     return 0
+
+
+def _dry_run(layout: Layout, schema, leaves, args) -> int:
+    """`--dry-run`：跑真 publish 的四個阻塞閘（呼叫同一批函式、零第二實作）＋資訊行，零寫入。
+
+    預覽非鎖定（spec：preview, not a reservation）：真 publish 會先 render 再算 coverage，
+    dry-run 對現有 `_latest.md` 算——render 不寫散文，閘相關量（哪些節有散文）相同，
+    但 dry-run 綠不保證之後真 publish 綠（中間檔案可能變）。"""
+    from dspx.render import detect_drift, parse_section_bodies
+
+    article = args.article
+    print(f"pre-publish preview for \"{article}\" (--dry-run; nothing is written)")
+    ok = True
+
+    # ① check（真 publish：紅 → abort）
+    check = run_check(leaves, schema, layout)
+    if check.ok:
+        print("  ✓ check: passed")
+    else:
+        ok = False
+        print(f"  ✗ check: {len(check.errors)} error(s) — publish would abort (run docspec check)")
+
+    # ② lint ERROR（真 publish：有 → abort）
+    lint_errors = [f for f in run_lint(layout, leaves, schema) if f.level == ERROR]
+    if lint_errors:
+        ok = False
+        print(f"  ✗ lint: {len(lint_errors)} ERROR finding(s) — publish would abort (run docspec lint)")
+    else:
+        print("  ✓ lint: no ERROR findings")
+
+    # ③ coverage（真 publish：render 後 drafted==0 → abort；dry-run 對現有 _latest 算；
+    #    無 _latest ＝ 0 written）
+    art_leaves = [lf for lf in leaves if lf.article == article]
+    latest = layout.docs_latest(article)
+    bodies = parse_section_bodies(latest.read_text(encoding="utf-8")) if latest.is_file() else {}
+    written = [lf.section for lf in art_leaves if bodies.get(lf.section, "").strip()]
+    if written:
+        print(f"  ✓ coverage: {len(written)}/{len(art_leaves)} section(s) have prose")
+    else:
+        ok = False
+        print("  ✗ coverage: no written sections yet (draft has not produced prose) "
+              "— publish would abort")
+
+    # ④ no-op 預測（真 publish：位元同前版 → abort；--allow-noop／無前版 → 跳過）
+    prev_versions = layout.existing_versions(article)
+    if args.allow_noop:
+        print("  – no-op: skipped (--allow-noop)")
+    elif not prev_versions:
+        print("  – no-op: skipped (no prior version)")
+    else:
+        if latest.is_file():
+            _, body = parse_frontmatter(latest.read_text(encoding="utf-8"))
+            clean_body = strip_markers(body).strip() + "\n"
+        else:
+            clean_body = "\n"
+        prev_v = ".".join(str(p) for p in max(prev_versions))
+        prev_snap = layout.docs_snapshot(article, prev_v)
+        if prev_snap.is_file() and prev_snap.read_text(encoding="utf-8").strip() + "\n" == clean_body:
+            ok = False
+            print(f"  ✗ no-op: content is byte-identical to v{prev_v} — publish would abort "
+                  f"(use --allow-noop to force)")
+        else:
+            print(f"  ✓ no-op: content differs from v{prev_v}")
+
+    # ℹ 資訊行（永不阻塞——與真 publish 的非阻塞語義一致）
+    from dspx.commands.status import _docs_hashes, _leaf_row
+    from dspx.model import decision_index
+    by_section = {lf.section: lf for lf in leaves}
+    dindex = decision_index(leaves)
+    hashes = _docs_hashes(layout, article)
+    stale_counts: dict[str, int] = {}
+    for lf in art_leaves:
+        sync = _leaf_row(layout, lf, schema, check.ok, hashes, by_section, dindex)["sync"]
+        if sync != "synced":
+            stale_counts[sync] = stale_counts.get(sync, 0) + 1
+    stale_note = "  ".join(f"{k}:{v}" for k, v in sorted(stale_counts.items())) or "all synced"
+    print(f"  ℹ staleness: {stale_note}")
+    print(f"  ℹ drift: {len(detect_drift(layout, article))} hand-edited section(s)")
+    print(f"  ℹ audit: {_count_open_findings(layout, leaves, article)} open finding(s) (non-blocking)")
+    print(f"  ℹ version preview: v{_next_version(layout, article, args.level)} (--level {args.level})")
+
+    if ok:
+        print("dry-run verdict: GO — all blocking gates pass "
+              "(preview only; a real publish re-runs its own gates)")
+        return 0
+    print("dry-run verdict: NO-GO — fix the ✗ gate(s) above before publishing")
+    return 1
 
 
 def _count_open_findings(layout, leaves, article: str) -> int:

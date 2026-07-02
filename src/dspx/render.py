@@ -78,6 +78,10 @@ MARKER_RE = re.compile(r"^<!--\s*dspx:section\s+(\S+)\s*-->\s*$")
 # 分組（非末節）節點標記：與 section marker 區隔，使 parse_section_bodies 切斷前一節、
 # 忽略分組標題行（分組無散文、不記指紋、不進 lint 的 section 集合）。publish 一併剝除。
 GROUP_MARKER_RE = re.compile(r"^<!--\s*dspx:group\s+(\S+)\s*-->\s*$")
+# 關閉式標記（作者誤以為標記像 HTML 成對、手加的 `<!-- /dspx… -->`）：publish 凍結時一併剝除
+# （快照零機械痕跡契約）。刻意不進 parse_section_bodies——節內的關閉式行仍算該節散文
+# （手改如常計入 prose 指紋、diff 照抓），剝除只保護凍結快照。
+CLOSING_MARKER_RE = re.compile(r"^<!--\s*/\s*dspx\b[^>]*-->\s*$")
 
 
 def prose_hash(body: str) -> str:
@@ -254,6 +258,7 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     acked: list[str] = []
     ack_refused: list[str] = []
     emitted_groups: set[str] = set()
+    prose_bodies: list[str] = []   # 非空節散文（CJK 封面提示的語言偵測用）
     for lf in art_leaves:
         depth = _depth(article, lf.section)
         # 補產祖先分組節點標題（文章內深度 1..depth-1），使階層連續、不跳級。
@@ -275,6 +280,7 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
         out.append(heading)
         out.append("")
         if body:
+            prose_bodies.append(body)
             out.append(body)
             out.append("")
             # 有散文才記指紋：own=自己源、anc=祖先 brief、deps=realizes 共享真相、
@@ -326,6 +332,21 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
             drafted += 1
         else:
             out.append("")
+
+    # CJK 封面提示（Decision 9）：humanize fallback 真的打在封面（無 root 節、無 group.yaml
+    # title）且內容 CJK 為主 → stderr 一行 advisory 提示（不改 exit code / 輸出檔）。
+    # 語言偵測 fallback "en" 使空白/未撰寫文章保持沉默（無散文＝無提示噪音）。
+    if not has_root:
+        _cover_title = _group_meta(layout, article).get("title")
+        if not (isinstance(_cover_title, str) and _cover_title.strip()):
+            from dspx.config import detect_language
+            if detect_language("\n".join(prose_bodies), "en") == "zh":
+                import sys
+                sys.stderr.write(
+                    f"docspec: ⚠ cover title falls back to the humanized slug "
+                    f"\"{_group_title(layout, article, article)}\" but the article's content is CJK "
+                    f"— add corpus/{article}/group.yaml with a localized title: to fix the cover "
+                    f"heading.\n")
 
     # 保留現有 version（若有），render 不升版（升版是 publish 的事）。
     # 版本＝semver 字串；未發行的骨架預設 "0.0.0"（佔位、非真版）。
@@ -382,4 +403,5 @@ def strip_markers(text: str) -> str:
     return "\n".join(
         line for line in text.split("\n")
         if not MARKER_RE.match(line) and not GROUP_MARKER_RE.match(line)
+        and not CLOSING_MARKER_RE.match(line)
     )
