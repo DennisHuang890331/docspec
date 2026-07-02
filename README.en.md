@@ -1,6 +1,8 @@
 <div align="center">
 
-<h1><img src="docs/assets/logo.png" alt="docspec logo" width="56" align="middle"> docspec</h1>
+<img src="docs/assets/logo.png" alt="docspec logo" width="200">
+
+# docspec
 
 **Write long technical documents with an AI agent that keeps them consistent as they grow, then export clean Markdown or a typeset PDF.**
 

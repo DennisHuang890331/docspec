@@ -1,6 +1,8 @@
 <div align="center">
 
-<h1><img src="docs/assets/logo.png" alt="docspec logo" width="56" align="middle"> docspec</h1>
+<img src="docs/assets/logo.png" alt="docspec logo" width="200">
+
+# docspec
 
 **跟 AI agent 一起寫長篇技術文件，愈寫愈長也不走樣，最後匯出乾淨的 Markdown 或排版完整的 PDF。**
 
