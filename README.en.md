@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/assets/logo.png" alt="docspec logo" width="140">
+<img src="docs/assets/logo.png" alt="docspec logo" width="180">
 
 # docspec
 
