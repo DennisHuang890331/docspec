@@ -251,3 +251,56 @@ def test_v16_code_span_tokens_exempt(make_project, write_leaf, monkeypatch):
     layout = _render(home, monkeypatch)
     _inject(layout, "a", "\n\n範例片段：`系統應視情況重新啟動`，僅供說明格式。\n")
     assert not any(f.rule == "V16" for f in _lint(layout))
+
+
+# ── V17 英文 AI-ism 詞彙（WARN）──────────────────────────────────────
+
+def test_v17_ai_ism_tokens_caught(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\nWe delve into the design, a testament to the team, and it "
+                         "showcases seamless integration.\n")
+    v17 = [f for f in _lint(layout) if f.rule == "V17"]
+    assert v17 and all(f.level == WARN for f in v17)        # WARN，永不 ERROR
+    hits = {f.detail.split('"')[1].lower() for f in v17}
+    assert {"delve", "testament to", "showcases", "seamless"} <= hits
+
+
+def test_v17_sentence_initial_in_todays_caught(make_project, write_leaf, monkeypatch):
+    """行首與句末標點後的 In today's 都要抓；彎引號 apostrophe 也收。"""
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\nIn today's fast-paced API ecosystems, limits matter. "
+                         "In today’s teams the answer differs.\n")
+    v17 = [f for f in _lint(layout) if f.rule == "V17"]
+    assert v17 and all(f.level == WARN for f in v17)
+    assert sum("In today" in f.detail for f in v17) >= 2
+
+
+def test_v17_narrowed_and_excluded_forms_not_flagged(make_project, write_leaf, monkeypatch):
+    """ground-truthing 收窄的形態不誤報：robust／utilization／名詞 leverage／名詞 underscores／
+    非片語 navigate／中句 in today's。"""
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\nThe method shows robustness to noisy context and keeps CPU "
+                         "utilization low. The leverage sits in predictable places. "
+                         "Names use underscores. Navigate to the settings page, then "
+                         "review the notes from in today's meeting.\n")
+    assert not any(f.rule == "V17" for f in _lint(layout))
+
+
+def test_v17_code_span_tokens_exempt(make_project, write_leaf, monkeypatch):
+    """code 區段內的觸發詞是內容（API 名/範例），不該觸發 V17。"""
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\nRun `delve debug` on the target, for example:\n\n"
+                         "```\nutilize(tapestry)  # seamless\n```\n")
+    assert not any(f.rule == "V17" for f in _lint(layout))
+
+
+def test_v17_clean_doc_no_finding(make_project, write_leaf, monkeypatch):
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\nThe gateway rejects requests over the limit and returns 429 "
+                         "with a Retry-After header.\n")
+    assert not any(f.rule == "V17" for f in _lint(layout))

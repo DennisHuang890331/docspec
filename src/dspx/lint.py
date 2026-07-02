@@ -15,6 +15,7 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   V12 docs 殘留 GFM 警示/暫停旗   ERROR  ← `> [!WARNING]` 等 alert；draft 撞決策衝突刻意產生、絕不該 ship
   V15 docs 殘留撰寫工具/治理詞彙   ERROR  ← forest/governed-by/治理父/fan-in/factcheck/Tier-N/L2a/§回引…＝後台詞洩進交付物（補 V1 覆蓋缺口）
   V16 規範語句逃避詞（同句 應/不得）WARN  ← 最好／儘量／酌情／如有可能／視情況／最大限度（必要時故意排除，見下）
+  V17 英文 AI-ism 詞彙            WARN  ← delve/tapestry/seamless…封閉 13 組＋句首 In today's；robust 刻意排除（見下）
   Vg1/Vg2 術語一致               WARN
   Ve1 死錨點連結（export 破）     WARN  ← `](#x)` 對不上任何標題 slug → xelatex PDF 整份失敗
   Ve2 非標準 markdown（@import）  WARN  ← MPE 指令不會在 docx/PDF 渲染
@@ -102,6 +103,43 @@ _TOOL_VOCAB_RE = re.compile(
 # deliverable-cleanliness-normative-escape-hatch design.md。WARN 非 ERROR：命中只代表「像是作者
 # 迴避了可驗收的規定」，逃避詞的前提條件仍可能在文件別處被獨立、封閉地定義，那是人的判斷。
 _ESCAPE_HATCH_RE = re.compile(r"最好|儘量|酌情|如有可能|視情況|最大限度")
+# V17 英文 AI-ism 詞彙（WARN，非阻塞）：封閉 13 組 word-boundary、case-insensitive 觸發詞——LLM 生成
+# 英文裡不成比例常見、單獨出現即是語域訊號的字（依 `docspec reference writing-en` 的 Orwell 式選詞
+# 紀律；change deliverable-cleanliness-en-ai-isms）。出貨的詞表＝對 6 份已驗收英文交付物
+# ground-truthing 後的收窄版，**不是** reference 文件散文清單的照抄：
+#   - `robust` 整個排除——已驗收 survey 有 3 個合法 term-of-art 用法（paraphrase-robust、
+#     robustness to imperfect retrieval），同中文輪 `進行` 的教訓：太常見的真技術語域詞不進封閉表。
+#   - 裸 `leverage` → 只收動詞變位 leverages|leveraged|leveraging（合法名詞用法＋書目真論文標題被證實）。
+#   - 裸 `realm` → 只收片語 in the realm of（novel profile 的奇幻 setting 詞是可預見碰撞）。
+#   - 裸 `navigate` → 只收 navigate the complexit(y|ies)( of)?（UI 導航／航海領域合法）。
+#   - 裸 `underscores` → 只收動詞語境 underscores (the|that|how|why|its)（snake_case 手冊會寫
+#     "names use underscores" 名詞用法）。
+#   - `utilization` 排除——CPU/link utilization 是標準工程詞彙；只收動詞 utilize/-s/-d/-ing。
+# 已知且接受的誤報類（design.md Decision 2）：References 書目引用真論文標題
+# 「Leveraging Passage Retrieval…」會中 `leveraging`——WARN 級、人一眼可 dismiss，不為它建
+# 書目節偵測、也不為閃它放寬詞表。WARN 非 ERROR：每個觸發詞都有可想見的合法用途，取捨在人。
+_AI_ISM_RE = re.compile(
+    r"\b(?:"
+    r"delve|delves|delved|delving"
+    r"|tapestry"
+    r"|in the realm of"
+    r"|boasts"
+    r"|showcases|showcased|showcasing"
+    r"|seamless|seamlessly"
+    r"|utilize|utilizes|utilized|utilizing"
+    r"|testament to"
+    r"|a myriad of"
+    r"|plethora"
+    r"|navigate the complexit(?:y|ies)(?: of)?"
+    r"|underscores (?:the|that|how|why|its)"
+    r"|leverages|leveraged|leveraging"
+    r")\b",
+    re.IGNORECASE,
+)
+# V17 句首 In today's 開場白（throat-clearing opener）：只抓「行首（僅前導空白）或句末標點之後」
+# 的 In today's（直引號/彎引號皆收）＋任意接續——中句的 "in today's meeting" 是正常英文、不抓。
+# 刻意 case-sensitive（大寫 In）：句首必大寫，且避開 "e.g. in today's …" 這類縮寫句點誤報。
+_AI_ISM_OPENER_RE = re.compile(r"(?m)(?:^\s*|[.!?][\"')\]]?\s+)(In today[’']s)\b")
 _NORMATIVE_KEYWORD_RE = re.compile(r"應|不得")
 # 偽句切分（V16 專用、不共用）：僅供本規則判定「同句」，非通用中文斷句器，不需 material 的
 # 表格/條列/程式碼感知——只在乎標點界定的子句。
@@ -174,6 +212,18 @@ def _lint_docs(layout: Layout, articles: list[str], all_ids: set[str]) -> list[F
                                     "(name the document, \"per 《…》\", \"see 《…》\"), not backstage "
                                     "terms (forest / governed-by / governance parent / Tier-N / L2a / "
                                     "fan-in / module-section / factcheck / raise a finding / §back-ref)"))
+        for m in dict.fromkeys(_AI_ISM_RE.findall(body)):
+            findings.append(Finding("V17", WARN, where,
+                                    f"English AI-ism register tell \"{m.strip()}\" -- vocabulary "
+                                    "disproportionately common in LLM-generated English (see "
+                                    "`docspec reference writing-en`); prefer a plainer, more "
+                                    "specific word (advisory; a cited title or genuine term of "
+                                    "art may be legitimate -- the call is the author's)"))
+        for m in dict.fromkeys(_AI_ISM_OPENER_RE.findall(body)):
+            findings.append(Finding("V17", WARN, where,
+                                    f"English AI-ism opener \"{m}\" -- sentence-initial "
+                                    "\"In today's ...\" is throat-clearing (see `docspec reference "
+                                    "writing-en`); start with the actual claim instead"))
         seen_escape_hatch: set[str] = set()
         for sentence in _PSEUDO_SENTENCE_SPLIT_RE.split(body):
             if not _NORMATIVE_KEYWORD_RE.search(sentence):
