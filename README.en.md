@@ -2,176 +2,152 @@
 
 # docspec
 
-**Write long technical documents with an AI agent — clean Markdown and fully typeset PDFs that stay internally consistent as they grow.**
+**Write long technical documents with an AI agent that stay internally consistent — clean Markdown and a typeset PDF.**
 
 ![Python](https://img.shields.io/badge/python-%E2%89%A53.11-blue)
 ![License](https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-orange)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 <!-- TODO: add CI badge once the repo is public: https://github.com/<owner>/docspec/actions -->
 
-中文: [README.md](README.md)
+[English](README.en.md) · [中文](README.md)
 
 </div>
 
 > [!WARNING]
-> **Usage Boundaries**
-> This project is licensed under PolyForm Noncommercial 1.0.0. **Any commercial use is strictly prohibited.**
-> - ✅ **Allowed (Non-commercial)**: Personal writing, academic research, student projects, maintaining documentation for Open Source projects, personal tech blogs, or free community sharing.
-> - ❌ **Prohibited (Commercial)**: Publishing novels/books for profit, using it as an internal company knowledge base (Wiki, KB), or writing specs and development docs for commercial company products.
+> **Non-commercial license.** docspec is licensed under PolyForm Noncommercial 1.0.0. Free for
+> personal writing, research, coursework, open-source documentation, and non-paid sharing.
+> Commercial use — selling what you write, running it as a company knowledge base, or authoring specs
+> for a commercial product — requires a separate license. This is source-available, not OSI-approved
+> open source.
 
-You and the agent settle each section's logic and decisions first; docspec renders the prose and keeps the structure intact. As the document grows it stays consistent. You read only the rendered output — the backstage details are the agent's job.
+docspec is a spec-driven authoring tool for long documents. You and an AI agent settle each section's
+concepts and decisions in a structured backstage; the engine renders them to prose and keeps the
+whole document consistent as it grows. You read only the rendered deliverable.
 
-## End-to-End Showcase
+## Features
 
-Six documents — three genres (fiction / essay / academic survey) × two languages (English / Traditional Chinese), each written from scratch by an AI agent driving docspec. All six pass the structural, cleanliness, and render-fidelity gates and export to a typeset PDF. These are raw runs, not hand-edited or cherry-picked.
-
-| Genre | Lang | Read it | PDF | Length | Engine gates | Blind style review |
-|---|---|---|---|---|---|---|
-| Fiction (short story) | ZH | [read](docs/showcase/deliverables/novel-zh.md) | [PDF](docs/showcase/pdfs/novel-zh.pdf) | 6 sec / ~3.5k | ✓ | AI-tell 5/5, fluency 5/5 |
-| Fiction (short fantasy) | EN | [read](docs/showcase/deliverables/novel-en.md) | [PDF](docs/showcase/pdfs/novel-en.pdf) | 5 sec / ~2.2k | ✓ | AI-tell 4/5, fluency 5/5 |
-| Essay | ZH | [read](docs/showcase/deliverables/essay-zh.md) | [PDF](docs/showcase/pdfs/essay-zh.pdf) | 5 sec / ~2.6k | ✓ | high |
-| Essay | EN | [read](docs/showcase/deliverables/essay-en.md) | [PDF](docs/showcase/pdfs/essay-en.pdf) | 6 sec / ~2.8k | ✓ | AI-tell 4/5, fluency 5/5 |
-| Academic survey | ZH | [read](docs/showcase/deliverables/academic-zh.md) | [PDF](docs/showcase/pdfs/academic-zh.pdf) | 10 sec / ~4k | ✓ | AI-tell 5/5, fluency 5/5 |
-| Academic survey | EN | [read](docs/showcase/deliverables/academic-en.md) | [PDF](docs/showcase/pdfs/academic-en.pdf) | 11 sec / ~4.9k | ✓ | AI-tell 4/5, fluency 5/5 |
-
-> Method, model, and full prompts are in [docs/showcase/](docs/showcase/).
-
-![References page of the English PEFT survey](docs/showcase/images/academic-en-references.png)
-
-*References page of the English PEFT survey: real papers with correct venues and arXiv IDs. The run also tested the anti-AI-tell lint — the fantasy story's noun "realm" and the survey's noun "leverage" both drew zero false flags, since the rules target only the phrase and the verb forms.*
-
-## Design
-
-- **Semantics separated from the engine** — the engine is a thin, deterministic gatekeeper: id uniqueness, dead references, cycles, completeness, staleness by content hash, publish freeze. It makes no semantic judgment. Content correctness and consistency are handled by a non-blocking factcheck/audit that flags but never blocks a release. Mechanical drift is gated deterministically; semantic judgment stays advisory.
-- **Token-efficient authoring** — a document is a projection of a structure layer. Each section is rendered blind: the agent sees only that section plus an engine-projected aperture of the relevant upstream truths, never the whole growing document. Cross-section coherence comes from a shared writing guide and deterministic assembly, not from agents reading each other. Only sections whose content hash changed re-render, so per-action token cost does not grow with document length.
-- **Writing-quality system** — writing-guide backbone rules, language-seeded naturalness conventions written at `docspec init --lang` time (separate zh/en idiom rules), glossary term consistency, cleanliness lint (V1–V17, including rules for Chinese meta-narration and English AI-register clichés), and a citable writing reference (`docspec reference writing-zh/en`). The showcase above exercises this across six genres.
-- **Deliverable / backstage separation** — humans read only `docs/`, the rendered deliverable; `corpus/`, the structured backstage, is for the agent and engine. Cleanliness gates keep backstage vocabulary, scaffolding, and placeholders out of the deliverable.
-- **Multi-document forest governance** — documents connect through `governed-by` / `realizes` cross-document edges. Changing an upstream truth marks every downstream section that must re-sync as stale (propagated across own / upstream / inherited / style axes), so a set of specs cannot silently contradict itself.
-
-## Who it's for
-
-- You want to co-write a long, growing technical document or handbook with an AI agent, but worry it will drift and contradict itself.
-- You maintain a multi-section spec or wiki that has to stay internally consistent — editing one place shouldn't quietly break another.
-- You need a deliverable PDF with proper typesetting, not just Markdown.
-
-## See it in action
-
-You mostly invoke the built-in skills in your AI agent (Claude Code / Antigravity / Codex); the engine gatekeeps behind them:
-
-```text
-You: I want to write a doc on zenoh as a control plane — start an outline with develop
-AI:  [develop] created corpus/zenoh/intro/, recorded the skeleton (no prose yet)
-        ├─ concept:  why zenoh for the control plane
-        └─ decision: control plane = zenoh, not MQTT
-
-You: outline looks good, draft this section
-AI:  [draft] blind-rendered to prose → docs/zenoh/_latest.md
-
-You: publish
-AI:  [publish] all gates green → froze a read-only v1 snapshot, bumped version, wrote changelog
-
-You: make a PDF
-AI:  [release] export → review page images → tune layout knobs → docs/exports/zenoh.pdf
-```
-
-> 📄 **What the output looks like:** see the six real deliverables and PDFs in the [Showcase](#end-to-end-showcase) above, or [docs/showcase/](docs/showcase/) for the full method and prompts.
+- **Consistent as it grows** — sections have stable ids and share one writing guide, so editing one
+  section doesn't silently break another; cross-document edges keep multi-document sets in sync.
+- **Structure before prose** — you review concepts and decisions, not a wall of polished text; the
+  engine turns them into prose.
+- **Clean Markdown and typeset PDF** — every document renders to Markdown and exports to a
+  Typst-typeset PDF; a journal LaTeX track can emit `.tex` for submission.
+- **Natural prose** — a writing guide and cleanliness lint suppress AI-register tells in English and
+  translationese in Chinese ([see real output](docs/showcase/)).
+- **Runs in your agent** — Claude Code, Antigravity, or Codex, from one skill set.
 
 ## Quick start
 
-> **Requires** `uv` and Python ≥ 3.11. Tested on Windows and Linux; macOS is not yet verified.
+Requires `uv` and Python ≥ 3.11 (tested on Windows and Linux; macOS is not yet verified).
 
 ```bash
 git clone <repo-url> && cd docspec
 uv tool install --from . docspec
-uv tool update-shell          # add uv's tool bin to PATH (once), then open a new shell
-docspec init --tool claude    # create the workspace and install the skills into your agent
+uv tool update-shell          # add uv's tool bin to PATH (once), then open a new terminal
+docspec init --tool claude    # scaffold a project and install the skills into your agent
 ```
 
-After that, the whole writing workflow runs inside your agent conversation, across six skills: develop → draft → edit → factcheck → publish (→ release for a PDF). You don't type `docspec publish` yourself — you ask the agent in chat and the engine gatekeeps. publish is irreversible, and that trigger stays with you: nothing is frozen until you say so.
+Authoring happens inside your agent's chat through the built-in skills, not by typing docspec commands
+yourself. The commands you run by hand are just setup and maintenance:
 
-The CLI commands you actually run by hand are the install-and-maintenance ones:
-
-| command | what it does |
+| Command | Purpose |
 |---|---|
-| `docspec init` | start a project, install the skills into your agent |
-| `docspec setup` | download the PDF typesetting assets (only when you want PDFs) |
-| `docspec doctor` / `upgrade` / `version` | health check / update / version |
+| `docspec init` | create a project and install the skills into your agent |
+| `docspec setup` | download PDF typesetting assets (only when you export a PDF) |
+| `docspec doctor` / `upgrade` / `version` | diagnose / update / show version |
 
-`docspec --help` lists exactly these human commands; the full set the agent drives behind the scenes is under `docspec --help-all`.
+`docspec --help` lists these human-facing commands; the full agent-facing set is under
+`docspec --help-all`.
 
-## The six skills you use
+## How it works
 
-A skill carries only judgment and stance. The mechanical details — fields, formats, steps — aren't hard-coded into the skill; they're projected live by `docspec guide`.
+Authoring is a loop of six skills invoked in your agent; the engine gatekeeps behind them:
 
-| skill | what it does | when |
-|---|---|---|
-| **develop** | Grow and restructure a section's concept & decision outline (audience, scope, depth). Skeleton first — no prose. | starting a doc, or restructuring |
-| **draft** | Write one section into prose, seeing only that section's context — so it can't reference a sibling it can't see. | structure is set; turn a section into prose |
-| **edit** | Publisher-style passes: line → copy → proofread. | prose written; polishing |
-| **factcheck** | Adversarial review, every claim against a primary source. Flags only, never edits, never blocks publishing. | any time you want to verify |
-| **publish** | Irreversible release: all gates green → freeze a read-only snapshot → bump version → write the changelog. | a version is final |
-| **release** | Interactive typesetting: export → review page images → tune knobs → re-export. Presentation only, content never moves. | producing a PDF |
+```text
+You: draft a doc on zenoh as a control plane — start with develop
+AI:  [develop] created corpus/zenoh/intro/ — recorded the skeleton (no prose yet)
+        ├─ concept:  why zenoh for the control plane
+        └─ decision: control plane = zenoh, not MQTT
+You: outline looks good, draft this section
+AI:  [draft] blind-rendered to prose → docs/zenoh/_latest.md
+You: publish
+AI:  [publish] gates green → froze a read-only v1 snapshot, bumped version, wrote changelog
+```
 
-It's a loop, not a pipeline. When factcheck finds a problem, it goes back to develop or draft.
+| Skill | What it does |
+|---|---|
+| **develop** | grow or restructure a section's concepts and decisions (audience, scope, depth); skeleton first, no prose |
+| **draft** | render one section to prose, seeing only that section |
+| **edit** | an editing pass: line → sentence → proofread |
+| **factcheck** | adversarial check of each claim against a source; flags only, never blocks a release |
+| **publish** | irreversible release: gates green → freeze a read-only snapshot → bump version → changelog |
+| **release** | interactive PDF layout: export → review page images → tune knobs → re-export |
+
+It is a loop, not a pipeline: when factcheck finds a problem, work goes back to develop or draft.
+
+The backstage `corpus/` (structured YAML per section, for the agent and engine) is separate from the
+front `docs/` (blind-rendered prose, for people). Each section is rendered in isolation; coherence
+comes from the shared writing guide and deterministic assembly, not from agents reading each other.
+
+## Design
+
+The decisions docspec is built on:
+
+- **Semantics separated from the engine** — the engine is a thin, deterministic gatekeeper: id
+  uniqueness, dead references, cycles, completeness, staleness by content hash, publish freeze. It
+  makes no semantic judgment; content correctness is handled by a non-blocking factcheck/audit that
+  flags but never blocks a release.
+- **Token-efficient authoring** — a document is a projection of a structure layer. Each section is
+  rendered blind — seeing only itself plus an engine-projected aperture of the relevant upstream
+  truths, never the whole growing document. Only sections whose content hash changed re-render, so
+  per-action token cost does not grow with document length.
+- **A writing-quality system** — writing-guide backbone rules, language-seeded naturalness
+  conventions written at `docspec init --lang` time, glossary consistency, cleanliness lint
+  (V1–V17, including rules for Chinese meta-narration and English AI-register clichés), and a citable
+  writing reference (`docspec reference writing-zh/en`).
+- **Deliverable / backstage separation** — humans read only `docs/`; `corpus/` is for the agent and
+  engine, and cleanliness gates keep backstage vocabulary out of the deliverable.
+- **Multi-document forest governance** — `governed-by` / `realizes` edges propagate staleness across
+  documents, so a set of specs cannot silently contradict itself.
 
 ## PDF output
 
-PDF delivery is one of docspec's main features. Add the export dependencies, then run `docspec setup` once — it downloads the controlled typesetting assets into your user data dir, without touching your system environment:
+Install the export extra and run setup once; it downloads managed typesetting assets into your user
+data directory without touching your system:
 
 ```bash
 uv tool install --from ".[export]" docspec
 docspec setup
 ```
 
-**Typst is the default** renderer: a lightweight `typst` binary (~22MB, native CJK) plus a docspec-owned `.typ` house-style template; `setup` installs typst + pandoc + fonts. The content model is **backend-neutral** (Markdown + images, no LaTeX-only notation), so one document drives two tracks:
+docspec renders with **Typst** by default (a ~22 MB binary with native CJK and a bundled house-style
+template). Content is backend-neutral (Markdown + images), so one source drives two tracks: the
+default Typst track (compiled, fidelity-checked) and a bring-your-own journal LaTeX track that emits a
+`.tex` through a slot contract for you to compile (IEEE and Elsevier adapters included). Diagrams are
+drawn by a delegated subagent as drawio and embedded as high-resolution PNG; `docspec setup
+--with-drawio` installs the managed drawio.
 
-- **Typst track (default)** — docspec-owned template, bundled compile, full fidelity / byte-lock checks.
-- **Journal LaTeX track (BYO, emit-only)** — for journal submission, docspec feeds your content through the journal's own pandoc template via a **slot contract** (title / authors / abstract / keywords / …) and emits a `.tex`; you compile it in Overleaf / the journal toolchain. Example IEEE and Elsevier adapters ship in-box: `docspec export <article> --journal {ieee,elsevier}`.
+## Showcase
 
-**Diagrams = drawio images**: during `draft`, a delegated subagent (loading the `dspx-diagram` skill) authors a `.drawio` and renders it to a **high-resolution PNG**, embedded into the deliverable (both tracks consume the same image; PNG, not SVG — a drawio SVG collapses to a black box on the Typst track). draw.io is an optional asset — run `docspec setup --with-drawio` when you want diagram rendering.
+Six documents — fiction, essay, and academic survey, in English and Traditional Chinese — written
+from scratch by an agent driving docspec, each passing the structural, cleanliness, and
+render-fidelity gates. The rendered deliverables, exported PDFs, the method, the models, and the exact
+prompts are in **[docs/showcase/](docs/showcase/)**.
 
-Then use the release skill in your agent to typeset interactively: export → review page images → tune layout knobs → re-export until it looks right. (The underlying `docspec export` is an agent command driven by the skill — you don't run it by hand.)
+## Contributing
 
-## Three agents, one skill set
-
-`docspec init` installs the same SKILL.md set into Claude Code, Antigravity, and Codex, with a consistent skills-directory layout in each — so the same writing doctrine works in any of them.
-
-<details>
-<summary><b>How it works (open if you want the internals)</b></summary>
-
-The usual failure mode when an AI writes docs: it reasons about logic and polishes wording at the same time, and you get something fluent but hollow and self-contradictory — and when you only want to check whether the logic holds, you're forced to read a screen of polished prose first. docspec splits those two jobs apart:
-
-- **Backstage `corpus/` (for the agent and the engine).** Each section is a few small structured files: a one-line concept, a writing envelope (`brief`: who it's for, how deep), and the decisions it realizes. This layer cares only about rigor and factual completeness, not style.
-- **Front `docs/` (for people).** The backstage is blind-rendered into finished prose — each section written in isolation, without access to its siblings. **People read only this layer.**
-
-Sections have stable ids, so moving or renaming folders never breaks a reference. Coherence across sections doesn't come from agents reading each other; it comes from one shared writing guide plus deterministic assembly.
-
-```text
-corpus/zenoh/intro/concept.yaml          docs/zenoh/_latest.md  (rendered, for people)
-  concept: why zenoh for the control   ──▶   ## Why zenoh for the control plane
-  brief:  {audience: devs, depth: ...}        zenoh replaces polling with pub/sub …
-corpus/zenoh/intro/decisions.yaml             (generated from the brief + decisions;
-  - statement: control plane = zenoh          it only says what the decisions say)
-```
-
-The engine only does deterministic gatekeeping (structure, completeness); whether the content is semantically right is left to the non-blocking factcheck.
-</details>
-
-## Why docspec
-
-- **Review the logic before the prose.** You check the outline and the decisions, not a screen of polished text.
-- **People read only the `docs/` output**; the backstage `corpus/` is for the agent and the engine.
-- **The engine gates structure, not semantics.** Mechanical drift is caught deterministically; whether facts are right is flagged by a non-blocking review that never blocks your release.
-
-## Development / contributing
-
-Issues and PRs welcome. The dev setup, how to run the tests, and why Windows + non-ASCII paths need `uv run --no-editable` are all in [CONTRIBUTING.md](CONTRIBUTING.md).
+Issues and PRs welcome. Dev setup, running the tests, and why non-ASCII paths on Windows need
+`uv run --no-editable` are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## License
 
-**PolyForm Noncommercial 1.0.0** — free for any noncommercial use; commercial use requires a separate license from the author. This is a source-available, noncommercial license, not an OSI "open source" license.
-For detailed boundaries, please refer to the "Usage Boundaries" section at the top of this document. Bundled third-party components keep their own licenses — see [`LICENSE`](LICENSE) and the root [`NOTICE.md`](NOTICE.md).
+**PolyForm Noncommercial 1.0.0** — free for any non-commercial use; commercial use requires a
+separate license from the author. Source-available, not OSI open source. See the usage boundary at
+the top of this file, [`LICENSE`](LICENSE), and [`NOTICE.md`](NOTICE.md) for bundled third-party
+components.
 
 ## Acknowledgements
 
-docspec is adapted from [OpenSpec](https://github.com/Fission-AI/OpenSpec); it runs standalone, with no OpenSpec dependency. Thanks to the OpenSpec team for the original spec-driven AI-agent workflow that this prose-first derivative grew from.
+docspec is a prose-first derivative of [OpenSpec](https://github.com/Fission-AI/OpenSpec); it runs
+standalone and does not depend on it. Thanks to the OpenSpec team for the spec-driven agent workflow
+it grew from.
