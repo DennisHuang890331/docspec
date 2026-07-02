@@ -23,14 +23,30 @@ English: [README.en.md](README.en.md)
 
 ## 端到端產出實證 (Showcase)
 
-docspec 已通過完整的壓力測試（包含結構閘門與忠實度硬閘），能駕馭雙語及多種文體。以下是完全由人與 agent 共筆、滾輪式從淺到深做出來的實證範例：
+六份文件——三種文體（小說／隨筆／學術綜述）× 中英雙語，每份皆由 AI agent 從零驅動 docspec 寫成。六份全數通過結構、潔淨、渲染忠實度閘門並匯出排版 PDF，為原始跑出的結果，未經手動修改或挑選。
 
-| 文件類型 | 語言 | 產出與排版亮點 |
-|---|---|---|
-| **中/長篇小說** | 中/英雙語 | 跨章節連續性查核、防劇透大綱生成。 |
-| **長篇論說** | 中/英雙語 | 論點連貫性保持、章節交叉引用驗證。 |
-| **工程設計/手冊** | 中/英雙語 | **自動生成架構圖**：由 agent 呼叫 drawio 繪圖並嵌進 PDF。 |
-| **學術綜述** | 中/英雙語 | **雙軌發布**：同時輸出 Typst 排版 PDF 與期刊標準 `.tex` 源碼。 |
+| 文體 | 語言 | 讀全文 | PDF | 篇幅 | 引擎閘 | 盲審風格 |
+|---|---|---|---|---|---|---|
+| 小說（短篇） | 中 | [讀](docs/showcase/deliverables/novel-zh.md) | [PDF](docs/showcase/pdfs/novel-zh.pdf) | 6 節 / ~3500 字 | ✓ | AI腔 5/5、流暢 5/5 |
+| 小說（短篇奇幻） | 英 | [讀](docs/showcase/deliverables/novel-en.md) | [PDF](docs/showcase/pdfs/novel-en.pdf) | 5 節 / ~2200 字 | ✓ | AI腔 4/5、流暢 5/5 |
+| 隨筆 | 中 | [讀](docs/showcase/deliverables/essay-zh.md) | [PDF](docs/showcase/pdfs/essay-zh.pdf) | 5 節 / ~2600 字 | ✓ | 高 |
+| 隨筆 | 英 | [讀](docs/showcase/deliverables/essay-en.md) | [PDF](docs/showcase/pdfs/essay-en.pdf) | 6 節 / ~2800 字 | ✓ | AI腔 4/5、流暢 5/5 |
+| 學術綜述 | 中 | [讀](docs/showcase/deliverables/academic-zh.md) | [PDF](docs/showcase/pdfs/academic-zh.pdf) | 10 節 / ~4000 字 | ✓ | AI腔 5/5、流暢 5/5 |
+| 學術綜述 | 英 | [讀](docs/showcase/deliverables/academic-en.md) | [PDF](docs/showcase/pdfs/academic-en.pdf) | 11 節 / ~4900 字 | ✓ | AI腔 4/5、流暢 5/5 |
+
+> 方法、模型與完整 prompt 見 [docs/showcase/](docs/showcase/)。
+
+![英文 PEFT 綜述產出的參考文獻頁](docs/showcase/images/academic-en-references.png)
+
+*英文 PEFT 綜述的參考文獻頁：真論文、正確的會議與 arXiv 編號。本次亦測試抗 AI 腔 lint——奇幻小說中的名詞 realm 與綜述中的名詞 leverage 均零誤報，因規則只針對片語與動詞形。*
+
+## 設計
+
+- **語義與引擎分離** — 引擎是薄的、確定性的守門員：id 唯一、無死引用、無環、完整性、以內容雜湊判斷過期、發行凍結，不做任何語義判斷。內容正確性與一致性由不阻塞的 factcheck／audit 標記，不擋發行。機械漂移由引擎確定性攔下，語義判斷維持非阻塞。
+- **省 token 的寫作模型** — 文章是結構層的投影。每一節盲渲染：agent 只看該節，加上引擎投影的光圈（aperture，僅相關的上游真相），不需載入整份持續成長的文件。跨節連貫來自共用寫作守則與確定性組裝，而非 agent 互讀。只有內容雜湊改變的節會重渲，因此每次動作的 token 成本不隨文件長度增長。
+- **寫作風格系統** — 寫作守則骨幹規則、於 `docspec init --lang` 時依語言種入的中／英道地準則、glossary 術語一致、潔淨 lint（V1–V17，含中文報幕式元敘述與英文 AI 套話規則）、可查核出處的寫作參考（`docspec reference writing-zh/en`）。上方 showcase 為此系統跨六種文體的實測。
+- **交付物與後台分離** — 人只讀 `docs/`（渲染成品）；`corpus/`（結構化後台）供 agent 與引擎使用。潔淨閘門確保後台詞彙、鷹架、佔位符不進入交付物。
+- **多文件森林治理** — 文件間以 `governed-by`／`realizes` 建跨文件邊。改動上游真相會將每個須重新同步的下游節標為過期（own／upstream／inherited／style 四軸傳播），使整套規格不致悄悄自相矛盾。
 
 ## 這給誰用
 
@@ -58,8 +74,7 @@ AI： [publish] 所有閘門綠 → 凍結 v1 唯讀快照、升版、記 change
 AI： [release] 匯出 → 看頁面圖 → 調排版旋鈕 → docs/exports/zenoh.pdf
 ```
 
-> 📄 **成品長這樣：**
-> `[插入壓測 PDF 截圖於此]`
+> 📄 **成品長這樣：** 見上方 [Showcase](#端到端產出實證-showcase) 的六份真實產出與 PDF，或 [docs/showcase/](docs/showcase/) 看完整方法與 prompt。
 
 ## 快速開始
 
@@ -129,7 +144,7 @@ docspec setup
 - **後台 `corpus/`（給 agent 和引擎）**：每個章節用幾個結構化小檔，記「一句話概念＋寫作邊界（brief：給誰看、寫多深）＋它實現了哪些決策」。這層只在乎邏輯嚴謹、事實完整，不管文筆。
 - **前台 `docs/`（給人）**：把後台盲渲染成散文成品——每一節獨立寫、看不到鄰節。**人只讀這層。**
 
-章節有穩定 id，搬資料夾或改名都不會斷引用。跨章節的連貫不靠 agent 互相偷看，而是靠一份共用的寫作守則加上確定性的組裝。
+章節有穩定 id，搬資料夾或改名都不會斷引用。跨章節的連貫不靠 agent 互相參照，而是靠一份共用的寫作守則加上確定性的組裝。
 
 ```text
 corpus/zenoh/intro/concept.yaml          docs/zenoh/_latest.md（渲出來、給人讀的）

@@ -23,14 +23,30 @@ You and the agent settle each section's logic and decisions first; docspec rende
 
 ## End-to-End Showcase
 
-docspec has been stress-tested across multiple genres and languages, passing strict structural and fidelity gates. Here are real examples entirely co-authored by human-agent interaction:
+Six documents — three genres (fiction / essay / academic survey) × two languages (English / Traditional Chinese), each written from scratch by an AI agent driving docspec. All six pass the structural, cleanliness, and render-fidelity gates and export to a typeset PDF. These are raw runs, not hand-edited or cherry-picked.
 
-| Document Type | Language | Output & Typesetting Highlights |
-|---|---|---|
-| **Novellas / Novels** | EN / ZH | Plot continuity fact-checking, spoiler-free outline generation. |
-| **Long-form Essays** | EN / ZH | Argument coherence, cross-section reference validation. |
-| **Engineering / Manuals** | EN / ZH | **Auto-generated diagrams**: Agent uses drawio to draw and embed diagrams. |
-| **Academic Surveys** | EN / ZH | **Dual-track publishing**: Emits both Typst-typeset PDFs and journal-ready `.tex` source. |
+| Genre | Lang | Read it | PDF | Length | Engine gates | Blind style review |
+|---|---|---|---|---|---|---|
+| Fiction (short story) | ZH | [read](docs/showcase/deliverables/novel-zh.md) | [PDF](docs/showcase/pdfs/novel-zh.pdf) | 6 sec / ~3.5k | ✓ | AI-tell 5/5, fluency 5/5 |
+| Fiction (short fantasy) | EN | [read](docs/showcase/deliverables/novel-en.md) | [PDF](docs/showcase/pdfs/novel-en.pdf) | 5 sec / ~2.2k | ✓ | AI-tell 4/5, fluency 5/5 |
+| Essay | ZH | [read](docs/showcase/deliverables/essay-zh.md) | [PDF](docs/showcase/pdfs/essay-zh.pdf) | 5 sec / ~2.6k | ✓ | high |
+| Essay | EN | [read](docs/showcase/deliverables/essay-en.md) | [PDF](docs/showcase/pdfs/essay-en.pdf) | 6 sec / ~2.8k | ✓ | AI-tell 4/5, fluency 5/5 |
+| Academic survey | ZH | [read](docs/showcase/deliverables/academic-zh.md) | [PDF](docs/showcase/pdfs/academic-zh.pdf) | 10 sec / ~4k | ✓ | AI-tell 5/5, fluency 5/5 |
+| Academic survey | EN | [read](docs/showcase/deliverables/academic-en.md) | [PDF](docs/showcase/pdfs/academic-en.pdf) | 11 sec / ~4.9k | ✓ | AI-tell 4/5, fluency 5/5 |
+
+> Method, model, and full prompts are in [docs/showcase/](docs/showcase/).
+
+![References page of the English PEFT survey](docs/showcase/images/academic-en-references.png)
+
+*References page of the English PEFT survey: real papers with correct venues and arXiv IDs. The run also tested the anti-AI-tell lint — the fantasy story's noun "realm" and the survey's noun "leverage" both drew zero false flags, since the rules target only the phrase and the verb forms.*
+
+## Design
+
+- **Semantics separated from the engine** — the engine is a thin, deterministic gatekeeper: id uniqueness, dead references, cycles, completeness, staleness by content hash, publish freeze. It makes no semantic judgment. Content correctness and consistency are handled by a non-blocking factcheck/audit that flags but never blocks a release. Mechanical drift is gated deterministically; semantic judgment stays advisory.
+- **Token-efficient authoring** — a document is a projection of a structure layer. Each section is rendered blind: the agent sees only that section plus an engine-projected aperture of the relevant upstream truths, never the whole growing document. Cross-section coherence comes from a shared writing guide and deterministic assembly, not from agents reading each other. Only sections whose content hash changed re-render, so per-action token cost does not grow with document length.
+- **Writing-quality system** — writing-guide backbone rules, language-seeded naturalness conventions written at `docspec init --lang` time (separate zh/en idiom rules), glossary term consistency, cleanliness lint (V1–V17, including rules for Chinese meta-narration and English AI-register clichés), and a citable writing reference (`docspec reference writing-zh/en`). The showcase above exercises this across six genres.
+- **Deliverable / backstage separation** — humans read only `docs/`, the rendered deliverable; `corpus/`, the structured backstage, is for the agent and engine. Cleanliness gates keep backstage vocabulary, scaffolding, and placeholders out of the deliverable.
+- **Multi-document forest governance** — documents connect through `governed-by` / `realizes` cross-document edges. Changing an upstream truth marks every downstream section that must re-sync as stale (propagated across own / upstream / inherited / style axes), so a set of specs cannot silently contradict itself.
 
 ## Who it's for
 
@@ -58,8 +74,7 @@ You: make a PDF
 AI:  [release] export → review page images → tune layout knobs → docs/exports/zenoh.pdf
 ```
 
-> 📄 **What the output looks like:**
-> `[Insert screenshot of rendered PDF here]`
+> 📄 **What the output looks like:** see the six real deliverables and PDFs in the [Showcase](#end-to-end-showcase) above, or [docs/showcase/](docs/showcase/) for the full method and prompts.
 
 ## Quick start
 
@@ -127,9 +142,9 @@ Then use the release skill in your agent to typeset interactively: export → re
 The usual failure mode when an AI writes docs: it reasons about logic and polishes wording at the same time, and you get something fluent but hollow and self-contradictory — and when you only want to check whether the logic holds, you're forced to read a screen of polished prose first. docspec splits those two jobs apart:
 
 - **Backstage `corpus/` (for the agent and the engine).** Each section is a few small structured files: a one-line concept, a writing envelope (`brief`: who it's for, how deep), and the decisions it realizes. This layer cares only about rigor and factual completeness, not style.
-- **Front `docs/` (for people).** The backstage is blind-rendered into finished prose — each section written in isolation, never peeking at siblings. **People read only this layer.**
+- **Front `docs/` (for people).** The backstage is blind-rendered into finished prose — each section written in isolation, without access to its siblings. **People read only this layer.**
 
-Sections have stable ids, so moving or renaming folders never breaks a reference. Coherence across sections doesn't come from agents peeking at each other; it comes from one shared writing guide plus deterministic assembly.
+Sections have stable ids, so moving or renaming folders never breaks a reference. Coherence across sections doesn't come from agents reading each other; it comes from one shared writing guide plus deterministic assembly.
 
 ```text
 corpus/zenoh/intro/concept.yaml          docs/zenoh/_latest.md  (rendered, for people)
