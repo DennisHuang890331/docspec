@@ -10,6 +10,71 @@ a minor bump.
 
 ## [Unreleased]
 
+### Added — bundled writing-style reference + language-seeded writing guide
+
+- **`docspec reference writing-zh` / `writing-en`**: docspec now ships a writing-style reference
+  (naturalness / anti-translationese for Chinese, anti-AI-tell for English), each claim traceable to
+  a cited source, merged with the template-pack craft reference under `docspec reference`. Consulted
+  by `develop` when drafting a project's writing-guide "Project conventions" section.
+- **`docspec init --lang zh-TW/en` seeds naturalness rules** directly into the new project's
+  `writing-guide.md` (via `build_writing_guide(lang)`), instead of leaving language-universal rules
+  for `develop` to fill in later. Genre-specific bullets stay fill-in placeholders.
+
+### Added — deliverable-cleanliness lint rules V16 / V17 (both WARN)
+
+- **V16 (zh)**: flags a normative escape-hatch hedge word (`最好`/`儘量`/`酌情`/`如有可能`/`視情況`/
+  `最大限度`) in the same sentence as a normative keyword (`應`/`不得`) — an unconditional requirement
+  softened into an unverifiable one. `必要時` is deliberately excluded (a legitimate EARS-style
+  conditional trigger, confirmed by ground-truthing against real corpora). WARN, never blocks.
+- **V17 (en)**: a closed, ground-truthed English "AI-ism" trigger set (delve, tapestry, boasts,
+  showcases, seamless, `utilize`-verb-forms, testament to, a myriad of, plethora, `in the realm of`,
+  `navigate the complexities of`, `underscores the/that/…`, `leverage`-verb-forms, and the
+  sentence-initial "In today's …" opener). `robust` and bare `leverage`/`realm`/`navigate`/
+  `underscores`/`utilization` are excluded — refuted or narrowed by real accepted corpora.
+- **Lint findings now carry a section locator**: V1–V4/V12/V13/V15/V16/V17 report
+  `docs/<article>/_latest.md § <section-path>` instead of file-level only, so an editor can jump
+  straight to the section; dedup unit becomes per-section.
+
+### Added — CLI discoverability & authoring seams
+
+- `docspec ready <article>` (batch graduation, per-section independent transactions); `ready`'s
+  missing-`decisions.yaml` error now hints that an empty `entries: []` is legal.
+- `docspec show <section-path>` (look up a section's ids by path, not just by id); `show` now prints
+  `governed-by`.
+- `docspec new` seeds the generated id / title / order into the scaffolded `develop.md` header.
+- Optional `<article>` positional scope on `check` / `lint` / `list` / `status` (`check` never
+  filters its errors/exit code — scope applies only to the green-path id index, no false-green).
+- `docspec list` shows group nodes with their localized titles and a `kind` field on every JSON row.
+- `docspec publish <article> --dry-run` (consolidated go/no-go pre-publish report, no freeze).
+- `docspec audit summary [<article>]` (mechanical convergence signal: open/closed finding counts,
+  including forest findings that touch the article).
+- Develop's forest map now projects candidate anchor concepts (id + title) for wiring `governed-by`.
+- `render` warns on a romanized-slug cover title for a CJK article (fix: add a root `group.yaml`
+  title) and strips hand-added closing-form `<!-- /dspx… -->` markers from frozen snapshots.
+- The `realizes` field's schema now documents the sibling-dependency filing rule (projected into
+  `docspec guide`). `impact`'s zero-blast message no longer reads as "orphan/unused".
+
+### Changed — diagram-intent gate exempts unwritten sections
+
+- The `brief.layout: diagram` gate no longer fires on an empty/whitespace-only section body, so
+  batch drafting stays green until prose exists without an embedded figure; the gate's error message
+  now routes authors to the drawio→PNG track (dspx-diagram skill / `setup --with-drawio` /
+  `docs/assets/`) instead of leaving them to invent mermaid.
+
+### Changed — internal module reorganization (no behavior change)
+
+- `check.py`, `commands/setup.py`, and `commands/export.py` were each split into a subpackage of
+  smaller single-concern modules, re-exporting their full public surface so every caller and test is
+  unchanged. New capability spec `module-reexport-stability` records the re-export contract.
+
+### Changed — repo hygiene
+
+- `src/dspx/skills/` renamed to `src/dspx/assets/skills/` (alongside `assets/templates|fonts|
+  reference/`, no longer colliding in name with the `skills.py` module that reads it).
+- `docspec setup` prints an honest stderr notice on macOS that the platform is not yet verified on
+  real hardware (only Windows and Linux are tested); it proceeds regardless. CI test matrix widened
+  to Python 3.11 / 3.12 / 3.13.
+
 ### Changed — PDF strategy pivot: Typst-default, dual-track binder
 
 - **Typst is now the default render track.** docspec ships one owned `.typ` house-style
