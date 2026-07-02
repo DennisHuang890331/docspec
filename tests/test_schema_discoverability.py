@@ -97,6 +97,27 @@ def test_field_contract_carries_type_and_enum_values():
     assert concept["brief"]["closed"] is True
 
 
+def test_filing_rules_carry_sibling_dependency_via_realizes(make_project, monkeypatch, capsys):
+    """#13c：sibling/跨文件決策依賴走 concept.realizes 的規則落 schema.yaml filing-rules、
+    由 guide 投影（鐵律2：規則住 schema、被投影，不散落散文）。"""
+    import json as _json
+
+    from dspx.commands import guide
+
+    s = load_schema()
+    ids = {r.get("id") for r in s.filing_rules}
+    assert "sibling-dependency-via-realizes" in ids
+
+    home = make_project()
+    monkeypatch.chdir(home.parent)
+    assert guide.run(["--json"]) == 0
+    data = _json.loads(capsys.readouterr().out)
+    rules = {r["id"]: r["rule"] for r in data["filingRules"]}
+    assert "sibling-dependency-via-realizes" in rules
+    assert "concept.realizes" in rules["sibling-dependency-via-realizes"]
+    assert "stale-upstream" in rules["sibling-dependency-via-realizes"]
+
+
 def test_yaml_skeleton_entries_container_and_enum_comments():
     s = load_schema()
     dec = yaml_skeleton(s.by_id("decisions"))

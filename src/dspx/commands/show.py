@@ -55,7 +55,8 @@ def _find(leaves: list, the_id: str, layout=None) -> dict | None:
             return {"kind": "concept", "section": leaf.section, "title": c.get("title"),
                     "status": c.get("status"), "concept": c.get("concept"),
                     "brief": c.get("brief"), "must_cover": c.get("must_cover"),
-                    "sources": c.get("sources"), "realizes": c.get("realizes")}
+                    "sources": c.get("sources"), "realizes": c.get("realizes"),
+                    "governedBy": c.get("governed-by")}
         for e in leaf.decisions:
             if str(e.get("id")) == the_id:
                 return {"kind": "decision", "section": leaf.section,
@@ -78,9 +79,40 @@ def _find(leaves: list, the_id: str, layout=None) -> dict | None:
     return None
 
 
+def _find_section(leaves: list, layout, arg: str) -> dict | None:
+    """section 路徑模式（id 查找 miss 後的第二種地址形狀）：回該節身份 payload。
+
+    命中條件＝引數含 `/`，或指到既有非封存 corpus 節資料夾。leaf → conceptId/title/status
+    （＝concept.status，非 sync 狀態）/order＋決策 id（statement 截 80 字）＋history id；
+    develop-only（尚無 concept.yaml）→ conceptId: null＋note。"""
+    section = arg.strip("/")
+    if not section:
+        return None
+    section_dir = layout.section_dir(section)
+    dir_hit = section_dir.is_dir() and not layout.is_archived_path(section_dir)
+    if "/" not in arg and not dir_hit:
+        return None
+    for leaf in leaves:
+        if leaf.section != section:
+            continue
+        c = leaf.concept or {}
+        return {"kind": "section", "section": section,
+                "conceptId": c.get("id"), "title": c.get("title"),
+                "status": c.get("status"), "order": c.get("order"),
+                "decisions": [{"id": e.get("id"), "status": e.get("status"),
+                               "statement": (str(e.get("statement") or ""))[:80]}
+                              for e in leaf.decisions],
+                "history": [{"id": e.get("id"), "kind": e.get("kind"),
+                             "status": e.get("status")} for e in leaf.history]}
+    if dir_hit:
+        return {"kind": "section", "section": section, "conceptId": None,
+                "note": "not yet crystallized (develop-only section: no concept.yaml yet)"}
+    return None
+
+
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec show", description=HELP)
-    parser.add_argument("id", help="id of the decision/concept/retirement")
+    parser.add_argument("id", help="id of the decision/concept/retirement, or a section path")
     parser.add_argument("--json", action="store_true", dest="as_json", help="output as JSON")
     args = parser.parse_args(argv)
 
@@ -92,7 +124,10 @@ def run(argv: list[str]) -> int:
 
     found = _find(leaves, args.id, layout)
     if found is None:
-        sys.stderr.write(f"docspec: id \"{args.id}\" not found (use docspec impact to see back-references)\n")
+        found = _find_section(leaves, layout, args.id)
+    if found is None:
+        sys.stderr.write(f"docspec: id or section \"{args.id}\" not found "
+                         "(use docspec list to see sections, docspec impact for back-references)\n")
         return 1
 
     payload = {"id": args.id, **found}

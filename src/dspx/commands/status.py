@@ -107,7 +107,10 @@ def _leaf_row(layout: Layout, leaf: Leaf, schema: Schema, check_ok: bool,
 
 
 def run(argv: list[str]) -> int:
+    import sys
+
     parser = argparse.ArgumentParser(prog="docspec status", description=HELP)
+    parser.add_argument("article", nargs="?", default=None, help="scope output to this article")
     parser.add_argument("--section", default=None, help="report only this leaf section")
     parser.add_argument("--json", action="store_true", dest="as_json", help="output as JSON")
     args = parser.parse_args(argv)
@@ -119,10 +122,20 @@ def run(argv: list[str]) -> int:
     except BootstrapError as exc:
         return exc.exit_code
 
+    if args.article:
+        known = {lf.article for lf in leaves} | {
+            s.split("/", 1)[0]
+            for s in develop_only_sections(layout, {lf.section for lf in leaves})}
+        if args.article not in known:
+            sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n")
+            return 1
+
     check_ok = run_check(leaves, schema, layout).ok
     by_section = {lf.section: lf for lf in leaves}   # 全專案，供祖先 brief 查找
     dindex = decision_index(leaves)                  # 全專案決策索引，供 deps 指紋
-    shown = [lf for lf in leaves if lf.section == args.section] if args.section else leaves
+    shown = [lf for lf in leaves if lf.article == args.article] if args.article else leaves
+    if args.section:
+        shown = [lf for lf in shown if lf.section == args.section]
 
     from dspx.render import detect_drift
     hashes_by_article: dict[str, dict] = {}
@@ -141,6 +154,8 @@ def run(argv: list[str]) -> int:
     # develop-only 章節（已建 develop.md、尚未結晶成 concept/decisions）——讓它們可見且不誤報 ready
     leaf_sections = {lf.section for lf in leaves}
     for sec in develop_only_sections(layout, leaf_sections):
+        if args.article and sec.split("/", 1)[0] != args.article:
+            continue
         if args.section and sec != args.section:
             continue
         devdir = layout.section_dir(sec)

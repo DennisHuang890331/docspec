@@ -113,6 +113,9 @@ filing-rules:
   - id: retire-via-transaction
     rule: "Retire a decision with docspec retire, a whole section with docspec retire-section — never hand-move/delete a section folder; published archive/ is immutable (hash-netted by lint)."
     enforced-by: retire / lint
+  - id: sibling-dependency-via-realizes
+    rule: "A dependency on ANOTHER section's decision — sibling or cross-document — is declared as a structural edge: concept.realizes (list of decision ids). Never park an internal decision id in sources: (external provenance only) and never rely on a bare id mention in prose — staleness (stale-upstream) and impact only see structural edges."
+    enforced-by: check
 
 # Project-level files: not artifacts (no corpus field schema, not in the leaf-section directory), but contracts the agent must know.
 # guide projects them, closing the blind spot where the style/term authority is invisible to the agent contract. Injection mechanism is in aperture.py.

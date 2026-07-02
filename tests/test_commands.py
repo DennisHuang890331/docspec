@@ -45,6 +45,24 @@ def test_new_then_instructions_on_uncrystallized(make_project, monkeypatch, caps
     assert "order: 2" in tpl      # 同層第二個 → order 接龍 2
 
 
+def test_new_seeds_develop_header_with_id_title_order(make_project, monkeypatch):
+    """#5/#6：new 把 id/title/order 種進 develop.md 註解頭（id 持久化、--title 生效）；
+    種子是純註解 → drain_remainder 永不擋畢業。"""
+    home = make_project()
+    monkeypatch.chdir(home.parent)
+    assert new_cmd.run(["demo/intro", "--title", "導言"]) == 0
+    body = (home / "corpus" / "demo" / "intro" / "develop.md").read_text(encoding="utf-8")
+    assert "sec-" in body                 # 生成的 id 持久化在鷹架裡
+    assert "導言" in body                  # --title 不再是 no-op
+    assert "order: 1" in body
+    assert ready_cmd.drain_remainder(body) == ""   # 種子＝註解，不算實質殘留
+
+    assert new_cmd.run(["demo/guide"]) == 0        # 無 --title → 路徑末段
+    body2 = (home / "corpus" / "demo" / "guide" / "develop.md").read_text(encoding="utf-8")
+    assert "guide" in body2
+    assert ready_cmd.drain_remainder(body2) == ""
+
+
 def test_new_refuses_overwrite(make_project, monkeypatch):
     home = make_project()
     monkeypatch.chdir(home.parent)
