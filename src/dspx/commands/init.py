@@ -71,6 +71,10 @@ _WRITING_GUIDE_BACKBONE = """\
    Tier-1·2·3 / L2a / diamond fan-in / module-section / factcheck / raise a finding / §back-ref).
    Express document relationships in domain language instead: name the document (《…》), write "per
    the principles in 《…》" or "see 《…》", and "the sections of this spec" — not "module-sections".
+   For a SAME-document cross-reference, quote the target section's human title —
+   「詳見「〈章節標題〉」一節」 / "see the section titled …" — never `§` plus a number or a
+   backstage id. Inside tables, where a citation sentence doesn't fit, still prefer the section's
+   human title (quoted, shortened if needed) over `§` notation.
 9. **Density**: one idea per paragraph, 4–5 sentences max.
 10. **No metaphors / nicknames** → state responsibilities plainly.
 11. **No first-person colloquialism** → formal sentences with explicit subjects.

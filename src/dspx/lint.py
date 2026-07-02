@@ -32,6 +32,11 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   `{=tex}` 區塊（舊 TikZ 寫法）——LaTeX-only、預設 Typst 軌會被剝掉而消失。兩者都非 backend-neutral，
   與 Ve2 的 @import 同類，故 WARN 前移、導向改用 drawio 圖片。字體/留白仍＝export 設定、不進此處。
   （TikZ／mermaid→TikZ 教條已退場；diagrams travel as images。）
+
+  finding 定位：交付物本文規則（V1–V4/V12/V13/V15/V16/V17）的 where 帶章節定位
+  `docs/<article>/_latest.md § <section-path>`——沿隱形 `dspx:section`/`dspx:group` 標記切段、
+  逐段掃描；首個標記前的 preamble／整份無標記的檔案回退檔案級 where。去重單位＝每章節
+  （同 token 洩漏兩章節＝兩筆各自可定位的 finding）。V10 為全文聚合檢查、維持檔案級。
 """
 
 from __future__ import annotations
@@ -172,71 +177,110 @@ def _strip_frontmatter(text: str) -> str:
     return text
 
 
+def _split_marker_segments(body: str) -> list[tuple[str | None, str]]:
+    """把（已剝 frontmatter 的）交付物本文沿隱形章節標記切段：回傳 [(section-path|None, text)]。
+
+    標記＝render 擁有的行級 `<!-- dspx:section <path> -->` 與 `<!-- dspx:group <path> -->`；
+    首個標記之前的 preamble 段 section=None（finding 回退檔案級 where）。刻意不重用
+    render.parse_section_bodies：它會丟掉標記後的標題行與 group 段文字——lint 要掃**全部**
+    交付物文字（標題裡的洩漏也要抓），只消耗標記行本身。"""
+    from dspx.render import GROUP_MARKER_RE, MARKER_RE
+    segments: list[tuple[str | None, str]] = []
+    current: str | None = None
+    buf: list[str] = []
+    for line in body.split("\n"):
+        m = MARKER_RE.match(line) or GROUP_MARKER_RE.match(line)
+        if m:
+            segments.append((current, "\n".join(buf)))
+            current = m.group(1)
+            buf = []
+            continue
+        buf.append(line)
+    segments.append((current, "\n".join(buf)))
+    return segments
+
+
+def _scan_deliverable_text(body: str, where: str, all_ids: set[str]) -> list[Finding]:
+    """對一段（已剝註解/程式碼的）交付物文字跑 V1–V4/V12/V13/V15/V16/V17 潔淨規則。
+
+    `where`＝finding 定位（章節級 `docs/<a>/_latest.md § <section>` 或檔案級回退）。
+    去重單位＝呼叫者給的這段文字（章節切段後＝每章節去重：同 token 洩漏兩章節＝兩筆各自可定位）。"""
+    findings: list[Finding] = []
+    for the_id in sorted(all_ids):
+        if the_id in body:
+            findings.append(Finding("V1", ERROR, where, f"leaked internal code/id \"{the_id}\""))
+    for m in _ANCHOR_RE.findall(body):
+        findings.append(Finding("V2", ERROR, where, f"leftover internal anchor \"{m}\""))
+    if _SCAFFOLD_RE.search(body):
+        findings.append(Finding("V3", ERROR, where, "leftover scaffold placeholder ({id}/{title}/{order}/{name})"))
+    for m in dict.fromkeys(_PLACEHOLDER_RE.findall(body)):
+        findings.append(Finding("V4", ERROR, where, f"leftover placeholder \"{m.strip()}\""))
+    for m in _ALERT_RE.findall(body):
+        findings.append(Finding("V12", ERROR, where,
+                                "leftover GFM alert/admonition (e.g. `> [!WARNING]`) -- "
+                                "draft emits these as a stop-and-flag marker; never ship one"))
+    for m in dict.fromkeys(_RESERVED_EXAMPLE_RE.findall(body)):
+        findings.append(Finding("V13", WARN, where,
+                                f"reserved example/placeholder token shipped \"{m.strip()}\" -- "
+                                "RFC 2606 example.* domains / lorem ipsum / 555-01xx signal "
+                                "unfilled placeholder data (e.g. an author/contact never filled in)"))
+    for m in dict.fromkeys(_TOOL_VOCAB_RE.findall(body)):
+        findings.append(Finding("V15", ERROR, where,
+                                f"leaked authoring-tool/governance vocabulary \"{m.strip()}\" -- "
+                                "the deliverable is for domain readers, not for operators of the "
+                                "authoring tool; express document relationships in domain language: "
+                                "cross-document, name the document (\"per 《…》\", \"see 《…》\"); "
+                                "same-document, quote the target section's human title "
+                                "(「詳見「〈章節標題〉」一節」), never § + a number or a backstage id. "
+                                "Never ship backstage terms (forest / governed-by / governance parent "
+                                "/ Tier-N / L2a / fan-in / module-section / factcheck / raise a "
+                                "finding / §back-ref)"))
+    for m in dict.fromkeys(_AI_ISM_RE.findall(body)):
+        findings.append(Finding("V17", WARN, where,
+                                f"English AI-ism register tell \"{m.strip()}\" -- vocabulary "
+                                "disproportionately common in LLM-generated English (see "
+                                "`docspec reference writing-en`); prefer a plainer, more "
+                                "specific word (advisory; a cited title or genuine term of "
+                                "art may be legitimate -- the call is the author's)"))
+    for m in dict.fromkeys(_AI_ISM_OPENER_RE.findall(body)):
+        findings.append(Finding("V17", WARN, where,
+                                f"English AI-ism opener \"{m}\" -- sentence-initial "
+                                "\"In today's ...\" is throat-clearing (see `docspec reference "
+                                "writing-en`); start with the actual claim instead"))
+    seen_escape_hatch: set[str] = set()
+    for sentence in _PSEUDO_SENTENCE_SPLIT_RE.split(body):
+        if not _NORMATIVE_KEYWORD_RE.search(sentence):
+            continue
+        for m in _ESCAPE_HATCH_RE.findall(sentence):
+            if m in seen_escape_hatch:
+                continue
+            seen_escape_hatch.add(m)
+            findings.append(Finding("V16", WARN, where,
+                                    f"normative escape-hatch hedge word \"{m}\" in the same sentence "
+                                    "as a normative keyword (應/不得) -- looks like an unconditional, "
+                                    "testable requirement was softened into an unverifiable one; "
+                                    "either state a closed condition or drop the hedge"))
+    return findings
+
+
 def _lint_docs(layout: Layout, articles: list[str], all_ids: set[str]) -> list[Finding]:
     findings: list[Finding] = []
     for article in articles:
         path = layout.docs_latest(article)
         if not path.is_file():
             continue
-        body = _strip_frontmatter(path.read_text(encoding="utf-8"))
-        # 隱形章節標記（<!-- dspx:section … -->）讀者看不到、publish 會剝除——
-        # 不算交付物洩漏，掃描前先去掉所有 HTML 註解，免得誤判 V2/V3。
-        # 再剝掉程式碼區塊：裡面的 KE 模板/JSON/變數名是內容，不是機械。
-        body = _HTML_COMMENT_RE.sub("", body)
-        body = _FENCED_CODE_RE.sub("", body)
-        body = _INLINE_CODE_RE.sub("", body)
-        where = f"docs/{article}/_latest.md"
-        for the_id in sorted(all_ids):
-            if the_id in body:
-                findings.append(Finding("V1", ERROR, where, f"leaked internal code/id \"{the_id}\""))
-        for m in _ANCHOR_RE.findall(body):
-            findings.append(Finding("V2", ERROR, where, f"leftover internal anchor \"{m}\""))
-        if _SCAFFOLD_RE.search(body):
-            findings.append(Finding("V3", ERROR, where, "leftover scaffold placeholder ({id}/{title}/{order}/{name})"))
-        for m in dict.fromkeys(_PLACEHOLDER_RE.findall(body)):
-            findings.append(Finding("V4", ERROR, where, f"leftover placeholder \"{m.strip()}\""))
-        for m in _ALERT_RE.findall(body):
-            findings.append(Finding("V12", ERROR, where,
-                                    "leftover GFM alert/admonition (e.g. `> [!WARNING]`) -- "
-                                    "draft emits these as a stop-and-flag marker; never ship one"))
-        for m in dict.fromkeys(_RESERVED_EXAMPLE_RE.findall(body)):
-            findings.append(Finding("V13", WARN, where,
-                                    f"reserved example/placeholder token shipped \"{m.strip()}\" -- "
-                                    "RFC 2606 example.* domains / lorem ipsum / 555-01xx signal "
-                                    "unfilled placeholder data (e.g. an author/contact never filled in)"))
-        for m in dict.fromkeys(_TOOL_VOCAB_RE.findall(body)):
-            findings.append(Finding("V15", ERROR, where,
-                                    f"leaked authoring-tool/governance vocabulary \"{m.strip()}\" -- "
-                                    "the deliverable is for domain readers, not for operators of the "
-                                    "authoring tool; express document relationships in domain language "
-                                    "(name the document, \"per 《…》\", \"see 《…》\"), not backstage "
-                                    "terms (forest / governed-by / governance parent / Tier-N / L2a / "
-                                    "fan-in / module-section / factcheck / raise a finding / §back-ref)"))
-        for m in dict.fromkeys(_AI_ISM_RE.findall(body)):
-            findings.append(Finding("V17", WARN, where,
-                                    f"English AI-ism register tell \"{m.strip()}\" -- vocabulary "
-                                    "disproportionately common in LLM-generated English (see "
-                                    "`docspec reference writing-en`); prefer a plainer, more "
-                                    "specific word (advisory; a cited title or genuine term of "
-                                    "art may be legitimate -- the call is the author's)"))
-        for m in dict.fromkeys(_AI_ISM_OPENER_RE.findall(body)):
-            findings.append(Finding("V17", WARN, where,
-                                    f"English AI-ism opener \"{m}\" -- sentence-initial "
-                                    "\"In today's ...\" is throat-clearing (see `docspec reference "
-                                    "writing-en`); start with the actual claim instead"))
-        seen_escape_hatch: set[str] = set()
-        for sentence in _PSEUDO_SENTENCE_SPLIT_RE.split(body):
-            if not _NORMATIVE_KEYWORD_RE.search(sentence):
-                continue
-            for m in _ESCAPE_HATCH_RE.findall(sentence):
-                if m in seen_escape_hatch:
-                    continue
-                seen_escape_hatch.add(m)
-                findings.append(Finding("V16", WARN, where,
-                                        f"normative escape-hatch hedge word \"{m}\" in the same sentence "
-                                        "as a normative keyword (應/不得) -- looks like an unconditional, "
-                                        "testable requirement was softened into an unverifiable one; "
-                                        "either state a closed condition or drop the hedge"))
+        raw = _strip_frontmatter(path.read_text(encoding="utf-8"))
+        file_where = f"docs/{article}/_latest.md"
+        # 章節定位：沿隱形章節標記切段、逐段掃——finding 的 where 指名含命中的章節
+        # （`docs/<a>/_latest.md § <section>`）；首個標記前的 preamble／整份無標記＝檔案級回退。
+        for section, segment in _split_marker_segments(raw):
+            # 每段先剝 HTML 註解（隱形標記讀者看不到、publish 會剝除，不算洩漏），
+            # 再剝程式碼區塊：裡面的 KE 模板/JSON/變數名是內容，不是機械。
+            text = _HTML_COMMENT_RE.sub("", segment)
+            text = _FENCED_CODE_RE.sub("", text)
+            text = _INLINE_CODE_RE.sub("", text)
+            where = f"{file_where} § {section}" if section else file_where
+            findings.extend(_scan_deliverable_text(text, where, all_ids))
     return findings
 
 

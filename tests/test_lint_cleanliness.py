@@ -304,3 +304,68 @@ def test_v17_clean_doc_no_finding(make_project, write_leaf, monkeypatch):
     _inject(layout, "a", "\n\nThe gateway rejects requests over the limit and returns 429 "
                          "with a Retry-After header.\n")
     assert not any(f.rule == "V17" for f in _lint(layout))
+
+
+# ── 章節定位（F-v15-no-section-locator：交付物本文規則的 where 帶 § <section>）──────
+
+
+def _two_leaves(write_leaf, home):
+    for i, name in enumerate(("x", "y"), start=1):
+        write_leaf(home, f"a/{name}",
+                   concept={"id": f"c{i}", "title": name.upper(), "order": i, "concept": name,
+                            "brief": {"audience": "a", "depth": "d",
+                                      "breadth": "b", "forbidden": ["f"]}})
+
+
+def _inject_into_section(layout: Layout, article: str, section: str, extra: str) -> None:
+    """把文字插進指定章節的標記之後（成為該章節段的內容）。"""
+    p = layout.docs_latest(article)
+    text = p.read_text(encoding="utf-8")
+    marker = f"<!-- dspx:section {section} -->"
+    assert marker in text
+    p.write_text(text.replace(marker, marker + "\n" + extra, 1), encoding="utf-8")
+
+
+def test_finding_where_names_the_containing_section(make_project, write_leaf, monkeypatch):
+    """V15 token 只在章節 a/y → finding 的 where 指名 § a/y（不再只有檔案級）。"""
+    home = make_project(); _two_leaves(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject_into_section(layout, "a", "a/y", "\n本文件同時承接兩個治理父。\n")
+    v15 = [f for f in _lint(layout) if f.rule == "V15"]
+    assert v15 and all(f.where == "docs/a/_latest.md § a/y" for f in v15)
+    # detail 同時導向同文件核准寫法（引章節人讀標題，非 §+編號/後台 id）
+    assert all("詳見「〈章節標題〉」一節" in f.detail for f in v15)
+
+
+def test_same_token_in_two_sections_yields_two_located_findings(make_project, write_leaf, monkeypatch):
+    """去重單位＝每章節：同 token 洩漏兩章節＝兩筆 finding、各自可定位。"""
+    home = make_project(); _two_leaves(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject_into_section(layout, "a", "a/x", "\n上表由治理父決定。\n")
+    _inject_into_section(layout, "a", "a/y", "\n本節亦由治理父決定。\n")
+    v15 = [f for f in _lint(layout) if f.rule == "V15"]
+    assert len(v15) == 2
+    assert {f.where for f in v15} == {"docs/a/_latest.md § a/x", "docs/a/_latest.md § a/y"}
+
+
+def test_preamble_before_first_marker_falls_back_to_file_level(make_project, write_leaf, monkeypatch):
+    """首個標記之前的文字（preamble）回退檔案級 where；整份無標記（他測已覆蓋）同理。"""
+    home = make_project(); _two_leaves(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    p = layout.docs_latest("a")
+    text = p.read_text(encoding="utf-8")
+    idx = text.index("<!-- dspx:")          # 任何標記（section 或 group）之前
+    p.write_text(text[:idx] + "序言就提到治理父。\n\n" + text[idx:], encoding="utf-8")
+    v15 = [f for f in _lint(layout) if f.rule == "V15"]
+    assert v15 and all(f.where == "docs/a/_latest.md" for f in v15)
+
+
+def test_v4_and_v16_findings_are_section_located_too(make_project, write_leaf, monkeypatch):
+    """章節定位涵蓋整個交付物本文規則家族（不只 V15）——抽 V4/V16 各驗一筆。"""
+    home = make_project(); _two_leaves(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject_into_section(layout, "a", "a/x", "\n回覆簽名 [TBD: 確認]。\n")
+    _inject_into_section(layout, "a", "a/y", "\n系統應視情況重新啟動。\n")
+    findings = _lint(layout)
+    assert any(f.rule == "V4" and f.where == "docs/a/_latest.md § a/x" for f in findings)
+    assert any(f.rule == "V16" and f.where == "docs/a/_latest.md § a/y" for f in findings)

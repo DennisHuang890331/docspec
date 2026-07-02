@@ -80,6 +80,14 @@ def test_build_writing_guide_seeds_en_naturalness():
     assert "動詞當家" not in guide
 
 
+def test_backbone_rule8_carries_same_document_crossref_form():
+    """規則 8 給同文件的核准寫法（引章節人讀標題）＋表格情境 doctrine 提示，不只跨文件《…》。"""
+    guide = init_cmd.build_writing_guide("zh-TW")
+    assert "SAME-document cross-reference" in guide
+    assert "詳見「〈章節標題〉」一節" in guide
+    assert "Inside tables" in guide and "over `§` notation" in guide
+
+
 def test_build_writing_guide_unknown_lang_keeps_placeholder():
     guide = init_cmd.build_writing_guide("fr")
     assert "docspec ships no bundled reference for this language yet" in guide

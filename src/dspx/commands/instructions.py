@@ -130,6 +130,13 @@ def run(argv: list[str]) -> int:
     if proj.project_purpose:
         print(f"Project goal: {proj.project_purpose}\n")
 
+    # 風格權威（writing guide）印在大宗逐節內容之前：edit 級投影可達 ~100KB、消費端可能截尾——
+    # 印在最後會讓 naive editor 根本沒看到它。刻意只調順序、不做任何截斷/預算機制（非目標）。
+    if proj.writing_guide:
+        print("── Writing guide (one shared copy for the whole document; coherence comes from it, not from reading other sections) ──")
+        print(proj.writing_guide)
+        print()
+
     if proj.forest is not None:
         f = proj.forest
         print("── Forest map (this document's place in the forest / who governs it / who it parallels; set governed-by against this) ──")
@@ -277,10 +284,6 @@ def run(argv: list[str]) -> int:
             if w.get("instruction"):
                 print(w["instruction"])
 
-    if proj.writing_guide:
-        print("\n── Writing guide (one shared copy for the whole document; coherence comes from it, not from reading other sections) ──")
-        print(proj.writing_guide)
-
     if proj.glossary:
         print("\n── Terminology authority (lean index; apply the bucket treatment before writing; canonical is mandatory, aliases_forbidden is banned) ──")
         print("  Drill down for definition/english via `docspec show <id>`; write per the definition in your own words (write-per, don't clone).")
@@ -306,4 +309,8 @@ def run(argv: list[str]) -> int:
                 disp = f"`{canon}`" if bucket == "protocol" else canon  # protocol uses code formatting to demonstrate the treatment
                 ref = f" [{tid}]" if tid else ""
                 print(f"    • {disp}{ref}{tail}")
+
+    if proj.writing_guide:
+        # 尾端回指：巨量/被截尾的投影從尾巴讀起也找得到風格權威（正文在上方、header 之後）。
+        print("\n(style authority: the writing guide is projected near the TOP of this output, right after the header — read it before touching any prose)")
     return 0

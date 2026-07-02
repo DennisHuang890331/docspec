@@ -215,6 +215,20 @@ def test_instructions_backstage_projections_warn_against_narration(make_project,
     assert "本節約束下游" in out2                          # coverage/coherence 守護點名
 
 
+def test_instructions_writing_guide_precedes_sections_with_tail_pointer(make_project, write_leaf, monkeypatch, capsys):
+    """F-edit-projection-too-large：writing guide（風格權威）印在大宗逐節內容之前（緊接 header），
+    輸出最末一行回指它——巨量/被截尾的投影從頭從尾都找得到；只調順序、無截斷機制。"""
+    from dspx.commands import instructions as instr_cmd
+    home = make_project()
+    (home / "writing-guide.md").write_text("# Writing guide\n\n風格權威哨兵句。\n", encoding="utf-8")
+    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
+    monkeypatch.chdir(home.parent)
+    assert instr_cmd.run(["edit", "g/x"]) == 0
+    out = capsys.readouterr().out
+    assert out.index("Writing guide") < out.index("── Readable")   # 風格權威在逐節內容之前
+    assert out.rstrip().splitlines()[-1].startswith("(style authority:")  # 尾端回指
+
+
 def _write_roadmap_file(path, entries):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump({"entries": entries}, allow_unicode=True,
