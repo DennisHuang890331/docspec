@@ -115,6 +115,14 @@ def run(argv: list[str]) -> int:
             " — not covered by the TinyTeX manifest.\n")
         return 1
 
+    if platform.system() == "Darwin":
+        # macOS 的下載/解壓/字型路徑在程式碼裡是齊的（manifest + 平台 key），但尚未在真實
+        # Mac 硬體上跑過一輪端到端驗證（只在 Windows/Linux 實測過）——先誠實提醒，不擋。
+        sys.stderr.write(
+            "docspec: note — macOS is not yet verified on real hardware "
+            "(only Windows and Linux are tested); setup will proceed but may hit "
+            "untested edge cases. Reports welcome.\n")
+
     try:
         dd = paths.data_dir()
     except Exception as exc:  # noqa: BLE001 — platformdirs 缺席等

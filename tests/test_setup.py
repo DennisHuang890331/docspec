@@ -54,6 +54,23 @@ def test_setup_with_latex_installs_tinytex(monkeypatch, tmp_path):
     assert "tinytex" in calls and "pkgs" in calls
 
 
+def test_setup_warns_macos_not_verified(monkeypatch, tmp_path, capsys):
+    """macOS 尚未實機驗證：setup 照跑但在 stderr 誠實提醒（不擋）。"""
+    _stub_setup_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(setup_cmd.platform, "system", lambda: "Darwin")
+    assert setup_cmd.run([]) == 0
+    err = capsys.readouterr().err
+    assert "macOS is not yet verified" in err
+
+
+def test_setup_no_macos_warning_on_other_platforms(monkeypatch, tmp_path, capsys):
+    """非 macOS 平台不印那行提醒。"""
+    _stub_setup_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(setup_cmd.platform, "system", lambda: "Windows")
+    assert setup_cmd.run([]) == 0
+    assert "macOS is not yet verified" not in capsys.readouterr().err
+
+
 # ── paths 解析 ────────────────────────────────────────────────────
 
 def test_data_dir_subpaths_consistent(monkeypatch, tmp_path):
