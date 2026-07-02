@@ -55,7 +55,26 @@ docspec init --tool claude    # 建專案並把 skill 裝進你的 agent
 
 ## 運作方式
 
-寫作是六個 skill 的迴圈，在 agent 裡呼叫，引擎在背後把關：
+一個 docspec 專案分兩層。**後台**（`corpus/`）每節放幾個結構化 YAML 檔——一句話的概念、一份 brief
+（受眾、範圍、深度），以及這節實現了哪些決策；邏輯與完整性都住在這層，給 agent 和引擎看。**前台**
+（`docs/`）是渲染出來的散文成品——每節各自獨立渲染、再確定性組裝。**人只讀前台。** 章節有穩定 id，
+搬資料夾或改名都不會斷引用；跨節的連貫靠一份共用的寫作守則，而不是 agent 互相參照。
+
+這一切都在 agent 對話裡用六個 skill 驅動，引擎在背後把關。
+
+### 寫你的第一份文件
+
+`docspec init` 之後，在專案裡打開你的 agent，說你想寫什麼：
+
+1. **「用 develop 開一份講 X 的文件。」** agent 建好章節骨架，並問你受眾、範圍、深度。你這時審的是
+   大綱——概念與決策——不是散文。
+2. **「draft 這一節。」** agent 把這節渲染成散文寫進 `docs/`，你在那裡讀。
+3. **「edit」再「factcheck」**——先潤一遍稿，再把每條主張對一手來源查核。
+4. 一版定稿就**「publish」**：引擎跑完所有閘、凍結一份唯讀的版本快照、記一筆 changelog；要 PDF 就
+   **「出成 PDF」**。
+
+你不必親手改後台、也不必自己敲引擎指令——你只跟 agent 對話，每一步讀渲染出來的 `docs/` 檔。在對話
+裡看起來像這樣：
 
 ```text
 你： 我要寫一份 zenoh 控制平面的技術文件，先用 develop 起大綱
@@ -68,6 +87,8 @@ AI： [draft] 盲渲染成散文 → docs/zenoh/_latest.md
 AI： [publish] 所有閘綠 → 凍結唯讀 v1 快照、升版、記 changelog
 ```
 
+六個 skill：
+
 | skill | 做什麼 |
 |---|---|
 | **develop** | 長出／重整一節的概念與決策（受眾、範圍、深度）；先有骨架，不寫散文 |
@@ -77,10 +98,8 @@ AI： [publish] 所有閘綠 → 凍結唯讀 v1 快照、升版、記 changelog
 | **publish** | 不可逆發行：所有閘綠 → 凍結唯讀快照 → 升版 → 記 changelog |
 | **release** | 互動排版：匯出 → 看頁面圖 → 調旋鈕 → 重出 |
 
-這是迴圈、不是流水線：factcheck 抓到問題就退回 develop 或 draft。
-
-後台 `corpus/`（每節結構化 YAML，給 agent 與引擎）與前台 `docs/`（盲渲染散文，給人）分離。每一節
-獨立渲染；跨節連貫來自共用寫作守則與確定性組裝，而非 agent 互相參照。
+這是迴圈、不是流水線：factcheck 抓到問題就退回 develop 或 draft。日後改動上游某節，引擎會把每個需要
+重新同步的下游節標出來，一致性不會在你沒察覺時悄悄跑掉。
 
 ## 設計
 
@@ -115,9 +134,20 @@ docspec setup
 
 ## Showcase
 
-六份文件——小說、隨筆、學術綜述，中英雙語——由 agent 從零驅動 docspec 寫成，各自通過結構、潔淨、
-渲染忠實度閘門。渲染成品、匯出 PDF，以及方法、模型、完整 prompt 都在
-**[docs/showcase/](docs/showcase/)**。
+六份由 agent 從零驅動 docspec 寫成的文件——三種文體 × 中英雙語，每一份都通過結構、潔淨、渲染忠實度
+閘門，並匯出成排版 PDF。點進去讀渲染成品或開 PDF：
+
+| 文體 | 語言 | 讀全文 | PDF |
+|---|---|---|---|
+| 小說——短篇 | 正體中文 | [讀](docs/showcase/deliverables/novel-zh.md) | [PDF](docs/showcase/pdfs/novel-zh.pdf) |
+| 小說——短篇奇幻 | 英文 | [讀](docs/showcase/deliverables/novel-en.md) | [PDF](docs/showcase/pdfs/novel-en.pdf) |
+| 隨筆 | 正體中文 | [讀](docs/showcase/deliverables/essay-zh.md) | [PDF](docs/showcase/pdfs/essay-zh.pdf) |
+| 隨筆 | 英文 | [讀](docs/showcase/deliverables/essay-en.md) | [PDF](docs/showcase/pdfs/essay-en.pdf) |
+| 學術綜述 | 正體中文 | [讀](docs/showcase/deliverables/academic-zh.md) | [PDF](docs/showcase/pdfs/academic-zh.pdf) |
+| 學術綜述 | 英文 | [讀](docs/showcase/deliverables/academic-en.md) | [PDF](docs/showcase/pdfs/academic-en.pdf) |
+
+這些文件怎麼做出來的——用哪些模型、什麼方法、完整的 prompt——寫在 **[docs/showcase/](docs/showcase/)**，
+連做得不夠好的地方也照實交代。
 
 ## 開發 / 貢獻
 

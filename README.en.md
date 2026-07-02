@@ -61,7 +61,29 @@ yourself. The commands you run by hand are just setup and maintenance:
 
 ## How it works
 
-Authoring is a loop of six skills invoked in your agent; the engine gatekeeps behind them:
+A docspec project has two layers. The **backstage** (`corpus/`) holds a few structured YAML files per
+section — a one-line concept, a brief (audience, scope, depth), and the decisions the section
+realizes. This is where logic and completeness live, and it is for the agent and engine. The **front**
+(`docs/`) is the rendered prose deliverable — each section rendered in isolation, then assembled
+deterministically. **People read only the front.** Section ids are stable, so moving or renaming a
+section never breaks a reference; coherence across sections comes from a shared writing guide, not
+from agents reading each other.
+
+You drive all of this from your agent's chat through six skills; the engine gatekeeps behind them.
+
+### Your first document
+
+After `docspec init`, open your agent in the project and describe what you want to write:
+
+1. **"Start a doc on X — use develop."** The agent builds the section skeleton and asks you about
+   audience, scope, and depth. You review the outline — concepts and decisions — not prose.
+2. **"Draft this section."** The agent renders that section to prose in `docs/`; you read it there.
+3. **"Edit"** then **"factcheck"** — a polishing pass, then each claim is checked against a source.
+4. **"Publish"** when a version is done: the engine runs its gates, freezes a read-only versioned
+   snapshot, and writes a changelog entry. **"Make a PDF"** exports a typeset PDF.
+
+You never edit the backstage or run engine commands by hand — you talk to the agent and read the
+rendered `docs/` file at each step. In chat it looks like this:
 
 ```text
 You: draft a doc on zenoh as a control plane — start with develop
@@ -74,6 +96,8 @@ You: publish
 AI:  [publish] gates green → froze a read-only v1 snapshot, bumped version, wrote changelog
 ```
 
+The six skills:
+
 | Skill | What it does |
 |---|---|
 | **develop** | grow or restructure a section's concepts and decisions (audience, scope, depth); skeleton first, no prose |
@@ -84,10 +108,8 @@ AI:  [publish] gates green → froze a read-only v1 snapshot, bumped version, wr
 | **release** | interactive PDF layout: export → review page images → tune knobs → re-export |
 
 It is a loop, not a pipeline: when factcheck finds a problem, work goes back to develop or draft.
-
-The backstage `corpus/` (structured YAML per section, for the agent and engine) is separate from the
-front `docs/` (blind-rendered prose, for people). Each section is rendered in isolation; coherence
-comes from the shared writing guide and deterministic assembly, not from agents reading each other.
+Change an upstream section later and the engine marks every downstream section that needs re-syncing,
+so nothing drifts out of consistency unnoticed.
 
 ## Design
 
@@ -129,10 +151,21 @@ drawn by a delegated subagent as drawio and embedded as high-resolution PNG; `do
 
 ## Showcase
 
-Six documents — fiction, essay, and academic survey, in English and Traditional Chinese — written
-from scratch by an agent driving docspec, each passing the structural, cleanliness, and
-render-fidelity gates. The rendered deliverables, exported PDFs, the method, the models, and the exact
-prompts are in **[docs/showcase/](docs/showcase/)**.
+Six documents written from scratch by an agent driving docspec — three genres × two languages — each
+one passing the structural, cleanliness, and render-fidelity gates and exported to a typeset PDF.
+Click through to read the rendered output or open the PDF:
+
+| Genre | Language | Read | PDF |
+|---|---|---|---|
+| Fiction — short story | Traditional Chinese | [read](docs/showcase/deliverables/novel-zh.md) | [PDF](docs/showcase/pdfs/novel-zh.pdf) |
+| Fiction — short fantasy | English | [read](docs/showcase/deliverables/novel-en.md) | [PDF](docs/showcase/pdfs/novel-en.pdf) |
+| Essay | Traditional Chinese | [read](docs/showcase/deliverables/essay-zh.md) | [PDF](docs/showcase/pdfs/essay-zh.pdf) |
+| Essay | English | [read](docs/showcase/deliverables/essay-en.md) | [PDF](docs/showcase/pdfs/essay-en.pdf) |
+| Academic survey | Traditional Chinese | [read](docs/showcase/deliverables/academic-zh.md) | [PDF](docs/showcase/pdfs/academic-zh.pdf) |
+| Academic survey | English | [read](docs/showcase/deliverables/academic-en.md) | [PDF](docs/showcase/pdfs/academic-en.pdf) |
+
+How they were made — the models, the method, and the exact prompts — is written up in
+**[docs/showcase/](docs/showcase/)**, including an honest account of where the results fell short.
 
 ## Contributing
 
