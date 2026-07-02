@@ -2,9 +2,7 @@
 
 <img src="docs/assets/logo.png" alt="docspec logo" width="200">
 
-# docspec
-
-**Write long technical documents with an AI agent that keeps them consistent as they grow, then export clean Markdown or a typeset PDF.**
+# docspec — Write long technical documents with an AI agent that keeps them consistent as they grow, then export clean Markdown or a typeset PDF
 
 ![CI](https://github.com/DennisHuang890331/docspec/actions/workflows/test.yml/badge.svg) ![Python](https://img.shields.io/badge/python-%E2%89%A53.11-blue) ![License](https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-orange) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 
