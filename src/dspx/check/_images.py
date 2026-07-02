@@ -39,12 +39,18 @@ def _validate_image_refs(layout, leaves: list[Leaf]) -> list[str]:
                         f"docs/assets/ (render the diagram into docs/assets/, fix the path, "
                         f"or remove the reference)"
                     )
-            # diagram-intent：節自己宣告 brief.layout=diagram 卻零張圖 ref＝宣告版面 vs 交付物的機械
-            # 落差（吃封閉 enum；不解析 decision 文字＝那是語義，留 audit/skill，鐵律1）。
+            # diagram-intent：節自己宣告 brief.layout=diagram、散文已寫卻零張圖 ref＝宣告版面 vs
+            # 交付物的機械落差（吃封閉 enum；不解析 decision 文字＝那是語義，留 audit/skill，鐵律1）。
+            # 空/純空白 body＝未撰寫節（增量撰寫中）→ 不觸發：宣告 layout 先於作圖，紅整份 check
+            # 會在作者還沒寫到該節前就把全文章 status 染紅（F-diagram-gate-blocks-incremental-build）。
             brief = leaf.concept.get("brief")
-            if isinstance(brief, dict) and brief.get("layout") == "diagram" and asset_refs == 0:
+            if (isinstance(brief, dict) and brief.get("layout") == "diagram"
+                    and asset_refs == 0 and body.strip()):
                 errs.append(
                     f"{section}: declared brief.layout=diagram but the deliverable embeds no image "
-                    f"— embed the diagram with ![](assets/<file>) or change the layout"
+                    f"— embed the diagram with ![](assets/<file>) or change the layout; author the "
+                    f"figure on the drawio track (delegate to the dspx-diagram skill, `docspec setup "
+                    f"--with-drawio`, render drawio→PNG into docs/assets/) — never a hand-written "
+                    f"mermaid/TikZ block"
                 )
     return errs

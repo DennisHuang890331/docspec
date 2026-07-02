@@ -82,9 +82,13 @@ The two vendored helpers live next to this file:
    coordinates (snap to multiples of 10; scale spacing with node count). Use the draw.io XML
    skeleton below.
 3. **Validate** — `python3 scripts/validate.py docs/assets/<name>.drawio`. Fix every
-   error (warnings are advisory). Re-run until clean.
-4. **Render a preview** — `drawio -x -f png --width 2000 -o /tmp/<name>.png <name>.drawio`
-   (NO `-e`; cap width so vision can read it).
+   error (warnings are advisory). Re-run until clean. Known noise: on sequence diagrams the
+   pinned vertical lifelines always trip the "floating endpoint" warning — that's expected
+   on lifelines, not a defect to fix.
+4. **Render a preview** — `drawio -x -f png --width 2000 -o docs/assets/<name>.png <name>.drawio`
+   (NO `-e`; cap width so vision can read it). Render the preview straight to the final
+   destination — the final high-DPI render (step 6) overwrites it, so no intermediate file is
+   left anywhere; never write render output to the system temp dir.
 5. **Self-check (vision).** Read the preview PNG. Catch overlaps, clipped labels, missing
    connections, off-canvas shapes, **edges that occlude an unrelated node/label, and crossings rendered
    without a jump** (ambiguous intersections). Apply targeted XML fixes (waypoints, spread exit/entry,
@@ -197,10 +201,10 @@ A **docspec-managed** draw.io (from `docspec setup --with-drawio`) lives under d
 absent entirely, fall back to `scripts/encode_drawio_url.py` (browser) or hand back the XML.
 
 ```bash
-# Preview PNG (step 4) — width-capped for vision
-drawio -x -f png --width 2000 -o preview.png input.drawio
+# Preview PNG (step 4) — width-capped for vision; same destination, the final render overwrites it
+drawio -x -f png --width 2000 -o docs/assets/<name>.png docs/assets/<name>.drawio
 # Final PNG (step 6) — high-DPI raster; this is the deliverable image
-drawio -x -f png --width 2400 -o output.png input.drawio
+drawio -x -f png --width 2400 -o docs/assets/<name>.png docs/assets/<name>.drawio
 # Linux headless: prefix with  xvfb-run -a  ; running as root in CI: append  --no-sandbox  at the very end
 ```
 Key flags: `-x` export · `-f {png,svg,pdf}` format · `--width <px>` raster width (no `-s` with it) ·

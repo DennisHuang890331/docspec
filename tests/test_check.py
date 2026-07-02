@@ -439,6 +439,31 @@ def test_declared_diagram_with_image_passes_check(make_project, write_leaf):
     assert res.ok, res.errors
 
 
+def test_declared_diagram_with_empty_body_not_flagged(make_project, write_leaf):
+    """F-diagram-gate-blocks-incremental-build：宣告 layout=diagram 但散文尚未撰寫（body 空）
+    → 閘不觸發，增量撰寫期間 check 保持綠（宣告 layout 先於作圖，不是機械落差）。"""
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1,
+                                     "brief": dict(_DIAGRAM_BRIEF)})
+    _write_latest(home, "a", "a/x", "X", "")   # 骨架已 render、散文未寫
+    res = _check_with_layout(home)
+    assert res.ok, res.errors
+
+
+def test_diagram_gate_error_routes_to_drawio_track(make_project, write_leaf):
+    """閘的錯誤訊息＝choke point：必須指路 drawio→PNG 正軌（dspx-diagram／--with-drawio），
+    否則 naive 作者在這個失敗點會自己發明 mermaid。"""
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1,
+                                     "brief": dict(_DIAGRAM_BRIEF)})
+    _write_latest(home, "a", "a/x", "X", "Prose written, but no figure embedded.")
+    res = _check_with_layout(home)
+    assert not res.ok
+    err = next(e for e in res.errors if "layout=diagram" in e)
+    assert "dspx-diagram" in err
+    assert "--with-drawio" in err
+
+
 def test_non_diagram_without_image_not_flagged(make_project, write_leaf):
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1,
