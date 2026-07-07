@@ -28,7 +28,11 @@ $endif$
 #let _serif = ("Source Serif 4", "思源宋體")
 #let _sans  = if _sansok { ("Source Sans 3", "思源宋體") } else { _serif }
 #let _mono  = ("Source Code Pro", "思源宋體")
-#let _body  = if profile == "manual" { _sans } else { _serif }   // 手冊＝sans 內文（CJK 文件退 serif）
+// ★2026-07-08 台中港計畫真實審閱回饋（docspec-issues #09/#10）：default 內文改 sans，貼近
+//   Claude.ai 網頁版 markdown 慣例；CJK 因 _sansok 對 zh/ja/ko 恆為 false 會安全退回思源宋，
+//   不會踩 L20-22 註解所述之思源黑體 ToUnicode 抽取 bug。academic/paper/essay/novel 之 serif
+//   身分不受影響（各自獨立分支，見上）。
+#let _body  = if profile == "manual" or profile == "default" { _sans } else { _serif }   // 手冊/預設＝sans 內文（CJK 文件退 serif）
 #let _head  = if profile == "novel" { _serif } else { _sans }    // 標題 sans（CJK 文件退 serif）；小說全 serif
 #let _titlefont = if profile == "novel" { _serif } else { _sans }
 
@@ -36,23 +40,34 @@ $endif$
 //   ★段距 spacing 是「段落區塊之間」的間距，不是行距 leading；實測在 typst 0.15 設成 = leading（0.7em）
 //   會讓下一段首行壓上一段末行（overlap）——typst 段距須清掉一整行 advance（~1em+），不是只 ≥ leading。
 //   故 prose 段距＝leading + 0.4em（≈1.1em，緊湊書本節奏、不重疊；隨 leading 旋鈕一起縮放）。
-#let _lead   = $if(leading)$$leading$$else$0.7em$endif$
+// ★2026-07-08（docspec-issues #10）：default 行距放寬至 1.0em（無 leading 旋鈕覆寫時），
+//   貼近 Claude.ai 網頁版舒適閱讀行距；其餘 profile 之 0.7em 基準不變。
+#let _lead   = $if(leading)$$leading$$else$(if profile == "default" { 1.0em } else { 0.7em })$endif$
 // paper＝雙欄學術版（IEEE/會議/期刊風）；段落模型同 academic（首行縮排）。
 #let _twocol = profile == "paper"
 #let _prose  = profile == "academic" or profile == "paper" or profile == "essay" or profile == "novel"
 // 首行縮排：novel 用 1.5em（≈書籍 0.3"／中文 2 字慣例，比 article 深）；其餘 prose 1em；block 不縮排。
 #let _indent = if profile == "novel" { 1.5em } else if _prose { 1em } else { 0pt }
 #let _parspace = if _prose { _lead + 0.4em } else { 0.95em }
-// 標題編號：essay/novel 不編號（安靜/文學）；其餘 1.1
-#let _headnum = if profile == "essay" or profile == "novel" { none } else { "1.1" }
-// 側邊界：paper 雙欄＝窄邊（每欄才夠寬，對齊 IEEE ~1.76cm）；prose 單欄窄版心（行長 62–72 字）；manual 寬些容程式碼/表
-#let _mx = if profile == "paper" { 1.8cm } else if profile == "manual" { 2.5cm } else if profile == "essay" or profile == "novel" { 3.5cm } else { 3.0cm }
+// 標題編號：essay/novel 不編號（安靜/文學）；★2026-07-08（docspec-issues #09/#10）default 併入
+//   不編號陣營——docspec 專案慣例把 §編號直接寫進 concept.title（如「0 系統目標」「1.1 架構設計」），
+//   引擎再疊加十進位自動編號會產生雙重編號（真實案例：台中港計畫 system-concept export 實測）。
+//   academic/paper/manual 三個仍走引擎編號（未把手寫編號慣例带進 concept.title 的專案受益）。
+#let _headnum = if profile == "essay" or profile == "novel" or profile == "default" { none } else { "1.1" }
+// 側邊界：paper 雙欄＝窄邊（每欄才夠寬，對齊 IEEE ~1.76cm）；prose 單欄窄版心（行長 62–72 字）；manual 寬些容程式碼/表；
+//   ★default 貼近 Claude.ai 聊天氣泡的窄欄閱讀寬度（docspec-issues #10；首版 3.2cm 使用者實測回饋
+//   偏窄，調寬至比 essay/novel 的 3.5cm 更寬鬆，欄寬明顯窄於印刷向 profile）。
+#let _mx = if profile == "paper" { 1.8cm } else if profile == "manual" { 2.5cm } else if profile == "essay" or profile == "novel" { 3.5cm } else if profile == "default" { 3.8cm } else { 3.0cm }
 // 內文字級：paper 雙欄慣例 10pt（欄窄）；其餘 11pt；`fontsize` 旋鈕可覆寫。
 #let _bodysize = $if(fontsize)$$fontsize$$else$(if profile == "paper" { 10pt } else { 11pt })$endif$
 
-// 場景分隔（thematic break `---`）：novel＝置中花飾 * * *；其餘＝置中細線
+// 場景分隔（thematic break `---`）：novel＝置中花飾 * * *；★2026-07-08（docspec-issues #10）
+//   default＝滿版細線（GitHub/Claude.ai 風）——短置中線（35%–65%）在段落留白已多時，讀者會誤認
+//   為浮空的底線（台中港計畫真實審閱回饋，見 issue #10「副帶發現」）；其餘 profile 維持置中細線。
 #let horizontalrule = if profile == "novel" {
   align(center)[#v(0.8em) #text(font: _body, tracking: 0.35em)[\* \* \*] #v(0.8em)]
+} else if profile == "default" {
+  align(center)[#v(0.5em) #line(length: 100%, stroke: 0.5pt + rgb("#d0d7de")) #v(0.5em)]
 } else {
   align(center)[#v(0.4em) #line(start: (35%, 0%), end: (65%, 0%), stroke: 0.5pt + rgb("#888888")) #v(0.4em)]
 }
