@@ -445,3 +445,48 @@ def test_v4_and_v16_findings_are_section_located_too(make_project, write_leaf, m
     findings = _lint(layout)
     assert any(f.rule == "V4" and f.where == "docs/a/_latest.md § a/x" for f in findings)
     assert any(f.rule == "V16" and f.where == "docs/a/_latest.md § a/y" for f in findings)
+
+
+def test_fence_literal_marker_does_not_break_section(make_project, write_leaf, monkeypatch):
+    """D7 刻意行為修正：fenced code 內的字面 dspx:section 行不斬斷章節、不歸假章節。"""
+    home = make_project(); _two_leaves(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    # a/x 章節：先放一個 fenced code block、其內含字面 marker，fence 之後（仍屬 a/x）含 V15 洩漏
+    _inject_into_section(
+        layout, "a", "a/x",
+        "\n```\n<!-- dspx:section a/y -->\n```\n\nfence 之後本節由治理父決定。\n")
+    v15 = [f for f in _lint(layout) if f.rule == "V15"]
+    # 洩漏歸 a/x（fence 內字面 marker 不是章節邊界），不得歸 a/y
+    assert v15 and all(f.where == "docs/a/_latest.md § a/x" for f in v15)
+
+
+# ── V18 散文殘留半形標點（WARN、指向 normalize）─────────────────────────
+
+def test_v18_prose_halfwidth_punct_warns_and_points_to_normalize(make_project, write_leaf, monkeypatch):
+    home = make_project(); _two_leaves(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject_into_section(layout, "a", "a/x", "\n啟動後進入待命,等待指令。\n")
+    v18 = [f for f in _lint(layout) if f.rule == "V18"]
+    assert v18 and all(f.level == WARN for f in v18)
+    assert all(f.where == "docs/a/_latest.md § a/x" for f in v18)
+    assert all("docspec normalize a" in f.detail for f in v18)
+
+
+def test_v18_code_span_and_identifier_do_not_trigger(make_project, write_leaf, monkeypatch):
+    """報必可修閉環：V18 命中集合＝normalize 轉換集合——code／識別碼尾隨標點皆不觸發。"""
+    home = make_project(); _two_leaves(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject_into_section(layout, "a", "a/x",
+                         "\n設定 `retry_max=3`, 然後見 e_stop, 版本 3.14 即可。\n\n```\nx=1,y=2\n```\n")
+    assert not any(f.rule == "V18" for f in _lint(layout))
+
+
+def test_v18_is_non_blocking_warn(make_project, write_leaf, monkeypatch):
+    """V18 為 WARN、不阻塞 publish（潔淨閘只擋 ERROR）。"""
+    home = make_project(); _two_leaves(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject_into_section(layout, "a", "a/x", "\n進入待命,等待指令。\n")
+    findings = _lint(layout)
+    v18 = [f for f in findings if f.rule == "V18"]
+    assert v18 and all(f.level == WARN for f in v18)
+    assert not any(f.rule == "V18" and f.level == ERROR for f in findings)

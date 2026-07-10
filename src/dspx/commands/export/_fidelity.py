@@ -31,12 +31,14 @@ _IMAGE_MD_RE = re.compile(r"!\[.*?\]\(\s*[^)]*\)")
 def _source_anchored_stream(body_md: str) -> tuple[list[str], list[str]]:
     """源端有序內容字元流＋每字「最近 markdown 標題」錨（供差異定位、源端為準）。
 
-    抽字前先把 markdown 圖片語法整體換空白（alt 不是本文內容，見 _IMAGE_MD_RE 註）。"""
-    import re as _re
+    抽字前先把 markdown 圖片語法整體換空白（alt 不是本文內容，見 _IMAGE_MD_RE 註）。
+    圖片遮蔽走 span 服務 `mask_non_prose(kinds={image})`（等長＝現行 `.sub(" ")` 同款、
+    code-strip 單一權威）。"""
+    from dspx.spans import IMAGE, mask_non_prose
     chars: list[str] = []
     anchors: list[str] = []
     heading = "(preamble)"
-    body_md = _IMAGE_MD_RE.sub(" ", body_md)
+    body_md = mask_non_prose(body_md, kinds={IMAGE})
     for line in _nfc(body_md).splitlines():
         s = line.strip()
         if s.startswith("#"):

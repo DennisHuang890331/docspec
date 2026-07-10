@@ -16,6 +16,7 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   V15 docs 殘留撰寫工具/治理詞彙   ERROR  ← forest/governed-by/治理父/fan-in/factcheck/Tier-N/L2a/§回引…＝後台詞洩進交付物（補 V1 覆蓋缺口）
   V16 規範語句逃避詞（同句 應/不得）WARN  ← 最好／儘量／酌情／如有可能／視情況／最大限度（必要時故意排除，見下）
   V17 英文 AI-ism 詞彙            WARN  ← delve/tapestry/seamless…封閉 13 組＋句首 In today's；robust 刻意排除（見下）
+  V18 散文殘留半形標點           WARN  ← 散文面 span 內 normalize 會轉的半形標點（`,`/`.`/`:`/`;`/`?`/`!`）→ 指向 `docspec normalize`（不教手改）
   Vg1/Vg2 術語一致               WARN
   Ve1 死錨點連結（export 破）     WARN  ← `](#x)` 對不上任何標題 slug → xelatex PDF 整份失敗
   Ve2 非標準 markdown（@import）  WARN  ← MPE 指令不會在 docx/PDF 渲染
@@ -33,7 +34,7 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   與 Ve2 的 @import 同類，故 WARN 前移、導向改用 drawio 圖片。字體/留白仍＝export 設定、不進此處。
   （TikZ／mermaid→TikZ 教條已退場；diagrams travel as images。）
 
-  finding 定位：交付物本文規則（V1–V4/V12/V13/V15/V16/V17）的 where 帶章節定位
+  finding 定位：交付物本文規則（V1–V4/V12/V13/V15/V16/V17/V18）的 where 帶章節定位
   `docs/<article>/_latest.md § <section-path>`——沿隱形 `dspx:section`/`dspx:group` 標記切段、
   逐段掃描；首個標記前的 preamble／整份無標記的檔案回退檔案級 where。去重單位＝每章節
   （同 token 洩漏兩章節＝兩筆各自可定位的 finding）。V10 為全文聚合檢查、維持檔案級。
@@ -280,24 +281,64 @@ def _scan_deliverable_text(body: str, where: str, all_ids: set[str]) -> list[Fin
     return findings
 
 
+def _doc_section_segments(text: str) -> list[tuple[str | None, str]]:
+    """把交付物全文以 span 服務切成 [(section|None, masked_segment)]：章節歸屬 + code-strip
+    單一權威（`mask_non_prose` 等長遮蔽 html_comment/fence/inline_code/marker）。
+
+    取代舊 `_split_marker_segments`＋三條 `sub("")`：fence 狀態機優先 ⇒ fenced code 內的
+    字面 `dspx:section` 行不再斬斷章節（D7 刻意行為修正）。遮蔽面 kinds 子集＝對齊舊剝除
+    面（不剝 image path／URL，維持 V13 對圖 path 內 example.* 的既有覆蓋＝遷移行為鎖）。"""
+    from dspx.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
+                            classify_deliverable, mask_non_prose)
+    masked = mask_non_prose(text, kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER})
+    segments: list[tuple[str | None, str]] = []
+    for sp in classify_deliverable(text):
+        # 相鄰同章節併段（一章節一段、逐段去重＝與舊每章節去重同義）
+        if segments and segments[-1][0] == sp.section:
+            prev_sec, prev_txt = segments[-1]
+            segments[-1] = (prev_sec, prev_txt + masked[sp.start:sp.end])
+        else:
+            segments.append((sp.section, masked[sp.start:sp.end]))
+    return segments
+
+
 def _lint_docs(layout: Layout, articles: list[str], all_ids: set[str]) -> list[Finding]:
     findings: list[Finding] = []
     for article in articles:
         path = layout.docs_latest(article)
         if not path.is_file():
             continue
-        raw = _strip_frontmatter(path.read_text(encoding="utf-8"))
         file_where = f"docs/{article}/_latest.md"
-        # 章節定位：沿隱形章節標記切段、逐段掃——finding 的 where 指名含命中的章節
+        # 章節定位＋code-strip 走 span 服務（單一權威）：finding 的 where 指名含命中的章節
         # （`docs/<a>/_latest.md § <section>`）；首個標記前的 preamble／整份無標記＝檔案級回退。
-        for section, segment in _split_marker_segments(raw):
-            # 每段先剝 HTML 註解（隱形標記讀者看不到、publish 會剝除，不算洩漏），
-            # 再剝程式碼區塊：裡面的 KE 模板/JSON/變數名是內容，不是機械。
-            text = _HTML_COMMENT_RE.sub("", segment)
-            text = _FENCED_CODE_RE.sub("", text)
-            text = _INLINE_CODE_RE.sub("", text)
+        for section, segment in _doc_section_segments(path.read_text(encoding="utf-8")):
             where = f"{file_where} § {section}" if section else file_where
-            findings.extend(_scan_deliverable_text(text, where, all_ids))
+            findings.extend(_scan_deliverable_text(segment, where, all_ids))
+    return findings
+
+
+def _lint_punctuation(layout: Layout, articles: list[str]) -> list[Finding]:
+    """V18 散文殘留半形標點（WARN、非阻塞）：散文面 span 內 `docspec normalize` 會轉換的
+    半形標點 → 指向指令、不教手改。判定與 normalize 共用 `spans.propose_conversions`
+    （單一權威、報必可修的閉環）；byte-exact span 與識別碼尾隨標點天然不觸發。
+
+    每章節聚一筆 WARN（`where` 帶章節定位、與 V1–V17 同格式），避免逐字元洗版。"""
+    from dspx.spans import propose_conversions
+    findings: list[Finding] = []
+    for article in articles:
+        path = layout.docs_latest(article)
+        if not path.is_file():
+            continue
+        file_where = f"docs/{article}/_latest.md"
+        # 依原文序聚章節（dict 保插入序）：同章節 N 筆殘留 → 一筆 WARN、指向跑一次 normalize。
+        by_section: dict[str | None, int] = {}
+        for c in propose_conversions(path.read_text(encoding="utf-8")):
+            by_section[c.section] = by_section.get(c.section, 0) + 1
+        for section, n in by_section.items():
+            where = f"{file_where} § {section}" if section else file_where
+            findings.append(Finding("V18", WARN, where,
+                f"{n} half-width punctuation mark(s) in prose that would normalize to full-width "
+                f"-- run `docspec normalize {article}` (deterministic; do not hand-edit)"))
     return findings
 
 
@@ -313,10 +354,10 @@ def _lint_numbers(layout: Layout, articles: list[str]) -> list[Finding]:
         path = layout.docs_latest(article)
         if not path.is_file():
             continue
-        body = _strip_frontmatter(path.read_text(encoding="utf-8"))
-        body = _HTML_COMMENT_RE.sub("", body)
-        body = _FENCED_CODE_RE.sub("", body)
-        body = _INLINE_CODE_RE.sub("", body)
+        from dspx.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
+                                mask_non_prose)
+        body = mask_non_prose(path.read_text(encoding="utf-8"),
+                              kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER})
         where = f"docs/{article}/_latest.md"
         # (key, unit) -> 值集合
         seen: dict[tuple[str, str], set[str]] = {}
@@ -409,6 +450,7 @@ def run_lint(layout: Layout, leaves: list[Leaf], schema: Schema) -> list[Finding
     articles = sorted({leaf.article for leaf in leaves})
     findings = _lint_docs(layout, articles, all_ids)
     findings.extend(_lint_numbers(layout, articles))
+    findings.extend(_lint_punctuation(layout, articles))
     for leaf in leaves:
         findings.extend(_lint_material(leaf))
         findings.extend(_lint_realizes(leaf, index))
@@ -498,9 +540,10 @@ def _lint_glossary(layout, articles: list[str]) -> list[Finding]:
         path = layout.docs_latest(article)
         if not path.is_file():
             continue
-        body = _HTML_COMMENT_RE.sub("", _strip_frontmatter(path.read_text(encoding="utf-8")))
-        body = _FENCED_CODE_RE.sub("", body)
-        body = _INLINE_CODE_RE.sub("", body)
+        from dspx.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
+                                mask_non_prose)
+        body = mask_non_prose(path.read_text(encoding="utf-8"),
+                              kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER})
         where = f"docs/{article}/_latest.md"
         for t in terms:
             canonical = t.get("canonical", "")
@@ -618,12 +661,16 @@ def _lint_export_safety(layout: Layout, articles: list[str]) -> list[Finding]:
         path = layout.docs_latest(article)
         if not path.is_file():
             continue
-        body = _HTML_COMMENT_RE.sub("", _strip_frontmatter(path.read_text(encoding="utf-8")))
-        # 標題 slug 集（連結解析基準）：取剝程式碼前的全標題（標題不會在 code fence 內起算）
+        from dspx.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
+                                mask_non_prose)
+        raw = path.read_text(encoding="utf-8")
+        # 標題 slug 集（連結解析基準）：對遮蔽 fence/comment/marker 的文字取標題——fence 內的
+        # `#` 註解行不再被誤當標題（span 服務為底；遷移行為鎖對真實語料逐 byte 驗過無差異）。
+        body = mask_non_prose(raw, kinds={HTML_COMMENT, FENCE, MARKER})
         slugs = {_slugify(m.group(1)) for line in body.splitlines()
                  if (m := _HEADING_RE.match(line))}
-        # 連結/指令掃描在「剝掉程式碼」後做：code fence/inline code 裡的 `](#x)`、@import 是內容範例
-        scan = _INLINE_CODE_RE.sub("", _FENCED_CODE_RE.sub("", body))
+        # 連結/指令掃描在遮蔽 code（fence＋inline）後做：code 裡的 `](#x)`、@import 是內容範例
+        scan = mask_non_prose(raw, kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER})
         where = f"docs/{article}/_latest.md"
         seen: set[str] = set()
         for m in _ANCHOR_LINK_RE.finditer(scan):
@@ -635,11 +682,12 @@ def _lint_export_safety(layout: Layout, articles: list[str]) -> list[Finding]:
         if _IMPORT_RE.search(scan):
             findings.append(Finding("Ve2", WARN, where,
                 "contains non-standard markdown (MPE) directives like `@import` -- they won't render in the docx/PDF deliverable; remove or use standard syntax"))
-        # Ve3 掃 body（不剝 code fence——這些記法本身就是 fence）：非 backend-neutral 圖記法。
-        if _MERMAID_FENCE_RE.search(body):
+        # Ve3 掃保留 fence 的文字（這些記法本身就是 fence，不可遮）：非 backend-neutral 圖記法。
+        ve3_src = mask_non_prose(raw, kinds={HTML_COMMENT, MARKER})
+        if _MERMAID_FENCE_RE.search(ve3_src):
             findings.append(Finding("Ve3", WARN, where,
                 "contains a ```mermaid diagram -- mermaid does not render in the controlled toolchain (it ships as a placeholder box); author the diagram as an embedded image instead (the dspx-diagram subagent renders drawio to a raster PNG, embedded with `![](assets/...)`)"))
-        if _RAW_LATEX_FENCE_RE.search(body):
+        if _RAW_LATEX_FENCE_RE.search(ve3_src):
             findings.append(Finding("Ve3", WARN, where,
                 "contains a raw `{=latex}`/`{=tex}` block (LaTeX-only, e.g. TikZ) -- it is not backend-neutral and the default Typst track strips it (the figure silently disappears); author the diagram as an embedded image instead (drawio rendered to a raster PNG via the dspx-diagram subagent)"))
     return findings

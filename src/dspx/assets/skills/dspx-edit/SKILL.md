@@ -212,11 +212,11 @@ subagent's brief). Fix: don't re-derive it. **Every dispatch brief opens with on
 SEMANTIC work only"** — and then you copy this exclusion list verbatim. Each item names the
 mechanical work kept OUT of the brief and exactly where it goes instead:
 
-- **Punctuation width (full-width / half-width)** → **NOT dispatched.** Handle it per the
-  punctuation-width ban below: the engine has **no punctuation auto-fix today**, so no blind regex
-  sweep — fix punctuation only inside sentences you are already editing, and route residual width
-  inconsistency to a **single** non-blocking audit finding, never a per-occurrence pass. (A blind
-  sweep corrupts code spans / identifiers / protocol tokens / URLs — byte-exact zones.)
+- **Punctuation width (full-width / half-width)** → **NOT dispatched.** It is deterministic
+  engine work, not semantic: run **`docspec normalize <article>`** (converts half-width→full-width
+  only where prose is CJK on both sides; code spans / identifiers / protocol tokens / URLs stay
+  byte-exact). No subagent, no blind regex, no per-sentence hand-fixing, no audit finding — lint
+  **V18** flags any residual and points right back at `docspec normalize`.
 - **Leaked scaffolding / placeholder leftovers** (`{#…}` ids, `[TBD]`/`[待補]`, stray `[!WARNING]`)
   → `docspec lint` (blocking ERROR). Act on its findings; don't send a subagent hunting them.
 - **Term identity / number drift** → `docspec lint` (advisory WARN). The engine flags, it does not
@@ -296,13 +296,13 @@ whole doc in one sitting.
 - Don't eyeball deterministic checks — that's `lint`/`check`.
 - Don't touch the outline, decisions, or develop.md — deliverable only.
 - Don't rewrite during proofread, or pass to publish with open findings.
-- **Don't systematically sweep punctuation width** (full-width / half-width) after the fact —
-  no blind regex over the whole document. The engine has **no punctuation auto-fix today**, so a
-  bulk sweep is unguarded and **corrupts code spans, identifiers, protocol tokens, and URLs**
-  (byte-exact zones a width pass must never touch). Writing punctuation correctly as you compose is
-  fine; in edit you may fix it **only inside sentences you are already editing**. Residual width
-  inconsistency across the document → **one** non-blocking `docspec audit` finding for a human to
-  rule on, never a per-occurrence fix.
+- **Don't hand-roll a punctuation-width sweep** (full-width / half-width) — no blind regex over the
+  whole document, no per-occurrence hand-fixing. A bulk hand sweep is unguarded and corrupts
+  **code spans, identifiers, protocol tokens, and URLs** (byte-exact zones a width pass must never
+  touch). Writing punctuation correctly as you compose is fine; for document-wide width consistency
+  run the engine's deterministic pass — **`docspec normalize <article>`** (half-width→full-width
+  only where prose is CJK on both sides; byte-exact zones untouched). lint **V18** flags any
+  residual and points at `docspec normalize`; it is never an audit finding to rule on.
 - **Don't leak corpus-only content into the deliverable** — never paste a `rejected` option, a
   retired decision's `rationale`, or `history.*` prose (incl. a factcheck `--suggest` that quotes
   them) verbatim into `_latest.md`. Rejected/why-dropped reasoning is for the corpus, not the reader;

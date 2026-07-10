@@ -36,6 +36,7 @@ from dspx.commands import lint as _lint  # noqa: E402
 from dspx.commands import list_cmd as _list_cmd  # noqa: E402
 from dspx.commands import measure_fonts as _measure_fonts  # noqa: E402
 from dspx.commands import new as _new  # noqa: E402
+from dspx.commands import normalize as _normalize  # noqa: E402
 from dspx.commands import proof as _proof  # noqa: E402
 from dspx.commands import reference as _reference  # noqa: E402
 from dspx.commands import publish as _publish  # noqa: E402
@@ -72,6 +73,7 @@ _register(_upgrade)
 _register(_self_update)
 _register(_version)
 _register(_render)
+_register(_normalize)
 _register(_stale)
 _register(_redraft)
 _register(_export)

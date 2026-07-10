@@ -153,31 +153,31 @@ def test_edit_carries_exclusion_list_after_routing_rule_before_stage1():
     assert "SEMANTIC work only" in section        # brief 開頭必聲明
     # 逐條排除項與去處
     assert "Punctuation width" in section
-    assert "no punctuation auto-fix today" in section     # 誠實版（引擎現況）
-    assert "single" in section and "audit finding" in section
+    assert "docspec normalize" in section         # 引擎確定性 auto-fix（punctuation-normalizer 落地後）
+    assert "V18" in section                        # lint 殘留兜底、指回 normalize
     assert "docspec lint" in section              # 洩漏 scaffolding／drift 去處
     assert "docspec check" in section             # 錨點去處
     assert "grep" in section                      # banned openers 監工手動、同樣不派
 
 
 def test_edit_dont_list_has_punctuation_ban():
-    """dspx-edit Guardrails Don't 含標點寬度禁令（禁事後 sweep、順手修限已編輯的句子、byte-exact 點名）。"""
+    """dspx-edit Guardrails Don't 含標點寬度禁令（禁手改 sweep、byte-exact 點名、導向 normalize）。"""
     body = _skill_body("dspx-edit")
     dont = body[body.index("**Don't**"):]
-    assert "punctuation width" in dont.lower()
+    assert "punctuation-width sweep" in dont.lower()
     assert "no blind regex" in dont.lower()
     assert "byte-exact" in dont.lower()
     assert "code spans, identifiers, protocol tokens, and URLs" in dont
-    assert "only inside sentences you are already editing" in dont
+    assert "docspec normalize" in dont       # 導向引擎確定性 normalize（非手改、非 audit finding）
 
 
 def test_draft_bans_have_punctuation_ban():
-    """dspx-draft Bans 含同旨禁令（禁事後 sweep、不禁寫稿當下寫對、byte-exact 點名）。"""
+    """dspx-draft Bans 含同旨禁令（禁手改 sweep、不禁寫稿當下寫對、byte-exact 點名、導向 normalize）。"""
     body = _skill_body("dspx-draft")
     bans = body[body.index("## Bans"):body.index("## Guardrails")]
     assert "punctuation-width sweep" in bans.lower()
     assert "as you compose" in bans          # 不禁寫稿當下寫對
-    assert "no punctuation auto-fix today" in bans   # 誠實版
+    assert "docspec normalize" in bans       # 導向引擎確定性 normalize
     assert "byte-exact" in bans.lower()
 
 
@@ -194,10 +194,10 @@ def test_develop_teaches_reopen_after_reversal_paragraph():
     assert "roadmap" in para and "doing" in para
 
 
-def test_punctuation_stance_never_claims_engine_normalizes():
-    """誠實版守則：三處標點文案都不得宣稱引擎會 normalize 標點（現況無 auto-fix）。"""
+def test_punctuation_stance_points_to_normalize():
+    """punctuation-normalizer 落地後：標點文案改指向引擎確定性 `docspec normalize`（不再手改、
+    不再是誠實版「無 auto-fix」）；仍不宣稱引擎會創作/改寫內容（normalize 只換字寬）。"""
     for name in ("dspx-edit", "dspx-draft"):
-        body = _skill_body(name).lower()
-        # 不出現「引擎（會）正規化/自動修標點」這類假強制措辭
-        assert "engine normalizes punctuation" not in body
-        assert "engine auto-fixes punctuation" not in body
+        body = _skill_body(name)
+        assert "docspec normalize" in body                     # 導向引擎確定性 auto-fix
+        assert "no punctuation auto-fix today" not in body       # 誠實版已過時、不得殘留
