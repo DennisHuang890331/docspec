@@ -129,6 +129,8 @@ def run(argv: list[str]) -> int:
 
     # table of contents (so the agent doesn't read only the head and miss scope)
     toc = ["Workflow (loop)", "Author skills", "Boundaries"]
+    if wf.get("migration"):
+        toc.append("Migration onboarding")
     if schema.filing_rules:
         toc.append("Filing rules")
     toc.append("Artifact contracts: " + ", ".join(a["id"] for a in artifacts))
@@ -158,6 +160,18 @@ def run(argv: list[str]) -> int:
         print("── Boundaries ──")
         for b in wf["boundaries"]:
             print(f"  • {b}")
+        print()
+    if wf.get("migration"):
+        # 遷移三步配方（schema 缺鍵＝不印，向後相容其他 schema；與上方 wf.get 逐鍵防禦一致）
+        mig = wf["migration"]
+        print("── Migration onboarding (existing projects) ──")
+        if isinstance(mig, dict):
+            if mig.get("summary"):
+                print("  " + str(mig["summary"]).strip().replace("\n", "\n  "))
+            for i, step in enumerate(mig.get("steps") or [], 1):
+                print(f"  {i}. " + str(step).strip().replace("\n", "\n     "))
+        else:
+            print(f"  {mig}")
         print()
     if schema.filing_rules:
         print("── Filing rules (engine-enforced) ──")

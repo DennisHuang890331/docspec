@@ -470,8 +470,12 @@ def _lint_freeze(layout: Layout) -> list[Finding]:
     from dspx import freeze
     findings: list[Finding] = []
     for rel, problem in freeze.verify(layout.planning_home, layout.project_root, layout.docs_dir):
-        findings.append(Finding("V11", ERROR, rel,
-                                f"frozen area (archive/) {problem} -- published versions are immutable"))
+        detail = f"frozen area (archive/) {problem} -- published versions are immutable"
+        if problem.startswith("not registered"):
+            # 「未登記」死路變岔路口：附遷移指路的兩條正路（刪除/竄改訊息不加）
+            detail += (" (pre-docspec legacy versions: run 'docspec freeze register-legacy "
+                       "<dir>', or keep them outside archive/ (e.g. docs/legacy/))")
+        findings.append(Finding("V11", ERROR, rel, detail))
     return findings
 
 

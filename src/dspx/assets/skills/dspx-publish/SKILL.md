@@ -35,6 +35,20 @@ If any gate fails, stop and report. Do not "fix and continue" — return to `edi
 
 ---
 
+## Migrating an existing project (first publish only)
+
+If this project existed before docspec — it carries pre-docspec published versions and an
+existing revision history — do NOT run the first publish until the **migration onboarding
+recipe** has been walked: the legacy versions registered into the freeze net, the existing
+revision history pre-seeded, and the first version seeded to continue the pre-docspec
+numbering instead of restarting from scratch. The recipe (exact commands, flags, and paths)
+is projected by `docspec guide` under "Migration onboarding" — read it there, don't
+reconstruct it from memory. A first publish that restarts the numbering over a project whose
+history already reached a higher version breaks the version chain: stop, walk the recipe,
+then publish.
+
+---
+
 ## Sequence
 
 `docspec publish <article>` is one irreversible shot — the engine runs the whole internal sequence (gate → promote verbatim → strip + freeze → semver bump → changelog row); the exact steps, flags, and paths are in `docspec guide`. Two stances govern how you stand to it:

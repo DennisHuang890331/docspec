@@ -17,7 +17,7 @@ from datetime import date
 from dspx.check import run_check
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
 from dspx.frontmatter import parse_frontmatter, render_frontmatter
-from dspx.layout import Layout, next_version
+from dspx.layout import Layout, next_version, parse_semver
 from dspx.lint import ERROR, run_lint
 from dspx.render import render_article, strip_markers
 
@@ -62,6 +62,10 @@ def run(argv: list[str]) -> int:
         help="semver bump level (+1 from previous version; no previous -> 1.0.0). Defaults to patch.",
     )
     parser.add_argument("--note", default="", help="one-line changelog summary (lean, no details)")
+    parser.add_argument("--set-version", dest="set_version", default=None, metavar="X.Y.Z",
+                        help="seed the version chain on the FIRST publish only (a migrated project "
+                             "continues its pre-docspec numbering instead of restarting at 1.0.0); "
+                             "refused once any version exists")
     parser.add_argument("--allow-noop", action="store_true",
                         help="allow freezing a snapshot byte-identical to the previous version "
                              "(by default publish refuses a no-op version bump)")
@@ -69,6 +73,15 @@ def run(argv: list[str]) -> int:
                         help="print a consolidated go/no-go pre-publish report and exit without "
                              "writing anything (no render, no version stamp, no snapshot, no changelog)")
     args = parser.parse_args(argv)
+
+    # ── --set-version 值：嚴格 semver（唯一真雷點：壞值鑄出的快照檔名日後被版本掃描
+    #    靜默跳過＝版本鏈斷裂且無人察覺）→ 不合格即拒、不凍結。──
+    if args.set_version is not None and parse_semver(args.set_version) is None:
+        sys.stderr.write(
+            f"docspec: publish aborted -- --set-version \"{args.set_version}\" is not strict "
+            "semver X.Y.Z (a malformed version would be silently skipped by the version scan "
+            "and break the chain).\n")
+        return 1
 
     try:
         layout, config = bootstrap()
@@ -85,6 +98,15 @@ def run(argv: list[str]) -> int:
     #    彙總報告永遠印不出來）；dry-run 自己跑全部閘、印彙總、零寫入。──
     if args.dry_run:
         return _dry_run(layout, schema, leaves, args)
+
+    # ── --set-version 閘：限首次發行。版本鏈已存在＝改史，結構性拒絕；擺在任何寫入
+    #    （render 的骨架/帳本）之前＝abort 即零寫入。偽造 is_first 需先刪既有快照 →
+    #    被 .freeze.yaml hash net 抓、lint 閘在版本推導前就 abort（design D8）。──
+    if args.set_version is not None and layout.existing_versions(args.article):
+        sys.stderr.write(
+            "docspec: publish aborted -- version chain already exists; "
+            "--set-version cannot rewrite history.\n")
+        return 1
 
     # ── 閘 ──
     check = run_check(leaves, schema, layout)
@@ -119,7 +141,8 @@ def run(argv: list[str]) -> int:
     latest = layout.docs_latest(args.article)
     prev_versions = layout.existing_versions(args.article)
     is_first = not prev_versions
-    version = _next_version(layout, args.article, args.level)
+    # --set-version 走到這裡必為首次（非首次已在前面 abort）＝直接以指定版號鑄造
+    version = args.set_version or _next_version(layout, args.article, args.level)
 
     meta, body = parse_frontmatter(latest.read_text(encoding="utf-8"))
     # 快照＝純內容：剝隱形標記 ＋ **不寫 frontmatter**（機器簿記不進凍結交付物；
@@ -174,7 +197,7 @@ def run(argv: list[str]) -> int:
     level_label = _FIRST_LABEL[clang] if is_first else _LEVEL_LABELS[clang][args.level]
     if is_first and args.level != "patch":
         sys.stderr.write(
-            f"docspec: note — --level {args.level} has no effect on the first version (it is 1.0.0).\n")
+            f"docspec: note — --level {args.level} has no effect on the first version (it is {version}).\n")
     with changelog.open("a", encoding="utf-8") as fh:
         fh.write(f"| {version} | {when} | {level_label} | {summary} |\n")
 
@@ -263,7 +286,16 @@ def _dry_run(layout: Layout, schema, leaves, args) -> int:
     print(f"  ℹ staleness: {stale_note}")
     print(f"  ℹ drift: {len(detect_drift(layout, article))} hand-edited section(s)")
     print(f"  ℹ audit: {_count_open_findings(layout, leaves, article)} open finding(s) (non-blocking)")
-    print(f"  ℹ version preview: v{_next_version(layout, article, args.level)} (--level {args.level})")
+    # 版本預覽：--set-version 反映 seed 版（首次）／預告非首次會被拒（同真 publish 規則、NO-GO 化）
+    if args.set_version is not None:
+        if prev_versions:
+            ok = False
+            print("  ✗ --set-version: version chain already exists — publish would abort "
+                  "(--set-version cannot rewrite history)")
+        else:
+            print(f"  ℹ version preview: v{args.set_version} (--set-version, first publish)")
+    else:
+        print(f"  ℹ version preview: v{_next_version(layout, article, args.level)} (--level {args.level})")
 
     if ok:
         print("dry-run verdict: GO — all blocking gates pass "

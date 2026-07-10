@@ -28,6 +28,14 @@ class FreezeError(Exception):
     """freeze manifest 無法解析（壞 YAML）。"""
 
 
+class LegacyCollisionError(Exception):
+    """register-legacy 碰撞：任一相對路徑已在 frozen/legacy 任一表上（防洗白，整批拒絕）。"""
+
+    def __init__(self, collisions: list[str]):
+        super().__init__("already registered: " + ", ".join(collisions))
+        self.collisions = collisions
+
+
 def is_sync_junk(name: str) -> bool:
     """同步/系統垃圾檔名（大小寫不敏感）：desktop.ini/Thumbs.db/.DS_Store/~$*（Office 鎖檔）/
     *.tmp.drive*（Drive 暫存）。"""
@@ -50,7 +58,8 @@ def _manifest_path(home: Path) -> Path:
     return home / MANIFEST_NAME
 
 
-def load_manifest(home: Path) -> dict[str, str]:
+def _load_raw(home: Path) -> dict:
+    """讀整份 manifest（頂層 dict）；壞 YAML → FreezeError（cli 包成友善一行）。"""
     p = _manifest_path(home)
     if not p.is_file():
         return {}
@@ -61,39 +70,88 @@ def load_manifest(home: Path) -> dict[str, str]:
         mark = getattr(exc, "problem_mark", None)
         position = f" (line {mark.line + 1})" if mark is not None else ""
         raise FreezeError(f"YAML parse failed: {p}{position}") from exc
-    frozen = data.get("frozen") if isinstance(data, dict) else None
-    return frozen if isinstance(frozen, dict) else {}
+    return data if isinstance(data, dict) else {}
 
 
-def record(home: Path, project_root: Path, snapshot: Path) -> None:
-    """publish 產出快照後登記其 hash（key＝相對 project_root 的 posix 路徑）。"""
-    frozen = load_manifest(home)
-    key = snapshot.resolve().relative_to(project_root.resolve()).as_posix()
-    frozen[key] = _hash(snapshot)
+def _table(data: dict, key: str) -> dict[str, str]:
+    t = data.get(key)
+    return t if isinstance(t, dict) else {}
+
+
+def load_manifest(home: Path) -> dict[str, str]:
+    """`frozen:` 表（publish 鑄造的快照登記）。"""
+    return _table(_load_raw(home), "frozen")
+
+
+def load_legacy(home: Path) -> dict[str, str]:
+    """`legacy:` 表（register-legacy 遷入的 pre-docspec 歷版）；缺鍵＝空表（舊 manifest 相容）。"""
+    return _table(_load_raw(home), "legacy")
+
+
+def _write_manifest(home: Path, frozen: dict[str, str], legacy: dict[str, str]) -> None:
+    """兩表一次寫回；legacy 空表不落鍵（與現行單表 manifest 位元相容）。"""
+    data: dict = {"frozen": frozen}
+    if legacy:
+        data["legacy"] = legacy
     _manifest_path(home).write_text(
-        yaml.safe_dump({"frozen": frozen}, allow_unicode=True, sort_keys=True),
+        yaml.safe_dump(data, allow_unicode=True, sort_keys=True),
         encoding="utf-8",
     )
 
 
+def record(home: Path, project_root: Path, snapshot: Path) -> None:
+    """publish 產出快照後登記其 hash（key＝相對 project_root 的 posix 路徑）。"""
+    raw = _load_raw(home)
+    frozen = _table(raw, "frozen")
+    key = snapshot.resolve().relative_to(project_root.resolve()).as_posix()
+    frozen[key] = _hash(snapshot)
+    _write_manifest(home, frozen, _table(raw, "legacy"))
+
+
+def record_legacy(home: Path, project_root: Path, files: list[Path]) -> list[str]:
+    """pre-docspec 歷版整批登記進 `legacy:` 表（key 規則同 frozen：相對 project_root 的 posix 路徑）。
+
+    防洗白：任一 rel 已在 frozen **或** legacy 任一表 → LegacyCollisionError、零寫入
+    （允許重登記＝「竄改後 re-register 洗白 hash」一條指令繞過整個 hash net）。
+    批次單寫：整批算完 hash 才一次寫回 manifest（非逐檔全檔重寫；Drive 同步環境的 I/O／衝突面）。
+    回傳已登記的 rel 清單（排序）。"""
+    raw = _load_raw(home)
+    frozen, legacy = _table(raw, "frozen"), _table(raw, "legacy")
+    root = project_root.resolve()
+    entries: dict[str, str] = {}
+    for f in files:
+        rel = f.resolve().relative_to(root).as_posix()
+        entries[rel] = _hash(f)
+    collisions = sorted(r for r in entries if r in frozen or r in legacy)
+    if collisions:
+        raise LegacyCollisionError(collisions)
+    legacy.update(entries)
+    _write_manifest(home, frozen, legacy)
+    return sorted(entries)
+
+
 def verify(home: Path, project_root: Path, docs_dir: Path) -> list[tuple[str, str]]:
     """抽查凍結區完整性。回傳 (相對路徑, 問題) 清單；空＝全部完好。"""
-    frozen = load_manifest(home)
+    raw = _load_raw(home)
+    frozen, legacy = _table(raw, "frozen"), _table(raw, "legacy")
     root = project_root.resolve()
     problems: list[tuple[str, str]] = []
-    # 1) manifest 每一筆：被刪 or hash 不符
-    for rel, want in frozen.items():
-        f = root / rel
-        if not f.is_file():
-            problems.append((rel, "was deleted"))
-        elif _hash(f) != want:
-            problems.append((rel, "content was tampered with"))
-    # 2) 磁碟上 archive/ 內、卻沒登記的檔（手動塞進凍結區）；同步垃圾（desktop.ini 類）
-    #    白名單排除——它們由同步工具自動生成、非人為放置，不該鎖發布。
+    # 1) 兩表逐筆：被刪 or hash 不符（legacy 訊息分流＝遷入歷版，稽核時出處可辨）
+    for table, deleted, tampered in (
+            (frozen, "was deleted", "content was tampered with"),
+            (legacy, "legacy history was deleted", "legacy history was tampered with")):
+        for rel, want in table.items():
+            f = root / rel
+            if not f.is_file():
+                problems.append((rel, deleted))
+            elif _hash(f) != want:
+                problems.append((rel, tampered))
+    # 2) 磁碟上 archive/ 內、卻沒登記的檔（手動塞進凍結區）＝兩表聯集都查無；同步垃圾
+    #    （desktop.ini 類）白名單排除——它們由同步工具自動生成、非人為放置，不該鎖發布。
     if docs_dir.is_dir():
         for f in docs_dir.rglob("*"):
             if f.is_file() and is_frozen_path(f) and not is_sync_junk(f.name):
                 rel = f.resolve().relative_to(root).as_posix()
-                if rel not in frozen:
+                if rel not in frozen and rel not in legacy:
                     problems.append((rel, "not registered (not produced by publish)"))
     return problems
