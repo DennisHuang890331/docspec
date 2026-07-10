@@ -56,6 +56,23 @@ def validate_section_path(section: str) -> str | None:
     return None
 
 
+def _render_scaffold(schema, target, fills: dict[str, str]) -> list[str]:
+    """從 schema template 渲染 _SCAFFOLD 骨架（填入 fills）；回傳建立的檔名清單。
+    new（新建）與 --reopen（重建）共用同一模板來源與替換規則。"""
+    target.mkdir(parents=True, exist_ok=True)
+    created: list[str] = []
+    for artifact_id in _SCAFFOLD:
+        artifact = schema.by_id(artifact_id)
+        if artifact is None or artifact.template is None:
+            continue
+        body = artifact.template.read_text(encoding="utf-8")
+        for key, val in fills.items():
+            body = body.replace("{" + key + "}", val)
+        (target / artifact.generates).write_text(body, encoding="utf-8", newline="\n")
+        created.append(artifact.generates)
+    return created
+
+
 def _stable_id(section: str) -> str:
     """與位置脫鉤的穩定 id（內容＝路徑指紋，存進檔後即定身份）。"""
     return "sec-" + hashlib.sha1(section.encode("utf-8")).hexdigest()[:8]
@@ -80,6 +97,10 @@ def run(argv: list[str]) -> int:
         help="leaf section path relative to corpus/, segments named in the deliverable "
              "language (en: guide/intro; zh: 指南/簡介); no chapter-number prefixes")
     parser.add_argument("--title", default=None, help="title (defaults to the last path segment)")
+    parser.add_argument(
+        "--reopen", action="store_true",
+        help="rebuild develop.md for an already-crystallized section (has concept.yaml, no "
+             "develop.md); id/title/order are read from concept.yaml, never recomputed")
     args = parser.parse_args(argv)
 
     section = args.section.strip("/")
@@ -100,8 +121,47 @@ def run(argv: list[str]) -> int:
         return exc.exit_code
 
     target = layout.section_dir(section)
-    if (target / "develop.md").exists() or (target / "concept.yaml").exists():
-        sys.stderr.write(f"docspec: section \"{section}\" already exists: {target} (not overwritten)\n")
+    has_concept = (target / "concept.yaml").exists()
+    has_develop = (target / "develop.md").exists()
+
+    # ── --reopen：為已結晶節（有 concept.yaml、無 develop.md）從 schema template 重建 develop.md ──
+    # fills 的 id/title/order 一律從現有 concept.yaml 讀出（入帳身份／同層位置皆已定案，重算會脫鉤/漂移）。
+    if args.reopen:
+        if has_develop:
+            sys.stderr.write(
+                f"docspec: section \"{section}\" is already open (develop.md present): {target} "
+                "(reopen has nothing to do; not overwritten)\n")
+            return 2
+        if not has_concept:
+            sys.stderr.write(
+                f"docspec: section \"{section}\" is not crystallized (no concept.yaml); "
+                f"use `docspec new {section}` to scaffold a new section\n")
+            return 2
+        concept = yaml.safe_load((target / "concept.yaml").read_text(encoding="utf-8")) or {}
+        fills = {
+            "id": str(concept.get("id", _stable_id(section))),
+            "title": str(concept.get("title") or section.rsplit("/", 1)[-1]),
+            "order": str(concept.get("order", "")),
+        }
+        created = _render_scaffold(schema, target, fills)
+        print(f"reopened section \"{section}\" (develop stage): {target}")
+        print(f"  id: {fills['id']}  order: {fills['order']}  (read from concept.yaml, not recomputed)")
+        for item in created:
+            print(f"  + {item}")
+        print("  next: think from where the section already stands (read its concept/decisions/history "
+              "first); crystallize the new thinking, then docspec ready <section> to re-graduate.")
+        return 0
+
+    if has_develop or has_concept:
+        if has_concept and not has_develop:
+            # 已結晶但 develop.md 已被 ready 榨乾刪除 → 指路 --reopen（重開推理的正道）
+            sys.stderr.write(
+                f"docspec: section \"{section}\" is crystallized and has no develop.md: {target} "
+                f"(not overwritten); to reopen it for more thinking run "
+                f"`docspec new {section} --reopen`\n")
+        else:
+            sys.stderr.write(
+                f"docspec: section \"{section}\" already exists: {target} (not overwritten)\n")
         return 2
 
     title = args.title or section.rsplit("/", 1)[-1]
@@ -111,17 +171,7 @@ def run(argv: list[str]) -> int:
         "order": str(_next_order(layout, section)),
     }
 
-    target.mkdir(parents=True, exist_ok=True)
-    created: list[str] = []
-    for artifact_id in _SCAFFOLD:
-        artifact = schema.by_id(artifact_id)
-        if artifact is None or artifact.template is None:
-            continue
-        body = artifact.template.read_text(encoding="utf-8")
-        for key, val in fills.items():
-            body = body.replace("{" + key + "}", val)
-        (target / artifact.generates).write_text(body, encoding="utf-8", newline="\n")
-        created.append(artifact.generates)
+    created = _render_scaffold(schema, target, fills)
 
     print(f"created section \"{section}\" (develop stage): {target}")
     print(f"  id: {fills['id']}  order: {fills['order']}")

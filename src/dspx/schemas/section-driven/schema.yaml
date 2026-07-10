@@ -62,6 +62,17 @@ workflow:
           markers and the ledger key on paths). Applies to NEW sections only; existing slug-named
           trees stay legal as-is.
         - Think in develop.md ONLY; the other four files do not exist yet.
+        - >-
+          Reasoning lands AS IT HAPPENS — a long discussion or a reversal is written into develop.md
+          while you think, not reconstructed after the fact. A section already crystallized (its
+          develop.md was drained + deleted by ready) has no scratch home again until you reopen one:
+          docspec new <section> --reopen rebuilds develop.md from the schema template (id/title/order
+          read from the existing concept.yaml, never recomputed). A cross-section restructuring reopens
+          the ROOT section's develop.md as the central workbench, and at crystallization the same
+          four-question triage (scope→concept / rulings→decisions / facts→material / rejected→history)
+          distributes each part to the section it belongs in; register the restructuring as a roadmap
+          `doing` entry, and the existing roadmap lint (doing without a develop.md) becomes the
+          deterministic "this reasoning has no home yet" reminder — no new rule.
         - Crystallize via four-question triage → scope→concept / rulings→decisions / facts→material / rejected→history.
         - Graduate with docspec ready <section> (a checked transaction; it drains then deletes develop.md).
       transaction: ready

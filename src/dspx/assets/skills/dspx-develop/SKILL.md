@@ -89,6 +89,20 @@ pausing is a TEST-ONLY mode.)
 expected, not failure — think from where it already stands (including what was tried and rejected),
 not from scratch.
 
+**Reasoning lands as it happens — reopen gives it a home.** A long discussion or a reversal is
+written into `develop.md` *while* you think, not reconstructed afterward. But once a section
+crystallizes, `docspec ready` drains and deletes its `develop.md` — so a settled section has no
+scratch home again. To re-think it, **rebuild the workbench first**: `docspec new <section>
+--reopen` renders a fresh `develop.md` from the schema template, reading the section's `id`/`title`/
+`order` back from its existing `concept.yaml` (never recomputed — those are the on-ledger identity).
+It refuses if `develop.md` already exists (already open) or if the section was never crystallized
+(use plain `docspec new` there). For a **cross-section restructuring**, reopen the **root section's**
+`develop.md` as the single central workbench — think across the affected subtree there, then at
+crystallization let the same four-question triage (scope→concept / rulings→decisions / facts→material
+/ rejected→history) file each part into the section it belongs in. Register the restructuring as a
+roadmap `doing` entry: the existing roadmap lint (a `doing` item with no `develop.md`) then becomes
+the deterministic "this reasoning has no home yet" reminder — no new artifact, aperture, or rule.
+
 ---
 ## What You Might Do
 - **Interrogate** → the root brief: who reads it, how deep, how broad, what's forbidden.

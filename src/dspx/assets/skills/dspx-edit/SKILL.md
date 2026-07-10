@@ -203,6 +203,34 @@ Never let the engine "judge" prose, and never hand a subagent work a regex (or y
 settles. That mis-routing is the only way this skill fails.
 
 ---
+## Subagent dispatch briefs — the exclusion list (copy it, don't re-derive it)
+When you dispatch a clean-context subagent for judgment work (line edit, a whole-document read),
+the failure is not the routing principle above — it is that **at brief-writing time you re-derive
+which work is mechanical from memory and, in a hurry, let a deterministic sweep slip into a
+semantic brief** (the 台中港 case: "normalize all punctuation to full-width" landed in a semantic
+subagent's brief). Fix: don't re-derive it. **Every dispatch brief opens with one line — "You do
+SEMANTIC work only"** — and then you copy this exclusion list verbatim. Each item names the
+mechanical work kept OUT of the brief and exactly where it goes instead:
+
+- **Punctuation width (full-width / half-width)** → **NOT dispatched.** Handle it per the
+  punctuation-width ban below: the engine has **no punctuation auto-fix today**, so no blind regex
+  sweep — fix punctuation only inside sentences you are already editing, and route residual width
+  inconsistency to a **single** non-blocking audit finding, never a per-occurrence pass. (A blind
+  sweep corrupts code spans / identifiers / protocol tokens / URLs — byte-exact zones.)
+- **Leaked scaffolding / placeholder leftovers** (`{#…}` ids, `[TBD]`/`[待補]`, stray `[!WARNING]`)
+  → `docspec lint` (blocking ERROR). Act on its findings; don't send a subagent hunting them.
+- **Term identity / number drift** → `docspec lint` (advisory WARN). The engine flags, it does not
+  fix — **you** reconcile each by hand against the source; not a subagent's call.
+- **Anchors / reference structure** → `docspec check`. Deterministic resolution, engine-owned.
+- **Banned openers / cross-section references** (`as above`, `如前一節所述`) → the engine does
+  **NOT** validate these; **you** grep for them by hand. Still **NOT dispatched** — a one-line grep
+  is your own job, and spawning a subagent for it is both waste and a mis-signal that it needs taste.
+
+Keep the list honest about engine reality: only items the engine truly enforces say "→ the engine";
+items it does not validate say "→ you, by hand". A brief that hands any of these to a subagent is
+mis-routed before it is even read.
+
+---
 ## Stage 1 — Line edit (readability) · SEMANTIC → subagent
 The engine cannot hear cadence. Dispatch a subagent to make each section READABLE for
 its audience — tighten rhythm, cut throat-clearing, surface buried subjects, kill word
@@ -268,6 +296,13 @@ whole doc in one sitting.
 - Don't eyeball deterministic checks — that's `lint`/`check`.
 - Don't touch the outline, decisions, or develop.md — deliverable only.
 - Don't rewrite during proofread, or pass to publish with open findings.
+- **Don't systematically sweep punctuation width** (full-width / half-width) after the fact —
+  no blind regex over the whole document. The engine has **no punctuation auto-fix today**, so a
+  bulk sweep is unguarded and **corrupts code spans, identifiers, protocol tokens, and URLs**
+  (byte-exact zones a width pass must never touch). Writing punctuation correctly as you compose is
+  fine; in edit you may fix it **only inside sentences you are already editing**. Residual width
+  inconsistency across the document → **one** non-blocking `docspec audit` finding for a human to
+  rule on, never a per-occurrence fix.
 - **Don't leak corpus-only content into the deliverable** — never paste a `rejected` option, a
   retired decision's `rationale`, or `history.*` prose (incl. a factcheck `--suggest` that quotes
   them) verbatim into `_latest.md`. Rejected/why-dropped reasoning is for the corpus, not the reader;
