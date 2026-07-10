@@ -653,6 +653,50 @@ def test_verify_byte_lock_latin_only_loss_is_informational(monkeypatch, capsys):
     assert "informational" in capsys.readouterr().err
 
 
+def _fake_pdfplumber(text):
+    """假 pdfplumber 模組：open() 回一頁、逐字 chars＝text（fidelity 測試共用）。"""
+    import types
+
+    class _FakePage:
+        def __init__(self, t): self._t = t
+        @property
+        def chars(self): return [{"text": c} for c in self._t]
+
+    class _FakePDF:
+        def __init__(self, t): self._t = t
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        @property
+        def pages(self): return [_FakePage(self._t)]
+
+    return types.SimpleNamespace(open=lambda p: _FakePDF(text))
+
+
+def test_verify_byte_lock_image_alt_not_counted_as_source(monkeypatch):
+    """圖片 alt 的中文不算源端內容：PDF 渲圖不渲 alt → 不誤報 CJK 淨損（D6）。"""
+    body = "本文段落完整無缺。\n\n![某狀態機之中文長說明](assets/fig.png)\n"
+    pdf_text = "本文段落完整無缺。"                    # alt 文字不在 PDF
+    monkeypatch.setitem(__import__("sys").modules, "pdfplumber", _fake_pdfplumber(pdf_text))
+    assert export_cmd._verify_byte_lock(paths.Path("x.pdf"), body) == 0
+
+
+def test_verify_byte_lock_bracket_alt_stripped_whole(monkeypatch):
+    """alt 含 `]`（errors[]）→ lazy alt 整體剝除、不得半剝殘留把殘片算進源端。"""
+    body = "前文完整。\n\n![errors[] 佇列狀態說明圖](assets/q.png)\n"
+    pdf_text = "前文完整。"
+    monkeypatch.setitem(__import__("sys").modules, "pdfplumber", _fake_pdfplumber(pdf_text))
+    assert export_cmd._verify_byte_lock(paths.Path("x.pdf"), body) == 0
+
+
+def test_verify_byte_lock_real_loss_not_masked_by_image_strip(monkeypatch, capsys):
+    """剝圖片語法不掩蓋真丟段：本文中文真的消失（且文件含圖）→ 照 fail。"""
+    body = "重要中文段落必須出現。\n\n![說明圖](assets/fig.png)\n"
+    pdf_text = "段落必須出現。"                       # 本文丟了「重要中文」
+    monkeypatch.setitem(__import__("sys").modules, "pdfplumber", _fake_pdfplumber(pdf_text))
+    assert export_cmd._verify_byte_lock(paths.Path("x.pdf"), body) == 1
+    assert "render fidelity" in capsys.readouterr().err
+
+
 def test_verify_byte_lock_hard_gate_when_pdfplumber_missing(monkeypatch, capsys):
     """pdfplumber 缺 → 渲染忠實度 hard-gate：印安裝提示、回 1（fail-closed，--no-verify 才跳）。"""
     import builtins
@@ -824,6 +868,28 @@ def test_figure_health_clean_png_no_warn(tmp_path):
     Image.new("RGB", (24, 24), (120, 130, 140)).save(p)
     warns = export_cmd._figure_health_warnings("![d](assets/ok.png)", {"assets/ok.png": p})
     assert warns == []
+
+
+def test_figure_health_sparse_line_diagram_no_blank_warn(tmp_path):
+    """稀疏線圖（白底細線、非白 ~1%）mean luma 雖 >247，不得誤報近全白（D7）。"""
+    Image = pytest.importorskip("PIL.Image")
+    im = Image.new("RGB", (100, 100), (255, 255, 255))
+    px = im.load()
+    for x in range(100):                     # 一條橫線＝100/10000＝1% 深色像素
+        px[x, 50] = (0, 0, 0)
+    p = tmp_path / "sparse.png"
+    im.save(p)
+    warns = export_cmd._figure_health_warnings("![d](assets/sparse.png)", {"assets/sparse.png": p})
+    assert not any("blank" in w for w in warns)
+
+
+def test_figure_health_blank_white_png_still_warns(tmp_path):
+    """真空白圖（非白像素占比 <0.1%）照報 blank WARN。"""
+    Image = pytest.importorskip("PIL.Image")
+    p = tmp_path / "blank.png"
+    Image.new("RGB", (100, 100), (255, 255, 255)).save(p)
+    warns = export_cmd._figure_health_warnings("![d](assets/blank.png)", {"assets/blank.png": p})
+    assert any("blank.png" in w and "blank" in w for w in warns)
 
 
 def test_typst_template_table_breakable():

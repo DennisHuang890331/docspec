@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -20,12 +21,22 @@ def _is_cjk(ch: str) -> bool:
     return "一" <= ch <= "鿿"
 
 
+# markdown 圖片語法 `![alt](path)` 整體（lazy alt——與 render.IMAGE_REF_RE 同課：greedy `[^\]]*`
+# 會在 alt 含 `]` 時漏剝、殘片被算進源端字元）。源端抽字前整體換空白：PDF 渲圖不渲 alt，
+# alt 的中文若算進「源端應出現字元」＝保證誤報淨損、誤擋 hard-gate。方向安全：少算源端只會
+# 減少誤 fail；真丟段的字不在圖片語法內；某軌若真把 alt 渲進 PDF 只變 extra（informational）。
+_IMAGE_MD_RE = re.compile(r"!\[.*?\]\(\s*[^)]*\)")
+
+
 def _source_anchored_stream(body_md: str) -> tuple[list[str], list[str]]:
-    """源端有序內容字元流＋每字「最近 markdown 標題」錨（供差異定位、源端為準）。"""
+    """源端有序內容字元流＋每字「最近 markdown 標題」錨（供差異定位、源端為準）。
+
+    抽字前先把 markdown 圖片語法整體換空白（alt 不是本文內容，見 _IMAGE_MD_RE 註）。"""
     import re as _re
     chars: list[str] = []
     anchors: list[str] = []
     heading = "(preamble)"
+    body_md = _IMAGE_MD_RE.sub(" ", body_md)
     for line in _nfc(body_md).splitlines():
         s = line.strip()
         if s.startswith("#"):

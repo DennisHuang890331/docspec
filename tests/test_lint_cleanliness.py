@@ -156,6 +156,49 @@ def test_v14_referenced_asset_not_flagged(make_project, write_leaf, monkeypatch)
     assert not any(f.rule == "V14" for f in _lint(layout))
 
 
+def test_v14_alt_with_bracket_reference_seen(make_project, write_leaf, monkeypatch):
+    """alt 含 `]` 的引用（D2 lazy alt）也算引用——不再誤報孤兒。"""
+    home = make_project(); _leaf_with_asset(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n![errors[] 佇列圖](assets/fig.png)\n")
+    assert not any(f.rule == "V14" for f in _lint(layout))
+
+
+# ── V14 flat layout（共用 docs/assets/：全文件引用聯集、單趟掃）──────────────
+
+def _flat_two_articles(make_project, write_leaf, monkeypatch):
+    """flat layout 雙文章專案＋共用 docs/assets/fig.png，回傳 flat Layout。"""
+    home = make_project("language: zh-TW\ndocs_layout: flat\n")
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "x",
+                                     "brief": {"audience": "a", "depth": "d",
+                                               "breadth": "b", "forbidden": ["f"]}})
+    write_leaf(home, "b/y", concept={"id": "c2", "title": "Y", "order": 1, "concept": "y",
+                                     "brief": {"audience": "a", "depth": "d",
+                                               "breadth": "b", "forbidden": ["f"]}})
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["a"])
+    render_cmd.run(["b"])
+    layout = Layout(home, "flat")
+    adir = layout.docs_assets_dir(None)               # flat＝共用 docs/assets/
+    adir.mkdir(parents=True, exist_ok=True)
+    (adir / "fig.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    return layout
+
+
+def test_v14_flat_asset_referenced_by_one_article_not_orphan(make_project, write_leaf, monkeypatch):
+    """flat：只被文章 a 引用的共用圖，不得對 b 誤報孤兒（引用取聯集）。"""
+    layout = _flat_two_articles(make_project, write_leaf, monkeypatch)
+    _inject(layout, "a", "\n\n![圖](assets/fig.png)\n")
+    assert not any(f.rule == "V14" for f in _lint(layout))
+
+
+def test_v14_flat_orphan_reported_exactly_once(make_project, write_leaf, monkeypatch):
+    """flat：無人引用的共用圖＝孤兒，恰報一筆（不逐 article 重複 N 次）。"""
+    layout = _flat_two_articles(make_project, write_leaf, monkeypatch)
+    v14 = [f for f in _lint(layout) if f.rule == "V14"]
+    assert len(v14) == 1 and v14[0].level == WARN and "fig.png" in v14[0].where
+
+
 # ── V15 撰寫工具/治理詞彙洩漏（ERROR）────────────────────────────────
 
 def test_v15_governance_topology_vocab_caught(make_project, write_leaf, monkeypatch):
@@ -201,6 +244,39 @@ def test_v15_dual_use_domain_terms_not_flagged(make_project, write_leaf, monkeyp
     layout = _render(home, monkeypatch)
     _inject(layout, "a", "\n\n演算法級實作移交下游車端安全規格與上游詳設，依 ISO 17757 §4.2。\n")
     assert not any(f.rule == "V15" for f in _lint(layout))
+
+
+def test_v15_section_label_generic_not_flagged(make_project, write_leaf, monkeypatch):
+    """表格欄標「§節」「§章」（§＋單一結構泛字、無後續 CJK）＝標籤用法白名單，不報 V15。"""
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n| §節 | 內容 |\n| --- | --- |\n| §章 | 說明 |\n")
+    assert not any(f.rule == "V15" for f in _lint(layout))
+
+
+def test_v15_generic_followed_by_cjk_still_caught(make_project, write_leaf, monkeypatch):
+    """泛字後仍接章節名（「§節點清單」）＝多字回引，照報。"""
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n詳見 §節點清單。\n")
+    assert any(f.rule == "V15" and f.level == ERROR for f in _lint(layout))
+
+
+def test_v15_identifier_substrings_not_flagged(make_project, write_leaf, monkeypatch):
+    """識別碼子字串（tier2-doc-cleanup、L2a-xxx）不得誤中 Tier-N／層代號。"""
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n整併作業編號 tier2-doc-cleanup 與 L2a-xxx 已完成。\n")
+    assert not any(f.rule == "V15" for f in _lint(layout))
+
+
+def test_v15_bare_tier_and_layer_labels_still_caught(make_project, write_leaf, monkeypatch):
+    """裸用 Tier-2／L2a（兩側非 ASCII 英數/-/_）照常觸發。"""
+    home = make_project(); _leaf(write_leaf, home)
+    layout = _render(home, monkeypatch)
+    _inject(layout, "a", "\n\n本節屬 Tier-2 規格，對應 L2a 層。\n")
+    hits = {f.detail.split('"')[1] for f in _lint(layout) if f.rule == "V15"}
+    assert any("Tier" in h for h in hits) and "L2a" in hits
 
 
 def test_v15_code_span_tool_token_exempt(make_project, write_leaf, monkeypatch):

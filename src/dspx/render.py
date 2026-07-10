@@ -112,8 +112,12 @@ def groups_fingerprint(layout: Layout, article: str) -> str:
             h.update(f"{rel}\0{meta.get('title')!r}\0{meta.get('order')!r}\0".encode("utf-8"))
     return h.hexdigest()[:16]
 
-# markdown 圖片引用 ![alt](path "optional title")：抓 path（到空白或 ) 為止）
-IMAGE_REF_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)")
+# markdown 圖片引用 ![alt](path "optional title")：抓 path（到空白或 ) 為止）。
+# alt 用 lazy `.*?`（停在後接 `(` 的那個 `]`），alt 內裸 `]`（如 `errors[]`）不再咬斷整條引用——
+# 舊 `[^\]]*` 會在第一個 `]` 斷掉，讓 V14／check ⑨／export 收圖同時看不見這條引用。
+# 已知邊界：alt 含字面 `](` 仍提早截斷（CommonMark 本要求跳脫，不為它建 parser）。
+# 單一定義：所有消費端一律走 find_image_refs，勿另寫圖片 regex 分岔。
+IMAGE_REF_RE = re.compile(r"!\[.*?\]\(\s*([^)\s]+)")
 
 # 路徑抓到 `-->` 為止（lazy＋兩端 trim），不用 `\S+`——含空白的 section 路徑（如「附錄 A」）
 # 才能寫入/讀回對稱，散文不因標記解析失敗被靜默歸前節或丟棄。lint 的歸節直接 import 這兩條

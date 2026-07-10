@@ -94,11 +94,26 @@ _TOOL_VOCAB_RE = re.compile(
     r"|文件森林"                                      # forest
     r"|[一二三四五六七八九十百\d]+\s*層\s*(?:文件)?森林"   # 「三層森林」「三層文件森林」
     r"|§\s*[一-鿿]+"                        # §回引 / §<中文章節名>（跨節指涉；§+數字＝標準條號不算）
-    r"|Tier-?\d"                                     # Tier-1/2/3 階層標籤
-    r"|\bL[123][ab]\b"                              # L1a/L2a/L2b/L3b 帶字母後綴層代號
+    # Tier-N／層代號：兩側顯式 ASCII token 邊界（非英數/-/_）——識別碼子字串（tier2-doc-cleanup、
+    # L2a-xxx）不命中；裸用 Tier-2／L2a（後接空白/CJK/標點）照抓。`\b` 對 `L2a-` 的 a↔- 界成立、
+    # 是同型雷，故顯式類把 -、_ 一起排除。IGNORECASE 不影響斷言字母類。
+    r"|(?<![A-Za-z0-9_-])Tier-?\d(?![A-Za-z0-9_-])"  # Tier-1/2/3 階層標籤
+    r"|(?<![A-Za-z0-9_-])L[123][ab](?![A-Za-z0-9_-])"  # L1a/L2a/L2b/L3b 帶字母後綴層代號
     r"|raise.{0,12}finding",                       # raise 一筆 finding（引擎工作流措辭）
     re.IGNORECASE,
 )
+# V15 白名單 post-filter（D4）：`§`＋**單一**結構泛字（節/章/條/款/項）且無後續 CJK＝表格欄標
+# 「§節」「§章」這類標籤用法，非跨節回引 → 跳過。主 regex 是 greedy（`[一-鿿]+` 吃光後續 CJK），
+# 所以「命中恰為 §＋一個泛字」即隱含「其後無 CJK」；「§跨文件清單」（多字）或「§節名」照報。
+_SECTION_LABEL_GENERICS = frozenset("節章條款項")
+
+
+def _is_v15_whitelisted(match: str) -> bool:
+    """V15 命中是否落在白名單（§＋單一結構泛字＝欄位標籤，跳過）。"""
+    if not match.startswith("§"):
+        return False
+    cjk = match[1:].strip()
+    return len(cjk) == 1 and cjk in _SECTION_LABEL_GENERICS
 # V16 規範逃避詞（WARN，同句 應/不得）：封閉 6 詞——最好／儘量／酌情／如有可能／視情況／
 # 最大限度——與規範關鍵字（應／不得）同一「偽句」（。！？；ㄧ切界）出現＝作者把該寫成可驗收的
 # 規定軟化成無法驗收的裁量。`必要時` 刻意排除：它有合法的 EARS 條件觸發讀法（「必要時 X」＝
@@ -225,6 +240,8 @@ def _scan_deliverable_text(body: str, where: str, all_ids: set[str]) -> list[Fin
                                 "RFC 2606 example.* domains / lorem ipsum / 555-01xx signal "
                                 "unfilled placeholder data (e.g. an author/contact never filled in)"))
     for m in dict.fromkeys(_TOOL_VOCAB_RE.findall(body)):
+        if _is_v15_whitelisted(m):
+            continue
         findings.append(Finding("V15", ERROR, where,
                                 f"leaked authoring-tool/governance vocabulary \"{m.strip()}\" -- "
                                 "the deliverable is for domain readers, not for operators of the "
@@ -407,14 +424,38 @@ def run_lint(layout: Layout, leaves: list[Leaf], schema: Schema) -> list[Finding
 def _lint_orphan_assets(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
     """V14 孤兒圖檔（WARN）：**交付側 `docs/assets/`**（Model A：圖住交付側）有可嵌入圖檔
     （.png/.svg/.jpg…），但該文件交付物完全沒引用它的 basename ＝渲了卻忘了嵌入（或舊圖已換、殘留）。
-    `.drawio` 源檔不算（docs_asset_files 只收可嵌入圖格式、不含 .drawio）。WARN 非阻塞。"""
+    `.drawio` 源檔不算（docs_asset_files 只收可嵌入圖格式、不含 .drawio）。WARN 非阻塞。
+
+    孤兒判定跟著資產夾的共用範圍走：
+    - flat layout：`docs/assets/` 是**全專案共用**——孤兒＝「沒有任何文件引用」，故取
+      全部 article 引用的**聯集**、對共用夾**單趟**掃（逐 article 掃會把只被 A 引用的圖
+      對 B、C…各誤報一次＝恆誤報且重複 N 次）。
+    - per-article layout：各 article 資產夾獨立，維持逐 article 比對。"""
     from dspx.render import find_image_refs
     from dspx.model import docs_asset_files
     findings: list[Finding] = []
-    for article in sorted({lf.article for lf in leaves}):
+    articles = sorted({lf.article for lf in leaves})
+
+    def _refs(article: str) -> set[str]:
         path = layout.docs_latest(article)
-        refs = ({ref.rsplit("/", 1)[-1] for ref in find_image_refs(path.read_text(encoding="utf-8"))}
-                if path.is_file() else set())
+        if not path.is_file():
+            return set()
+        return {ref.rsplit("/", 1)[-1] for ref in find_image_refs(path.read_text(encoding="utf-8"))}
+
+    if layout.docs_layout == "flat":
+        union: set[str] = set()
+        for article in articles:
+            union |= _refs(article)
+        for asset in docs_asset_files(layout, None):
+            if asset.name not in union:
+                findings.append(Finding(
+                    "V14", WARN, f"docs/assets/{asset.name}",
+                    "image asset is not referenced by any deliverable "
+                    "(rendered but never embedded, or a stale leftover)"))
+        return findings
+
+    for article in articles:
+        refs = _refs(article)
         for asset in docs_asset_files(layout, article):
             if asset.name not in refs:
                 findings.append(Finding(
@@ -437,7 +478,12 @@ def _lint_freeze(layout: Layout) -> list[Finding]:
 def _lint_glossary(layout, articles: list[str]) -> list[Finding]:
     """術語一致性提醒（皆 WARN；精確同物異名判定→audit）。
     Vg1 同物異名：docs 出現某詞的 aliases_forbidden → 提醒改正名。
+       比對前先**遮蔽正名**：把 body 中該 term 的 canonical 每處出現換成等長佔位字元，
+       再比別名——「別名⊂正名」（alias 行控 ⊂ canonical 行控中心）時，寫對正名不再恆誤報；
+       裸用別名（未被 canonical 覆蓋）仍抓得到。
     Vg2 縮寫裸奔：module 桶的 code（如 RMM）在 docs 散文出現 → 提醒中文化。
+    掃描文字剝 HTML 註解＋fenced/inline code（與 V1–V4 同前處理）：code 內的別名 token
+    是內容（欄位名/範例），不是散文用詞。
     """
     from dspx.glossary import load_glossary
     terms = load_glossary(layout)
@@ -449,11 +495,16 @@ def _lint_glossary(layout, articles: list[str]) -> list[Finding]:
         if not path.is_file():
             continue
         body = _HTML_COMMENT_RE.sub("", _strip_frontmatter(path.read_text(encoding="utf-8")))
+        body = _FENCED_CODE_RE.sub("", body)
+        body = _INLINE_CODE_RE.sub("", body)
         where = f"docs/{article}/_latest.md"
         for t in terms:
             canonical = t.get("canonical", "")
+            # 遮蔽法：canonical 出現處換等長 \x00 佔位（等長保位移穩定、\x00 不與任何別名相交）
+            masked = (body.replace(str(canonical), "\x00" * len(str(canonical)))
+                      if canonical else body)
             for alias in (t.get("aliases_forbidden") or []):
-                if alias and str(alias) in body:
+                if alias and str(alias) in masked:
                     findings.append(Finding("Vg1", WARN, where,
                         f"possible synonym \"{alias}\" -> canonical name should be \"{canonical}\" (confirm context; precise judgment is in audit)"))
             code = t.get("code")

@@ -73,6 +73,70 @@ def test_lint_vg1_forbidden_alias(make_project, write_leaf, monkeypatch):
     assert "Vg2" in rules     # 縮寫 RMM 裸用、且 canonical 從未出現 → 報
 
 
+# ── Vg1 遮蔽法（lint-false-positive-batch D3）────────────────────────────
+
+
+def _render_with_insert(make_project, write_leaf, monkeypatch, terms, insert):
+    """建專案＋glossary＋render，把 insert 塞進交付物，回傳 findings。"""
+    from dspx.commands import render as render_cmd
+    home = make_project()
+    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
+    _set_glossary(home, terms)
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["g"])
+    latest = home.parent / "docs" / "g" / "_latest.md"
+    latest.write_text(latest.read_text("utf-8").replace("## X\n", "## X\n\n" + insert + "\n"),
+                      encoding="utf-8")
+    layout = Layout(home)
+    return run_lint(layout, load_project(layout), load_schema())
+
+
+_OCC_TERM = [{"id": "occ", "canonical": "行控中心", "bucket": "module",
+              "aliases_forbidden": ["行控"]}]
+
+
+def test_lint_vg1_substring_alias_masked_no_false_positive(make_project, write_leaf, monkeypatch):
+    """alias「行控」⊂ canonical「行控中心」：正文寫對正名 → 遮蔽後無裸用、零 Vg1。"""
+    findings = _render_with_insert(make_project, write_leaf, monkeypatch, _OCC_TERM,
+                                   "本節由行控中心統一調度，行控中心亦負責回報。")
+    assert not any(f.rule == "Vg1" for f in findings)
+
+
+def test_lint_vg1_bare_alias_still_caught(make_project, write_leaf, monkeypatch):
+    """裸用「行控」（未被任何 canonical 出現處覆蓋）仍報 Vg1。"""
+    findings = _render_with_insert(make_project, write_leaf, monkeypatch, _OCC_TERM,
+                                   "本節由行控中心統一調度；異常時由行控通知現場。")
+    vg1 = [f for f in findings if f.rule == "Vg1"]
+    assert vg1 and any("行控" in f.detail for f in vg1)
+
+
+def test_lint_vg1_code_span_alias_exempt(make_project, write_leaf, monkeypatch):
+    """fenced/inline code 內的別名 token 是內容（欄位名/範例），不報 Vg1。"""
+    findings = _render_with_insert(
+        make_project, write_leaf, monkeypatch,
+        [{"id": "t", "canonical": "風險估測系統", "bucket": "module",
+          "aliases_forbidden": ["監控系統"]}],
+        "欄位 `監控系統` 為列名。\n\n```\nkey: 監控系統\n```")
+    assert not any(f.rule == "Vg1" for f in findings)
+
+
+def test_validate_alias_substring_of_own_canonical_rejected():
+    """alias 為自己 canonical 的子字串＝死配置 → 結構錯誤、指名 term 與別名。"""
+    errs = validate_glossary([{"id": "occ", "canonical": "行控中心", "bucket": "module",
+                               "aliases_forbidden": ["行控"]}])
+    assert any("occ" in e and "行控" in e for e in errs)
+
+
+def test_validate_alias_overlapping_other_term_canonical_ok():
+    """跨 term 重疊（A 的別名 ⊂ B 的 canonical）不受此不變量限制。"""
+    errs = validate_glossary([
+        {"id": "occ", "canonical": "行控中心", "bucket": "module"},
+        {"id": "dsp", "canonical": "調度系統", "bucket": "module",
+         "aliases_forbidden": ["行控"]},
+    ])
+    assert errs == []
+
+
 def test_lint_vg2_suppressed_when_canonical_localized(make_project, write_leaf, monkeypatch):
     """canonical 已在文中出現（首用已在地化）→ 後續裸用縮寫不再每次誤報 Vg2。"""
     from dspx.commands import render as render_cmd

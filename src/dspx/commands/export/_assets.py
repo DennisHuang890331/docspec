@@ -50,16 +50,24 @@ def _figure_health_warnings(body_md: str, assets: dict[str, Path]) -> list[str]:
             continue
         try:
             with Image.open(src) as im:
-                mean = ImageStat.Stat(im.convert("L")).mean[0]
+                gray = im.convert("L")
+                stat = ImageStat.Stat(gray)
+                mean = stat.mean[0]
+                hist = gray.histogram()
         except Exception:  # noqa: BLE001 — 壞圖/解碼失敗不阻擋
             continue
+        # 近全白判準＝**非白像素占比**（histogram 數灰階 <245 的像素），非 mean luma：
+        # 稀疏線圖（白底細線的狀態圖）mean 天然 >247 但訊息完整，mean 判準系統性誤報；
+        # 非白占比 <0.1% 才是真空白/近空白渲染。近全黑分支不動——黑塊是實心面積，mean 對它成立。
+        total = sum(hist) or 1
+        nonwhite = sum(hist[:245]) / total
         if mean < 8:
             warns.append(f"figure \"{ref}\" renders almost entirely black (mean luma {mean:.0f}/255)"
                          f" — a drawio SVG under the Typst track collapses to a black box; re-render"
                          f" it as PNG (dspx-diagram is PNG-primary)")
-        elif mean > 247:
-            warns.append(f"figure \"{ref}\" is almost entirely blank (mean luma {mean:.0f}/255)"
-                         f" — verify the render is not empty")
+        elif nonwhite < 0.001:
+            warns.append(f"figure \"{ref}\" is almost entirely blank (non-white pixels "
+                         f"{nonwhite:.2%} < 0.10%) — verify the render is not empty")
     return warns
 
 

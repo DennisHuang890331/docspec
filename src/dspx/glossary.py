@@ -34,6 +34,10 @@ def validate_glossary(terms: list[dict]) -> list[str]:
     """check 用：每條 id 唯一、canonical 必填、bucket 合法。
 
     definition/english 是 optional 下鑽欄（`docspec show <id>` 才回）——不加硬 invariant。
+
+    另擋**自打架別名**：同一條 term 的 alias 若是自己 canonical 的子字串（且≠canonical），
+    在遮蔽式 Vg1 比對下永遠測不到（正名一出現就把別名遮掉）、在純子字串比對下對每次正確
+    寫法恆誤報——兩頭都是死配置，設定層 fail-loud（刪別名或改正名）。跨 term 的重疊不管。
     """
     errs: list[str] = []
     seen: set[str] = set()
@@ -49,4 +53,13 @@ def validate_glossary(terms: list[dict]) -> list[str]:
             errs.append(f"glossary term \"{tid}\" missing canonical (canonical name)")
         if t.get("bucket") not in BUCKETS:
             errs.append(f"glossary term \"{tid}\" bucket \"{t.get('bucket')}\" not in {BUCKETS}")
+        canonical = str(t.get("canonical") or "")
+        for alias in (t.get("aliases_forbidden") or []):
+            alias_s = str(alias)
+            if alias_s and canonical and alias_s != canonical and alias_s in canonical:
+                errs.append(
+                    f"glossary term \"{tid}\": aliases_forbidden \"{alias_s}\" is a substring of "
+                    f"its own canonical \"{canonical}\" -- a dead configuration (the alias can "
+                    "never be detected without false-flagging every correct use of the canonical); "
+                    "drop the alias or change the canonical")
     return errs

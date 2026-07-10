@@ -290,6 +290,22 @@ def test_strip_markers():
     assert "## A" in out and "內文" in out
 
 
+# ── 圖引用解析（lint-false-positive-batch D2：lazy alt、單一定義）────────────
+
+def test_find_image_refs_alt_with_bracket():
+    """alt 含裸 `]`（如 errors[]）不再咬斷整條引用——V14/check ⑨/export 同時生效。"""
+    from dspx.render import find_image_refs
+    body = "前文。\n\n![errors[] 佇列圖](assets/q.png)\n\n後文。\n"
+    assert find_image_refs(body) == ["assets/q.png"]
+
+
+def test_find_image_refs_plain_title_whitespace_unchanged():
+    """一般引用（含 title、路徑前空白）行為不回歸。"""
+    from dspx.render import find_image_refs
+    body = '![系統架構圖](assets/arch.png "架構")\n\n![圖]( assets/b.png )\n'
+    assert find_image_refs(body) == ["assets/arch.png", "assets/b.png"]
+
+
 def test_lint_ignores_section_markers(make_project, write_leaf, monkeypatch):
     home = _setup(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
