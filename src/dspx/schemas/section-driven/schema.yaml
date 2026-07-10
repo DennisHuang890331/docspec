@@ -53,6 +53,14 @@ workflow:
       summary: Developmental editor. Think freely in develop.md, then crystallize into concept/decisions/material; retire rejected work into history.
       steps:
         - Read the forest map + roadmap first (docspec instructions develop <section>).
+        - >-
+          Name section folders (docspec new) with the chapter name in the DELIVERABLE language — the
+          folder name is what a human sees browsing corpus/ (a Chinese document gets 適用範圍/, not an
+          English slug). NEVER prefix a chapter number (1-適用範圍/): ordering's only source of truth
+          is the order field (concept.yaml / group.yaml); a numbered folder name is a second source of
+          truth and every reorder would force a rename — and renames are currently unsafe (prose
+          markers and the ledger key on paths). Applies to NEW sections only; existing slug-named
+          trees stay legal as-is.
         - Think in develop.md ONLY; the other four files do not exist yet.
         - Crystallize via four-question triage → scope→concept / rulings→decisions / facts→material / rejected→history.
         - Graduate with docspec ready <section> (a checked transaction; it drains then deletes develop.md).

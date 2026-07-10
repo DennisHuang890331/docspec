@@ -95,6 +95,12 @@ not from scratch.
 - **Grow a MECE skeleton** and pressure-test it for overlap and gaps.
 - **Descend** — per section set its brief (inherit the parent, write only the diff), draft its
   one-sentence controlling idea, then split into MECE children or call it a leaf.
+- **Name section folders in the deliverable language** — the folder name (`docspec new
+  <article>/<chapter name>`) is the chapter name a human sees browsing `corpus/`; a Chinese
+  document gets `適用範圍/`, not an English slug. Never prefix a chapter number
+  (`1-適用範圍/`) — the rule and its why are projected by `docspec guide` (order's single
+  source of truth is the `order` field; renames are currently unsafe). NEW sections only:
+  an existing slug-named tree stays legal — do not rename it retroactively.
 - **Open with an orienting overview** — give the document a root/scope section whose brief is "frame
   the whole": what this document defines, its boundary, its audience, anchored on the subject's core
   framing idea. Set its `concept`/`brief` like any section so `draft` renders an orientation, not a

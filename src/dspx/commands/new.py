@@ -18,6 +18,43 @@ HELP = "create section folder + develop.md (concept/decisions are produced when 
 # material 可選、history 由 retire 建。（不預建空 stub——否則 status 會把未結晶的空節誤報 ready。）
 _SCAFFOLD = ("develop",)
 
+# ── 路徑段安全驗證（確定性黑名單；corpus 跨機同步，任何平台一律驗）──
+# Windows 保留裝置名（不分大小寫；「保留名.副檔名」形式的目錄名同樣中招）
+_WINDOWS_RESERVED = frozenset(
+    {"CON", "PRN", "AUX", "NUL"}
+    | {f"COM{i}" for i in range(1, 10)}
+    | {f"LPT{i}" for i in range(1, 10)})
+# Windows 非法字元＋反斜線（Windows pathlib 視 `\` 為分隔符，跨平台一致拒收）
+_ILLEGAL_CHARS = frozenset('<>:"|?*\\')
+
+
+def _segment_error(segment: str) -> str | None:
+    """單一路徑段的確定性安全檢查；壞 → 英文原因（給 CLI 訊息），好 → None。"""
+    if segment in ("", ".", ".."):
+        return 'empty, "." and ".." segments are not allowed'
+    if segment.startswith("_"):
+        return ('"_"-prefixed folders are engine-invisible (like _archive/); '
+                "sections created there are never seen by status/check/render")
+    bad = sorted({c for c in segment if c in _ILLEGAL_CHARS or ord(c) < 32})
+    if bad:
+        return "illegal character(s) " + ", ".join(map(repr, bad)) + " (unportable path)"
+    if segment != segment.strip() or segment.endswith("."):
+        # 結尾點/空格 Windows 會靜默剝除→路徑不一致；頭尾空白也破 render 標記 round-trip
+        return "leading/trailing whitespace or a trailing dot is not allowed"
+    if segment.split(".", 1)[0].upper() in _WINDOWS_RESERVED:
+        return (f'"{segment.split(".", 1)[0]}" is a Windows reserved device name '
+                "(the folder would be unusable on Windows)")
+    return None
+
+
+def validate_section_path(section: str) -> str | None:
+    """逐段驗證 section 路徑；回傳第一個壞段的錯誤訊息（指明段與原因），全部合法 → None。"""
+    for segment in section.split("/"):
+        reason = _segment_error(segment)
+        if reason:
+            return f'invalid path segment "{segment}": {reason}'
+    return None
+
 
 def _stable_id(section: str) -> str:
     """與位置脫鉤的穩定 id（內容＝路徑指紋，存進檔後即定身份）。"""
@@ -38,13 +75,22 @@ def _next_order(layout: Layout, section: str) -> int:
 
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec new", description=HELP)
-    parser.add_argument("section", help="leaf section path (relative to corpus/, e.g. myarticle/intro)")
+    parser.add_argument(
+        "section",
+        help="leaf section path relative to corpus/, segments named in the deliverable "
+             "language (en: guide/intro; zh: 指南/簡介); no chapter-number prefixes")
     parser.add_argument("--title", default=None, help="title (defaults to the last path segment)")
     args = parser.parse_args(argv)
 
     section = args.section.strip("/")
     if not section:
         sys.stderr.write("docspec: section path must not be empty\n")
+        return 2
+
+    # 路徑安全驗證：mkdir 之前 fail-loud——命中任一黑名單即拒建、不建任何目錄
+    problem = validate_section_path(section)
+    if problem:
+        sys.stderr.write(f'docspec: refusing to create "{section}": {problem}\n')
         return 2
 
     try:

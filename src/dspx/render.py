@@ -74,10 +74,13 @@ def write_ledger(layout: Layout, article: str, hashes: dict) -> None:
 # markdown 圖片引用 ![alt](path "optional title")：抓 path（到空白或 ) 為止）
 IMAGE_REF_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)")
 
-MARKER_RE = re.compile(r"^<!--\s*dspx:section\s+(\S+)\s*-->\s*$")
+# 路徑抓到 `-->` 為止（lazy＋兩端 trim），不用 `\S+`——含空白的 section 路徑（如「附錄 A」）
+# 才能寫入/讀回對稱，散文不因標記解析失敗被靜默歸前節或丟棄。lint 的歸節直接 import 這兩條
+# （單一真相源，勿另寫 regex 分岔）。
+MARKER_RE = re.compile(r"^<!--\s*dspx:section\s+(.+?)\s*-->\s*$")
 # 分組（非末節）節點標記：與 section marker 區隔，使 parse_section_bodies 切斷前一節、
 # 忽略分組標題行（分組無散文、不記指紋、不進 lint 的 section 集合）。publish 一併剝除。
-GROUP_MARKER_RE = re.compile(r"^<!--\s*dspx:group\s+(\S+)\s*-->\s*$")
+GROUP_MARKER_RE = re.compile(r"^<!--\s*dspx:group\s+(.+?)\s*-->\s*$")
 # 關閉式標記（作者誤以為標記像 HTML 成對、手加的 `<!-- /dspx… -->`）：publish 凍結時一併剝除
 # （快照零機械痕跡契約）。刻意不進 parse_section_bodies——節內的關閉式行仍算該節散文
 # （手改如常計入 prose 指紋、diff 照抓），剝除只保護凍結快照。
