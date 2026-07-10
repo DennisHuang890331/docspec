@@ -57,7 +57,7 @@ $endif$
 // 側邊界：paper 雙欄＝窄邊（每欄才夠寬，對齊 IEEE ~1.76cm）；prose 單欄窄版心（行長 62–72 字）；manual 寬些容程式碼/表；
 //   ★default 貼近 Claude.ai 聊天氣泡的窄欄閱讀寬度（docspec-issues #10；首版 3.2cm 使用者實測回饋
 //   偏窄，調寬至比 essay/novel 的 3.5cm 更寬鬆，欄寬明顯窄於印刷向 profile）。
-#let _mx = if profile == "paper" { 1.8cm } else if profile == "manual" { 2.5cm } else if profile == "essay" or profile == "novel" { 3.5cm } else if profile == "default" { 3.8cm } else { 3.0cm }
+#let _mx = if profile == "paper" { 1.8cm } else if profile == "manual" { 2.5cm } else if profile == "essay" or profile == "novel" { 3.5cm } else if profile == "default" { 2.5cm } else { 3.0cm }
 // 內文字級：paper 雙欄慣例 10pt（欄窄）；其餘 11pt；`fontsize` 旋鈕可覆寫。
 #let _bodysize = $if(fontsize)$$fontsize$$else$(if profile == "paper" { 10pt } else { 11pt })$endif$
 
@@ -67,7 +67,7 @@ $endif$
 #let horizontalrule = if profile == "novel" {
   align(center)[#v(0.8em) #text(font: _body, tracking: 0.35em)[\* \* \*] #v(0.8em)]
 } else if profile == "default" {
-  align(center)[#v(0.5em) #line(length: 100%, stroke: 0.5pt + rgb("#d0d7de")) #v(0.5em)]
+  []   // ★docspec-issues #14：正式公文風＝移除 `---` 分隔線（台中港審閱回饋）；節與節靠標題段前空白分隔
 } else {
   align(center)[#v(0.4em) #line(start: (35%, 0%), end: (65%, 0%), stroke: 0.5pt + rgb("#888888")) #v(0.4em)]
 }
@@ -140,13 +140,16 @@ $endif$
   v(30%)   // 章首下沉約 ⅓（書籍 chapter-opener 慣例：標題起於頁面 ⅓–½ 處）
   align(center)[#text(font: _serif, weight: "regular", size: 1.6 * _bodysize)[#it.body]]
 } else {
-  block(above: 1.5em, below: 0.6em)[#it]
+  block(above: 2.0em, below: 0.9em)[#it]
 }
-// 標題段前間距＝約一行（對齊中文「段前空一行」；> 段距 1.1em 才與內文分隔）；段後較小＝把標題綁在其後文字。
-#show heading.where(level: 2): it => block(above: 1.25em, below: 0.5em)[#it]
-#show heading.where(level: 3): it => block(above: 1.05em, below: 0.45em)[#it]
+// ★docspec-issues #14（台中港審閱回饋「title/副標題→內文縫忽大忽小」）：改採 Claude web＝Tailwind
+//   Typography（prose）韻律——段前 ≫ 段後（標題緊貼下文），且上下皆隨層級「等比縮放」（大標題留多、
+//   小標題留少），而非舊版不規律跳動的 below（0.6/0.5/0.45/0.32）。Tailwind 原值相對各自字級：
+//   h2 2/1em、h3 1.6/0.6em、h4 1.5/0.5em；本模板標題字級僅 1.3/1.16/1.05/1.0×內文，依印刷密度略收 15%。
+#show heading.where(level: 2): it => block(above: 1.7em, below: 0.75em)[#it]
+#show heading.where(level: 3): it => block(above: 1.3em, below: 0.55em)[#it]
 // 四級＝最深層、內文字級地板：靠段前空白＋編號區分（非縮小字級）。五級以下不產出（render clamp＋check）。
-#show heading.where(level: 4): it => block(above: 0.95em, below: 0.32em)[#it]
+#show heading.where(level: 4): it => block(above: 1.05em, below: 0.45em)[#it]
 
 // 程式碼＝Source Code Pro（CJK fallback 思源宋）
 #show raw: set text(font: _mono, size: 0.92em)
@@ -160,6 +163,15 @@ $endif$
 #show raw.where(block: false): box.with(
   fill: rgb("#eff1f3"), inset: (x: 3pt), outset: (y: 3pt), radius: 2pt,
 )
+// 引用區塊（`>`，本專案用作「設計理據」附註）：★docspec-issues #14——typst 預設 quote 兩側內縮成
+//   突兀窄柱（台中港審閱回饋）。改 Claude web 風：左側細色條＋左內縮，不縮右界（維持滿幅、消窄柱），
+//   不加底色＝正式公文的克制。上下留半行與前後文分隔。
+#show quote.where(block: true): it => block(
+  width: 100%,
+  above: 0.8em, below: 0.8em,
+  inset: (left: 12pt),
+  stroke: (left: 2pt + rgb("#c8cdd3")),
+)[#it.body]
 
 // 表格＝GitHub 風：表頭淺灰底＋粗體、細灰格線、cell padding 舒服、整表置中
 #set table(
