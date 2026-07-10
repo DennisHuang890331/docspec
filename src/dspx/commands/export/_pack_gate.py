@@ -40,5 +40,8 @@ def _check_pack_integrity(template_dir: Path, is_bundled: bool, allow: bool) -> 
         return 0
     sys.stderr.write(
         "  Make format changes through validated knobs (--format-config; see docspec guide); "
-        "to really change the layout, use your own template pack with --template <dir>. To use this hand-edited bundled pack, add --allow.\n")
+        "for a real layout change, eject an editable copy of the pack: `docspec template eject` "
+        "(it records export.template so exports pick it up automatically, gate skipped). "
+        "If you edited the bundled pack in a dev source tree on purpose, regenerate the baseline: "
+        "`python tools/gen_pack_hashes.py`. To force-use this hand-edited bundled pack, add --allow.\n")
     return 1

@@ -157,3 +157,67 @@ def test_compile_typst_vars_default_uses_typst_house_body():
     # 明確調過 base_size 才發（且非錨點值）
     v2 = compile_typst_vars(validate_format_config({"font": {"base_size": 11.0}}))
     assert "fontsize=11pt" in v2
+
+
+# ── D4：page.margin / preset / par.first_line_indent 接線 ─────────────
+
+def test_compile_typst_vars_maps_page_margin():
+    from dspx.format_config import compile_typst_vars, validate_format_config
+    v = compile_typst_vars(validate_format_config({"page": {"margin": 25}}))
+    assert "margin=25mm" in v
+
+
+def test_compile_typst_vars_preset_a4_normal_emits_equivalent_margin():
+    from dspx.format_config import compile_typst_vars, validate_format_config
+    v = compile_typst_vars(validate_format_config({"page": {"preset": "a4-normal"}}))
+    assert "margin=25mm" in v
+
+
+def test_compile_typst_vars_preset_a4_wide_emits_no_margin():
+    """a4-wide（預設）＝house 版心、不發 margin（行為不變）。"""
+    from dspx.format_config import compile_typst_vars, validate_format_config
+    v = compile_typst_vars(validate_format_config({}))                       # 預設 a4-wide
+    assert not any(x.startswith("margin=") for x in v)
+
+
+def test_compile_typst_vars_preset_cas_native_warns_no_margin(capsys):
+    from dspx.format_config import compile_typst_vars, validate_format_config
+    v = compile_typst_vars(validate_format_config({"page": {"preset": "cas-native"}}))
+    assert not any(x.startswith("margin=") for x in v)                       # 不映射
+    assert "cas-native" in capsys.readouterr().err                          # 一行警告
+
+
+def test_compile_typst_vars_first_line_indent_set():
+    from dspx.format_config import compile_typst_vars, validate_format_config
+    v = compile_typst_vars(validate_format_config({"par": {"first_line_indent": 2}}))
+    assert "first-line-indent=2em" in v
+
+
+def test_compile_typst_vars_first_line_indent_zero():
+    from dspx.format_config import compile_typst_vars, validate_format_config
+    v = compile_typst_vars(validate_format_config({"par": {"first_line_indent": 0}}))
+    assert "first-line-indent=0em" in v                                     # 0＝明確關縮排（仍發）
+
+
+def test_compile_typst_vars_first_line_indent_unset():
+    from dspx.format_config import compile_typst_vars, validate_format_config
+    v = compile_typst_vars(validate_format_config({}))
+    assert not any(x.startswith("first-line-indent=") for x in v)           # 未設＝交 profile、不發
+
+
+@pytest.mark.parametrize("bad", [
+    {"par": {"first_line_indent": 9}},        # 超範圍（>4）
+    {"par": {"first_line_indent": -1}},       # 低於 0
+    {"par": {"first_line_indent": "2em"}},    # 型別錯（非數值）
+])
+def test_validate_rejects_bad_first_line_indent(bad):
+    with pytest.raises(FormatConfigError):
+        validate_format_config(bad)
+
+
+def test_typst_knob_followups_no_longer_names_page():
+    """未映射 follow-up 只剩 table.*（page margin/preset 已接線、脫離清單）。"""
+    from dspx.format_config import _TYPST_KNOB_FOLLOWUPS
+    joined = " ".join(_TYPST_KNOB_FOLLOWUPS)
+    assert "page" not in joined and "margin" not in joined
+    assert "table" in joined

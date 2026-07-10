@@ -470,13 +470,13 @@ def test_resolve_fonts_override_missing_font_errors(tmp_path):
 
 
 def test_export_template_flag_missing_dir_errors(make_project, monkeypatch, capsys):
-    """export --template 指不存在的夾（隱含 journal 軌）→ 清楚報錯、非零、不 crash。"""
+    """export --template 指不存在的夾 → 內容物路由清楚報錯、非零、不 crash（D5：不再隱含 journal）。"""
     home, _ = _setup(make_project)
     monkeypatch.chdir(home.parent)
     monkeypatch.setattr(export_cmd, "_pandoc_path", lambda: "pandoc")
     rc = export_cmd.run(["g", "--template", str(home / "missing_tpl")])
     assert rc == 1
-    assert "journal template not found" in capsys.readouterr().err
+    assert "does not exist" in capsys.readouterr().err
 
 
 def test_prune_old_pdfs_keeps_only_latest_scoped(make_project):

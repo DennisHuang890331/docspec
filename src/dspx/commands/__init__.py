@@ -14,7 +14,7 @@ REGISTRY: dict[str, ModuleType] = {}
 # maintenance). Everything else is agent-facing — driven by skills via `docspec guide` /
 # `docspec instructions` — and hidden from the default `--help` (still runnable; listed by
 # `docspec --help-all`). This is a discoverability split, not access control.
-HUMAN_COMMANDS = frozenset({"init", "setup", "skills", "doctor", "upgrade", "version"})
+HUMAN_COMMANDS = frozenset({"init", "setup", "skills", "doctor", "upgrade", "self-update", "version"})
 
 
 def _register(module: ModuleType) -> None:
@@ -47,8 +47,10 @@ from dspx.commands import stale as _stale  # noqa: E402
 from dspx.commands import roadmap as _roadmap  # noqa: E402
 from dspx.commands import retire_section as _retire_section  # noqa: E402
 from dspx.commands import retired as _retired  # noqa: E402
+from dspx.commands import self_update as _self_update  # noqa: E402
 from dspx.commands import setup as _setup  # noqa: E402
 from dspx.commands import show as _show  # noqa: E402
+from dspx.commands import template_cmd as _template_cmd  # noqa: E402
 from dspx.commands import skills_cmd as _skills  # noqa: E402
 from dspx.commands import status as _status  # noqa: E402
 from dspx.commands import upgrade as _upgrade  # noqa: E402
@@ -67,6 +69,7 @@ _register(_retired)
 _register(_setup)
 _register(_doctor)
 _register(_upgrade)
+_register(_self_update)
 _register(_version)
 _register(_render)
 _register(_stale)
@@ -86,3 +89,4 @@ _register(_ready)
 _register(_show)
 _register(_list_cmd)
 _register(_skills)
+_register(_template_cmd)

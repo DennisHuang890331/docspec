@@ -264,6 +264,8 @@ def run(argv: list[str]) -> int:
                         help="default hint for config.language (zh-TW or en); the deliverable language is ultimately decided in develop")
     parser.add_argument("--no-tex-hint", action="store_true",
                         help="turn off the typesetting-environment hint (suggests docspec doctor when tex.lock is missing/mismatched)")
+    parser.add_argument("--no-update-check", action="store_true",
+                        help="skip the non-blocking update check (git install: compares against GitHub HEAD with a ≤2s timeout, silent on any failure; directory install: offline snapshot reminder)")
     args = parser.parse_args(argv)
     lang = args.lang.strip()
 
@@ -344,7 +346,54 @@ def run(argv: list[str]) -> int:
         why = _tex_env_hint_reason()
         if why is not None:
             print(f"\nTypesetting-environment hint ({why}): run `docspec doctor` to check the export/PDF environment.")
+
+    # 非阻塞更新檢查（有界超時、失敗全靜默；絕不擋 init、絕不改離開碼）。
+    if not args.no_update_check:
+        _print_update_check()
     return 0
+
+
+def _github_head_sha(timeout: float = 2.0) -> str | None:
+    """GitHub 上 docspec repo 的 HEAD commit sha（≤2s 硬超時）。任何失敗由呼叫端吞掉。"""
+    import json
+    import urllib.request
+    from dspx import _install_source
+    api = f"https://api.github.com/repos/{_install_source.GIT_REPO}/commits/HEAD"
+    req = urllib.request.Request(
+        api, headers={"Accept": "application/vnd.github+json", "User-Agent": "docspec-init"})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = json.load(resp)
+    sha = data.get("sha")
+    return sha if isinstance(sha, str) and sha else None
+
+
+def _print_update_check() -> None:
+    """非阻塞更新提醒：git 裝比對 GitHub HEAD（落後印一行）；目錄裝離線印快照提醒。
+
+    ★鐵律：任何例外（無網/DNS/HTTP/429/schema 意外/direct_url 缺/超時）一律**靜默跳過**——
+    不印錯誤、不改離開碼、不阻塞 init。離線環境的 git 裝路徑＝完全無輸出（零煩擾）。
+    """
+    try:
+        from dspx import _install_source
+        src = _install_source.read_install_source()
+        if src is None:
+            return
+        if src["kind"] == "dir":
+            # 目錄安裝：**不連網**，直接印快照可能落後提醒＋更新指令。
+            print(f"\nUpdate: this is a local build snapshot ({src['path']}) and may lag the source. "
+                  f"To update: {_install_source.update_command(src)}")
+            return
+        if src["kind"] == "git":
+            head = _github_head_sha()
+            commit = src["commit"]
+            if not head:
+                return
+            same = head.startswith(commit) or commit.startswith(head)
+            if not same:
+                print(f"\nUpdate available: your git install ({commit[:12]}) is behind the latest on GitHub. "
+                      f"To update: {_install_source.update_command(src)}")
+    except Exception:  # noqa: BLE001 — 更新檢查永不擋 init、永不改離開碼
+        return
 
 
 def _tex_env_hint_reason() -> str | None:

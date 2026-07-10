@@ -52,6 +52,8 @@ _TABLE_STYLES = ("github", "booktabs")
 
 # 數值範圍旋鈕：鍵 → (min, max, 單位字串供錯誤訊息)。
 _PAGE_MARGIN_RANGE = (10.0, 40.0, "mm")
+# 首行縮排（em）：0＝明確關縮排；中文慣例 2em（≈2 字）。未設＝完全交 profile。
+_PAR_INDENT_RANGE = (0.0, 4.0, "em")
 _TABLE_SIZE_RANGE = (8.0, 14.0, "pt")     # 窄表內文字級（寬表＝此值-1；EM 欄寬同步縮放）
 # base_size 上限拉到 18：定版內文＝14.5pt（見 _BODY_SIZE_ANCHOR），
 # 過去上限 14 連預設都裝不下＝bug 之一。10–18 涵蓋常見投稿字級。
@@ -71,6 +73,9 @@ DEFAULT_FORMAT: dict[str, Any] = {
         "base_size": 14.5,        # 內文字級錨點（與 _BODY_SIZE_ANCHOR 一致＝交 Typst 模板 house 預設）
         "leading": 1.45,
     },
+    # par.first_line_indent：預設**不設**（＝完全交 profile 的 _indent，行為不變）。設 0–4 em
+    # 覆寫所有 profile 的首行縮排 amount（中文慣例 2em；0＝明確關縮排）；all:false 與段距 _parspace 不受影響。
+    "par": {},
     "table": {"style": "github", "zebra": True, "size": 12.0, "column_rules": True},
     "code": {"highlight": "tango"},
 }
@@ -80,6 +85,7 @@ _KNOWN_SECTIONS = frozenset(DEFAULT_FORMAT)
 _KNOWN_KEYS: dict[str, frozenset[str]] = {
     "page": frozenset({"preset", "margin"}),
     "font": frozenset({"base_size", "leading"}),
+    "par": frozenset({"first_line_indent"}),
     "table": frozenset({"style", "zebra", "size", "column_rules"}),
     "code": frozenset({"highlight"}),
 }
@@ -162,6 +168,13 @@ def validate_format_config(raw: Any, *, warn=None) -> dict:
     f["base_size"] = _check_number("font", "base_size", f["base_size"], *_BASE_SIZE_RANGE)
     f["leading"] = _check_number("font", "leading", f["leading"], *_LEADING_RANGE)
 
+    # ── par：first_line_indent（未設＝交 profile；設了驗 0–4 em）──
+    par = out.get("par") or {}
+    if "first_line_indent" in par:
+        par["first_line_indent"] = _check_number(
+            "par", "first_line_indent", par["first_line_indent"], *_PAR_INDENT_RANGE)
+    out["par"] = par
+
     # ── table ──
     t = out["table"]
     t["style"] = _check_enum("table", "style", t["style"], _TABLE_STYLES)
@@ -188,19 +201,24 @@ def pandoc_highlight_style(knobs: dict) -> str:
 
 # ── Typst 軌：已驗證旋鈕 → pandoc -V 模板變數（docspec-typst template 讀）─────────
 
-# Typst 軌目前由旋鈕控的子集（其餘＝模板統一預設）。house 字型已統一成思源宋體＋Source
-# Serif 4（見模板）；table 樣式/版心 → Typst 參數化是後續 follow-up。
-_TYPST_KNOB_FOLLOWUPS = ("table.style/zebra/size", "page margin/preset")
+# Typst 軌仍未映射的旋鈕（其餘＝模板統一預設）。house 字型已統一成思源宋體＋Source Serif 4
+# （見模板）；table 樣式/字級/斑馬紋 → Typst 參數化是**唯一**剩下的 follow-up（page margin/preset
+# 與 par.first_line_indent 已於本 change 接線、脫離此清單）。
+_TYPST_KNOB_FOLLOWUPS = ("table.style/zebra/size",)
 
 
 def compile_typst_vars(knobs: dict) -> list[str]:
     r"""把**已驗證**旋鈕編成 pandoc `-V` 變數，餵給 docspec-typst 模板。
 
-    目前映射 Typst 軌支援的子集：
+    映射 Typst 軌支援的子集：
       - font.base_size → `fontsize`（內文字級 pt；模板 `#set text(size:)`）。
       - font.leading   → `leading`（LaTeX linespread 1.1–1.6 近似成 typst `par(leading:)` em）。
-    code.highlight 走 pandoc CLI `--syntax-highlighting`（與 LaTeX 軌同，不在此）。
-    其餘旋鈕（見 _TYPST_KNOB_FOLLOWUPS）目前用模板統一預設、不由旋鈕控。
+      - page.margin / page.preset → `margin`（四邊等值覆寫模板 house 版心）：margin 直接發；
+        preset a4-normal→25mm、a4-wide→不發（house 幾何）、cas-native→不發＋一行警告（期刊雙欄
+        版心、Typst 單欄不適用）。
+      - par.first_line_indent（設了）→ `first-line-indent`（覆寫所有 profile 的首行縮排 amount）。
+    code.highlight 走 pandoc CLI `--syntax-highlighting`（不在此）。
+    其餘旋鈕（見 _TYPST_KNOB_FOLLOWUPS）仍用模板統一預設。
 
     ★Typst 軌 house body＝模板的 `$if(fontsize)$…$else$<TYPST 預設>$endif$` fallback（單欄 A4
     適中字級）：base_size 的**專案預設**＝LaTeX cas-sc 的 14.5pt 錨點（_BODY_SIZE_ANCHOR），那是
@@ -215,6 +233,25 @@ def compile_typst_vars(knobs: dict) -> list[str]:
     # base_size 仍是 LaTeX 錨點預設 → 交給 Typst 模板 house 預設（單欄 A4 不過大）；否則照旋鈕值發。
     if f["base_size"] != _BODY_SIZE_ANCHOR:
         out += ["-V", f"fontsize={f['base_size']:g}pt"]
+
+    # page.margin / page.preset → 四邊等值 margin（模板 $if(margin)$ 覆寫 house 版心）。
+    page = knobs.get("page") or {}
+    if "margin" in page:
+        out += ["-V", f"margin={page['margin']:g}mm"]
+    else:
+        preset = page.get("preset", "a4-wide")
+        if preset == "a4-normal":
+            out += ["-V", "margin=25mm"]
+        elif preset == "cas-native":
+            _warn_default(
+                "docspec: ⚠ page.preset 'cas-native' is a journal two-column trim and is not "
+                "mapped on the single-column Typst track — using the house page geometry.")
+        # a4-wide（預設）＝不發 → 模板 house 版心、行為不變。
+
+    # par.first_line_indent（設了）→ 覆寫所有 profile 的首行縮排 amount。
+    par = knobs.get("par") or {}
+    if "first_line_indent" in par:
+        out += ["-V", f"first-line-indent={par['first_line_indent']:g}em"]
     return out
 
 

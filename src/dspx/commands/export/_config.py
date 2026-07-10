@@ -10,11 +10,18 @@ from dspx import paths
 from dspx.config import DEFAULTS
 from dspx.format_config import FormatConfigError, validate_format_config
 
-# pandoc 輸入格式：標準 markdown 但關掉兩個擴充：
+# pandoc 輸入格式：標準 markdown 但關掉兩個擴充（兩軌共用單一常數）：
 #   -citations         : @token（MPE @import、@提及）不被當成引用文獻。
 #   -yaml_metadata_block: 文件中段的 --- ... --- 不被當 mid-doc YAML block（台中港風格
 #                          用 --- 當 section divider，夾在兩個 --- 間的散文被 pandoc
 #                          嘗試解析為 YAML 而失敗）；關掉後 --- 一律轉 thematic break。
+#
+# ★D7（issue #22）`+lists_without_preceding_blankline`＝**經實測否決、不採用**：design 宣稱它治
+#   兩個 false-positive，但對 docspec 受控 pandoc 實測結果**相反**——① 硬換行散文續行行首 `- ` 在
+#   現狀（不開擴充）本就正確保留為散文，開了擴充**反而**被切成 bullet list（引入 false-positive）；
+#   ② 行首 `2026. ` 自成段落時在開/不開擴充下**皆**被當有序清單（擴充治不了）。export 用的就是這顆
+#   受控 pandoc，故加此擴充只會製造 design 想防的 regression。保持現狀＝已正確處理 ①；② 需源端
+#   escape（design 列為 future 的 lint 兜底），非本常數所能解，不在此硬塞。實測見 commit 說明。
 _PANDOC_FROM = "markdown-citations-yaml_metadata_block"
 
 

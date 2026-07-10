@@ -21,7 +21,8 @@ from dspx import paths
 from dspx.commands import setup as setup_cmd
 
 NAME = "upgrade"
-HELP = "Align typesetting assets (TinyTeX/fonts/tlmgr packages) to the bundled expectations (idempotent; does not update program code)"
+HELP = ("(assets only — for the program itself: uv tool upgrade docspec / reinstall from git) "
+        "Align typesetting assets (typst/pandoc/fonts, optional TinyTeX) to the bundled expectations (idempotent)")
 
 _PROGRAM_UPDATE_HINT = (
     "Program code (the dspx wheel) is not updated by upgrade — use: "

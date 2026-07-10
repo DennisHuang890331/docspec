@@ -10,7 +10,7 @@ from pathlib import Path
 
 from ._assets import _copy_assets_into
 from ._config import _PANDOC_FROM
-from ._preprocess import _balance_table_columns, _fix_typst_math
+from ._preprocess import _balance_table_columns, _denumber_manual_headings, _fix_typst_math
 
 _H1_RE = re.compile(r"^#\s+(.+?)\s*$")
 
@@ -73,11 +73,13 @@ def _build_pdf_typst(pandoc: str, typst: str, typst_template: Path, fonts_src: P
             cwd=str(build), check=True,
         )
 
-        # pandoc 後處理：① 等分百分比欄寬 → auto（治表格擠爆＋硬斷字）；② 修數學符號錯位（sect→inter）。
+        # pandoc 後處理：① 等分百分比欄寬 → auto（治表格擠爆＋硬斷字）；② 修數學符號錯位（sect→inter）；
+        #   ③ 手寫編號標題去除模板自動編號（治 numbered profile 雙重編號；跳 code 區、原文不改）。
         doc_typ = build / "doc.typ"
         _src = doc_typ.read_text(encoding="utf-8")
-        doc_typ.write_text(_fix_typst_math(_balance_table_columns(_src)), encoding="utf-8",
-                           newline="\n")
+        doc_typ.write_text(
+            _denumber_manual_headings(_fix_typst_math(_balance_table_columns(_src))),
+            encoding="utf-8", newline="\n")
 
         # typst compile（受控字型夾、忽略系統字型＝確定性）。
         proc = subprocess.run(

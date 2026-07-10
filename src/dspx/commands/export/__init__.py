@@ -21,6 +21,7 @@ journal 軌/忠實度驗證/pack 完整性 gate/housekeeping）分在同夾的 `
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
@@ -73,6 +74,7 @@ from ._preprocess import (
     _TYPST_MATH_RE,
     _TYPST_MATH_SYMBOL_FIXES,
     _balance_table_columns,
+    _denumber_manual_headings,
     _fix_typst_math,
     _strip_raw_latex,
 )
@@ -90,6 +92,53 @@ _INSTALL_HINT = (
 _SETUP_HINT = (
     "Run `docspec setup` to install the controlled typst binary + OFL fonts (one-time, ~30 MB)."
 )
+
+
+# ── --template 內容物路由 / ejected 包 provenance ─────────────────
+
+def _route_by_template(d: Path) -> str | None:
+    """依 `--template <dir>` 內容物推斷引擎軌：template.typ→typst、template.tex→journal。
+
+    兩者皆有→需明確 --engine（報錯、回 None）；皆無/夾不存在→指名報缺（回 None）。
+    明確 --engine 由呼叫端優先處理、不進此函式。
+    """
+    if not d.is_dir():
+        sys.stderr.write(f"docspec: --template directory does not exist: {d}\n")
+        return None
+    has_typ = (d / "template.typ").is_file()
+    has_tex = (d / "template.tex").is_file()
+    if has_typ and has_tex:
+        sys.stderr.write(
+            f"docspec: --template {d} contains BOTH template.typ and template.tex — "
+            "pass --engine typst or --engine journal to choose the track.\n")
+        return None
+    if has_typ:
+        return "typst"
+    if has_tex:
+        return "journal"
+    sys.stderr.write(
+        f"docspec: --template {d} contains neither template.typ (Typst track) nor "
+        "template.tex (journal track) — nothing to route to.\n")
+    return None
+
+
+def _eject_provenance_notice(pack_dir: Path) -> str | None:
+    """ejected 包的 provenance 版本 ≠ 現行 dspx 版本 → 回一行落後提示（不擋）；無 provenance/相同→None。"""
+    prov = pack_dir / ".ejected-from.json"
+    if not prov.is_file():
+        return None
+    try:
+        data = json.loads(prov.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict):
+        return None
+    old = data.get("version")
+    from dspx import __version__
+    if old and str(old) != __version__:
+        return (f"docspec: ℹ template-pack was ejected from docspec {old}; current is {__version__} "
+                "— re-eject (`docspec template eject --force`) to pick up template fixes.")
+    return None
 
 
 # ── 主流程 ────────────────────────────────────────────────────────
@@ -114,8 +163,10 @@ def run(argv: list[str]) -> int:
     parser.add_argument("--latest", action="store_true",
                         help="export the working copy _latest (preview, not a final draft) instead of a frozen snapshot")
     parser.add_argument("--template", default=None, metavar="DIR",
-                        help="BYO journal template directory (for --engine journal): a directory containing template.tex "
-                             "(a pandoc LaTeX template honoring the slot contract). Selects journal track automatically.")
+                        help="BYO template pack directory, routed by CONTENT: a template.typ selects the Typst track "
+                             "(BYO replacement for the bundled pack, integrity gate skipped — see `docspec template eject`); "
+                             "a template.tex selects the journal track (pandoc LaTeX template honoring the slot contract); "
+                             "both present requires an explicit --engine. Overrides the project's export.template config.")
     parser.add_argument("--fonts", default=None, metavar="DIR",
                         help="a user font directory (e.g. a locally licensed real Kai font) to replace data_dir/fonts; "
                              "missing dir / missing required font files are rejected (no PDF produced)")
@@ -155,8 +206,25 @@ def run(argv: list[str]) -> int:
     if profile not in EXPORT_PROFILES:
         sys.stderr.write(f"docspec: unknown export profile '{profile}' — valid: {', '.join(EXPORT_PROFILES)}.\n")
         return 1
-    # render 引擎：--engine 旗標 >（--journal/--template 隱含 journal）> 專案 export.engine config > 預設 typst。
-    engine = args.engine or ("journal" if (args.journal or args.template) else None) or econf.get("engine") or "typst"
+    # 模板夾：--template 旗標 > 專案 export.template config（非空、相對專案根解析）。
+    template_dir: Path | None = None
+    if args.template:
+        template_dir = Path(args.template)
+    elif econf.get("template"):
+        template_dir = layout.project_root / str(econf["template"])
+    template_override = str(template_dir) if template_dir is not None else None
+
+    # render 引擎：--engine 旗標 > --journal 隱含 journal > 依模板夾內容物路由（template.typ→typst BYO、
+    #   template.tex→journal）> 專案 export.engine config > 預設 typst。明確 --engine 恆優先於內容推斷。
+    engine = args.engine
+    if engine is None and args.journal:
+        engine = "journal"
+    if engine is None and template_dir is not None:
+        engine = _route_by_template(template_dir)
+        if engine is None:
+            return 1   # 內容物路由失敗（不存在/兩者皆有需 --engine/皆無）已報錯。
+    if engine is None:
+        engine = econf.get("engine") or "typst"
 
     # latex 軌已退場（docspec-cas LPPL 包已移除）。
     if engine == "latex":
@@ -168,8 +236,9 @@ def run(argv: list[str]) -> int:
     if engine == "typst" and args.format_config:
         from dspx.format_config import _TYPST_KNOB_FOLLOWUPS
         sys.stderr.write(
-            "docspec: ⚠ Typst track applies the font-size / leading / code-highlight knobs; "
-            f"these are NOT yet mapped (house defaults used): {', '.join(_TYPST_KNOB_FOLLOWUPS)}.\n")
+            "docspec: ⚠ Typst track applies the font-size / leading / margin / first-line-indent / "
+            "code-highlight knobs; still NOT mapped (house defaults used): "
+            f"{', '.join(_TYPST_KNOB_FOLLOWUPS)}.\n")
 
     # 格式旋鈕：合成（專案 export.format ＋ --format-config 檔）並**驗證**。
     try:
@@ -194,7 +263,7 @@ def run(argv: list[str]) -> int:
 
     # ── journal 軌（BYO LaTeX、emit-only）：與兩條編譯軌分開，產 .tex、**不需字型**/不驗 fidelity ──
     if engine == "journal":
-        template = _resolve_journal_template(args.journal, args.template)
+        template = _resolve_journal_template(args.journal, template_override)
         if template is None:
             sys.stderr.write(
                 "docspec: journal template not found — use --journal {ieee,elsevier} or "
@@ -217,7 +286,7 @@ def run(argv: list[str]) -> int:
                 return 1
             extra_slots.update(data)
         # journal 軌產物落 per-journal 子夾（不與 latest PDF 混、雙 adapter 不互蓋）。
-        journal_id = args.journal or (Path(args.template).name if args.template else "journal")
+        journal_id = args.journal or (template_dir.name if template_dir is not None else "journal")
         out = layout.docs_journal_export(args.article, label, journal_id, "tex")
         from dspx.slots import SlotError
         try:
@@ -272,11 +341,25 @@ def run(argv: list[str]) -> int:
                     "docspec: typst not found — the Typst track needs it. Install the controlled typst "
                     "(`docspec setup --with-typst`), or point DOCSPEC_TYPST at a typst binary.\n")
                 return 1
-            typst_template = paths.bundled_typst_template_dir()
-            if typst_template is None or not (typst_template / "template.typ").is_file():
-                sys.stderr.write("docspec: bundled Typst template not found (assets/templates/docspec-typst/) — the install may be incomplete.\n")
-                return 1
-            if _check_pack_integrity(typst_template, is_bundled=True, allow=args.allow) != 0:
+            # BYO Typst 包（--template 或 config export.template 含 template.typ）＝合法替換、跳 hash 閘；
+            # 否則用 bundled docspec-typst 包（走 hash 閘）。
+            if template_dir is not None:
+                if not (template_dir / "template.typ").is_file():
+                    sys.stderr.write(
+                        f"docspec: --template {template_dir} has no template.typ (Typst track).\n")
+                    return 1
+                typst_template = template_dir
+                is_bundled = False
+                notice = _eject_provenance_notice(template_dir)
+                if notice is not None:
+                    print(notice)
+            else:
+                typst_template = paths.bundled_typst_template_dir()
+                is_bundled = True
+                if typst_template is None or not (typst_template / "template.typ").is_file():
+                    sys.stderr.write("docspec: bundled Typst template not found (assets/templates/docspec-typst/) — the install may be incomplete.\n")
+                    return 1
+            if _check_pack_integrity(typst_template, is_bundled=is_bundled, allow=args.allow) != 0:
                 return 1
             from dspx.format_config import compile_typst_vars
             from dspx.config import detect_language, region_for

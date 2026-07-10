@@ -47,7 +47,9 @@ $endif$
 #let _twocol = profile == "paper"
 #let _prose  = profile == "academic" or profile == "paper" or profile == "essay" or profile == "novel"
 // 首行縮排：novel 用 1.5em（≈書籍 0.3"／中文 2 字慣例，比 article 深）；其餘 prose 1em；block 不縮排。
-#let _indent = if profile == "novel" { 1.5em } else if _prose { 1em } else { 0pt }
+//   ★par.first_line_indent 旋鈕（設了）覆寫所有 profile 的 amount（含 default block 段落）；
+//     all:false 與段距 _parspace 不受影響（見 #set par）。未設＝交 profile（現狀、行為不變）。
+#let _indent = $if(first-line-indent)$$first-line-indent$$else$(if profile == "novel" { 1.5em } else if _prose { 1em } else { 0pt })$endif$
 #let _parspace = if _prose { _lead + 0.4em } else { 0.95em }
 // 標題編號：essay/novel 不編號（安靜/文學）；★2026-07-08（docspec-issues #09/#10）default 併入
 //   不編號陣營——docspec 專案慣例把 §編號直接寫進 concept.title（如「0 系統目標」「1.1 架構設計」），
@@ -72,9 +74,12 @@ $endif$
   align(center)[#v(0.4em) #line(start: (35%, 0%), end: (65%, 0%), stroke: 0.5pt + rgb("#888888")) #v(0.4em)]
 }
 
+// 版心：page.margin 旋鈕（或 preset a4-normal）給了就四邊等值覆寫 house 版心；未給＝house
+//   （_mx 側邊界＋上下 house 值，依 profile）。margin 旋鈕＝四邊等值（簡單可預期；要不對稱版心＝eject 改模板）。
+#let _pagemargin = $if(margin)$$margin$$else$(x: _mx, top: 2.6cm, bottom: 2.4cm)$endif$
 #set page(
   paper: "a4",
-  margin: (x: _mx, top: 2.6cm, bottom: 2.4cm),
+  margin: _pagemargin,
   numbering: "1",
   number-align: center,
   columns: if _twocol { 2 } else { 1 },   // paper＝雙欄；標題/摘要用 place(scope:parent) 跨欄
