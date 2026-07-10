@@ -217,7 +217,31 @@ def _depth(article: str, section: str) -> int:
     return len([p for p in section.split("/") if p]) - 1
 
 
-def _order_key(article: str, section: str, order_by_section: dict[str, float]):
+# ── outline 排序拓樸：引擎單一共用來源（render 正史；aperture document map／`docspec list`
+#    一律 import 這三個函式，勿另寫副本——副本已實證漂移：漏讀 group.yaml order、退回字典序）──
+
+def outline_order_by_section(layout: Layout, leaves: list[Leaf]) -> dict[str, float]:
+    """建構 section → order：leaf `concept.order` 為底、合併 concept-less 分組節點的
+    `group.yaml` `order`（缺則不入表＝排序時預設 0.0，既有行為）。`leaves` 通常為單一
+    article 的葉集合；跨 article 混傳亦安全（section 路徑含 article 前綴、不相撞）。"""
+    order_by_section = {
+        lf.section: lf.order for lf in leaves if lf.concept is not None
+    }
+    # 分組節點（無 concept）排序：讀其 group.yaml 的可選 order；缺則維持預設 0.0（既有行為）。
+    # 治「concept-less 分組節點固定 order=0.0 排到有序兄弟最前」（B8）。
+    for lf in leaves:
+        parts = [p for p in lf.section.split("/") if p]
+        for i in range(2, len(parts)):
+            gs = "/".join(parts[:i])
+            if gs in order_by_section:
+                continue   # 本身是 leaf（concept.order 優先）或已處理
+            go = _group_order(layout, gs)
+            if go is not None:
+                order_by_section[gs] = go
+    return order_by_section
+
+
+def outline_sort_key(section: str, order_by_section: dict[str, float]) -> list:
     """沿路徑逐層 (order, name) 當排序鍵，做 outline order 拓樸。"""
     parts = [p for p in section.split("/") if p]
     key = []
@@ -225,6 +249,23 @@ def _order_key(article: str, section: str, order_by_section: dict[str, float]):
         prefix = "/".join(parts[:i])
         key.append((order_by_section.get(prefix, 0.0), parts[i - 1]))
     return key
+
+
+def outline_group_nodes(leaves: list[Leaf]) -> list[str]:
+    """分組節點集合＝render 產 group marker 的同一套推導（path prefixes parts[:i]，
+    i in range(2, len(parts))、本身非 leaf 節）；跨 leaf 去重、保排序。"""
+    leaf_sections = {lf.section for lf in leaves}
+    out: list[str] = []
+    seen: set[str] = set()
+    for lf in leaves:
+        parts = [p for p in lf.section.split("/") if p]
+        for i in range(2, len(parts)):
+            gs = "/".join(parts[:i])
+            if gs in seen or gs in leaf_sections:
+                continue
+            seen.add(gs)
+            out.append(gs)
+    return out
 
 
 def parse_section_bodies(text: str) -> dict[str, str]:
@@ -281,21 +322,8 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     by_section = {lf.section: lf for lf in leaves}   # 全專案，供祖先 brief 查找
     dindex = decision_index(leaves)                  # 全專案決策索引，供 deps 指紋
     art_leaves = [lf for lf in leaves if lf.article == article]
-    order_by_section = {
-        lf.section: lf.order for lf in art_leaves if lf.concept is not None
-    }
-    # 分組節點（無 concept）排序：讀其 group.yaml 的可選 order；缺則維持預設 0.0（既有行為）。
-    # 治「concept-less 分組節點固定 order=0.0 排到有序兄弟最前」（B8）。
-    for lf in art_leaves:
-        parts = [p for p in lf.section.split("/") if p]
-        for i in range(2, len(parts)):
-            gs = "/".join(parts[:i])
-            if gs in order_by_section:
-                continue   # 本身是 leaf（concept.order 優先）或已處理
-            go = _group_order(layout, gs)
-            if go is not None:
-                order_by_section[gs] = go
-    art_leaves.sort(key=lambda lf: _order_key(article, lf.section, order_by_section))
+    order_by_section = outline_order_by_section(layout, art_leaves)
+    art_leaves.sort(key=lambda lf: outline_sort_key(lf.section, order_by_section))
 
     latest = layout.docs_latest(article)
     existing_bodies: dict[str, str] = {}

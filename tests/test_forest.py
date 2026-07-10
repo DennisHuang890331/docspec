@@ -342,6 +342,141 @@ def test_develop_forest_map_prints_anchors_and_catalogue_hint(make_project, writ
     assert "anchor:" not in out2 and "full concept catalogue" not in out2
 
 
+# ── projection-order-and-map-fixes：parallel 遞移判準／concept-less root／環旗標 ──
+
+
+def _grandparent_chain(make_project, write_leaf):
+    """t3 治於 t2、t2 治於 t1（爺孫鏈，無 t3→t1 直接邊）＋ 真無關文件 t4。"""
+    home = make_project()
+    write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1,
+                                    "status": "draft", "concept": "T1 主旨", "brief": {}})
+    write_leaf(home, "t2", concept={"id": "c-t2", "title": "T2", "order": 1,
+                                    "status": "draft", "concept": "T2 主旨",
+                                    "brief": {}, "governed-by": ["c-t1"]})
+    write_leaf(home, "t3", concept={"id": "c-t3", "title": "T3", "order": 1,
+                                    "status": "draft", "concept": "T3 主旨",
+                                    "brief": {}, "governed-by": ["c-t2"]})
+    write_leaf(home, "t4", concept={"id": "c-t4", "title": "T4", "order": 1,
+                                    "status": "draft", "concept": "T4 主旨", "brief": {}})
+    return home
+
+
+def test_parallel_is_transitive_grandparent_not_parallel(make_project, write_leaf):
+    """4.1：遞移判準——爺孫（t1 遞移可達 t3 的反向）不標平行；真無關文件（t4）仍平行；
+    hierarchy 仍只含直接 rollup 邊（rollup 定義不變）。"""
+    home = _grandparent_chain(make_project, write_leaf)
+    f = forest_view(_leaves(home))
+    assert ["t1", "t3"] not in f["parallel"]                      # 爺孫不平行（原判準誤標）
+    assert ["t1", "t4"] in f["parallel"] and ["t3", "t4"] in f["parallel"]
+    assert sorted((h["childDoc"], h["parentDoc"]) for h in f["hierarchy"]) == [
+        ("t2", "t1"), ("t3", "t2")]                               # 無 t3→t1 直接邊
+
+
+def test_conceptless_root_listed_with_group_title(make_project, write_leaf):
+    """4.2：root 未結晶但樹已有帶 concept 的 leaf → documents 條目不蒸發：conceptId=null、
+    oneLiner 取 group.yaml title、rootCrystallized=false；已結晶條目標 true；anchors 照舊
+    derive；該 article 參與 parallel——hierarchy 與 documents 不再自相矛盾。"""
+    home = make_project()
+    write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1,
+                                    "status": "draft", "concept": "T1 主旨", "brief": {}})
+    # 施工中樹：只有深處 leaf 有 concept（其 cid 經 governed-by 進 hierarchy）、root 未結晶
+    write_leaf(home, "wip/part", concept={"id": "c-wp", "title": "部件", "order": 1,
+                                          "status": "draft", "concept": "部件主旨",
+                                          "governed-by": ["c-t1"]})
+    (home / "corpus" / "wip" / "group.yaml").write_text("title: 施工中文件\n", encoding="utf-8")
+    f = forest_view(_leaves(home), Layout(home))
+    docs = {d["article"]: d for d in f["documents"]}
+    assert "wip" in docs                                          # 不蒸發
+    wip = docs["wip"]
+    assert wip["conceptId"] is None and wip["status"] is None
+    assert wip["oneLiner"] == "施工中文件"                        # group.yaml title（render 同機制）
+    assert wip["rootCrystallized"] is False
+    assert docs["t1"]["rootCrystallized"] is True                 # 既有條目 additive 標 true
+    # hierarchy 的 wip→t1 邊有 documents 條目對應（地圖不再自相矛盾）
+    assert any(h["childDoc"] == "wip" and h["parentDoc"] == "t1" for h in f["hierarchy"])
+    assert ["t1", "wip"] not in f["parallel"]                     # 有邊＝非平行（參與判準）
+
+
+def test_conceptless_root_slug_fallback_without_layout(make_project, write_leaf):
+    """4.2：無 group.yaml（或無 layout 可讀）→ oneLiner humanize slug fallback。"""
+    home = make_project()
+    write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1,
+                                    "status": "draft", "concept": "T1 主旨", "brief": {}})
+    write_leaf(home, "wip-doc/part", concept={"id": "c-wp", "title": "部件", "order": 1,
+                                              "status": "draft", "concept": "部件",
+                                              "governed-by": ["c-t1"]})
+    for f in (forest_view(_leaves(home), Layout(home)), forest_view(_leaves(home))):
+        wip = next(d for d in f["documents"] if d["article"] == "wip-doc")
+        assert wip["oneLiner"] == "Wip Doc" and wip["rootCrystallized"] is False
+
+
+def _mutual_governance(make_project, write_leaf):
+    """t1⇄t2 互治成環（check 會另外紅）＋ 無環邊 t3→t1。"""
+    home = make_project()
+    write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1,
+                                    "status": "draft", "concept": "T1 主旨",
+                                    "brief": {}, "governed-by": ["c-t2"]})
+    write_leaf(home, "t2", concept={"id": "c-t2", "title": "T2", "order": 1,
+                                    "status": "draft", "concept": "T2 主旨",
+                                    "brief": {}, "governed-by": ["c-t1"]})
+    write_leaf(home, "t3", concept={"id": "c-t3", "title": "T3", "order": 1,
+                                    "status": "draft", "concept": "T3 主旨",
+                                    "brief": {}, "governed-by": ["c-t1"]})
+    return home
+
+
+def test_cycle_edges_flagged_additively(make_project, write_leaf):
+    """4.3：互治成環兩邊皆帶 cycle: true；無環邊不加欄；旗標不改 check 行為（成環的硬紅燈
+    仍是 check 的、由它照舊報錯）。"""
+    home = _mutual_governance(make_project, write_leaf)
+    f = forest_view(_leaves(home))
+    by_edge = {(h["childDoc"], h["parentDoc"]): h for h in f["hierarchy"]}
+    assert by_edge[("t1", "t2")].get("cycle") is True
+    assert by_edge[("t2", "t1")].get("cycle") is True
+    assert "cycle" not in by_edge[("t3", "t1")]                   # 無環邊不加欄（省噪）
+    # 地圖只標不擋：check 的 governs 成環紅燈不因旗標改變（照舊 fail）
+    result = run_check(_leaves(home), load_schema(), Layout(home))
+    assert not result.ok
+
+
+def test_no_cycle_flag_on_acyclic_forest_and_check_green(make_project, write_leaf):
+    """4.3 對照：無環森林——任何邊都無 cycle 欄、check 不因本旗標多紅。"""
+    home = make_project()
+    full_brief = {"audience": "人", "depth": "gate", "breadth": "全", "forbidden": ["無"]}
+    write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1,
+                                    "status": "draft", "concept": "T1 主旨", "brief": full_brief})
+    write_leaf(home, "t2", concept={"id": "c-t2", "title": "T2", "order": 2,
+                                    "status": "draft", "concept": "T2 主旨",
+                                    "brief": full_brief, "governed-by": ["c-t1"]})
+    f = forest_view(_leaves(home))
+    assert all("cycle" not in h for h in f["hierarchy"])
+    assert run_check(_leaves(home), load_schema(), Layout(home)).ok
+
+
+def test_develop_forest_map_prints_uncrystallized_note_and_cycle_warning(
+        make_project, write_leaf, monkeypatch, capsys):
+    """4.4：Forest map 人讀輸出——未結晶 root 行帶 (root not yet crystallized)；
+    環上邊行帶成環警示（指出 check 會報錯）；正常條目不帶。"""
+    home = _mutual_governance(make_project, write_leaf)
+    # 加一棵施工中樹（root 未結晶）
+    write_leaf(home, "wip/part", concept={"id": "c-wp", "title": "部件", "order": 1,
+                                          "status": "draft", "concept": "部件主旨",
+                                          "governed-by": ["c-t3"]})
+    (home / "corpus" / "wip" / "group.yaml").write_text("title: 施工中文件\n", encoding="utf-8")
+    monkeypatch.chdir(home.parent)
+    from dspx.commands import instructions as instr
+    assert instr.run(["develop", "t3"]) == 0
+    out = capsys.readouterr().out
+    assert "[wip] 施工中文件  (root not yet crystallized)" in out
+    assert "  t1 → t2  ⚠ governs cycle — `docspec check` will fail" in out
+    assert "  t2 → t1  ⚠ governs cycle — `docspec check` will fail" in out
+    # 正常條目/無環邊不帶字樣
+    t3_line = next(ln for ln in out.splitlines() if ln.startswith("  [t3]"))
+    assert "not yet crystallized" not in t3_line
+    t3_edge = next(ln for ln in out.splitlines() if ln.startswith("  t3 → t1"))
+    assert "cycle" not in t3_edge
+
+
 # ── impact 零命中訊息（Decision 12 / 13d）─────────────────────────────────────
 
 

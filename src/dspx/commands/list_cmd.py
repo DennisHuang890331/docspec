@@ -18,23 +18,6 @@ def _article_of(section: str) -> str:
     return section.split("/", 1)[0]
 
 
-def _group_nodes(leaves: list) -> list[str]:
-    """分組節點集合＝render 產 group marker 的同一套推導（path prefixes parts[:i]，
-    i in range(2, len(parts))、本身非 leaf 節）；跨 leaf 去重、保排序。"""
-    leaf_sections = {lf.section for lf in leaves}
-    out: list[str] = []
-    seen: set[str] = set()
-    for lf in leaves:
-        parts = [p for p in lf.section.split("/") if p]
-        for i in range(2, len(parts)):
-            gs = "/".join(parts[:i])
-            if gs in seen or gs in leaf_sections:
-                continue
-            seen.add(gs)
-            out.append(gs)
-    return out
-
-
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec list", description=HELP)
     parser.add_argument("article", nargs="?", default=None, help="scope output to this article")
@@ -61,8 +44,15 @@ def run(argv: list[str]) -> int:
         leaves = [lf for lf in leaves if lf.article == args.article]
         dev_only = [s for s in dev_only if _article_of(s) == args.article]
 
-    from dspx.render import _group_order, _group_title
-    groups = _group_nodes(leaves)
+    from dspx.render import (_group_order, _group_title, outline_group_nodes,
+                             outline_order_by_section, outline_sort_key)
+    groups = outline_group_nodes(leaves)
+    # outline 排序鍵（共用來源，同 render/aperture）：leaf concept.order＋group.yaml order 合併。
+    # 一次建全表即可——section 路徑含 article 前綴、跨 article 不相撞（等價於每 article 建一次）。
+    order_by_section = outline_order_by_section(layout, leaves)
+
+    def _okey(section: str) -> tuple:
+        return (_article_of(section), outline_sort_key(section, order_by_section))
 
     if args.as_json:
         check_ok = run_check(all_leaves, schema, layout).ok
@@ -85,6 +75,8 @@ def run(argv: list[str]) -> int:
              "concept": None, "status": None, "kind": "group"}
             for gs in groups
         ]
+        # 列序＝outline 順序（同 text；leaf/develop-only/group interleave），欄位名值不變。
+        rows.sort(key=lambda r: _okey(r["section"]))
         print(json.dumps(rows, ensure_ascii=False, indent=2))
         return 0
 
@@ -92,12 +84,13 @@ def run(argv: list[str]) -> int:
         print("Corpus is empty. Use docspec new <section> to create the first section.")
         return 0
 
-    # 合併排序：依 article、再依 section 路徑；develop-only 標 (developing)；group 標 [group]。
+    # 合併排序：article 間維持字典序、article 內依共用 outline 排序器（同 render 交付物順序；
+    # develop-only 節無 concept order＝預設 0.0）；develop-only 標 (developing)；group 標 [group]。
     items = [(lf.article, lf.section, lf.title, "leaf") for lf in leaves]
     items += [(_article_of(sec), sec, sec.rsplit("/", 1)[-1], "develop-only") for sec in dev_only]
     items += [(_article_of(gs), gs, _group_title(layout, gs, gs.rsplit("/", 1)[-1]), "group")
               for gs in groups]
-    items.sort(key=lambda t: (t[0], t[1]))
+    items.sort(key=lambda t: _okey(t[1]))
 
     current_article = None
     for article, section, title, kind in items:

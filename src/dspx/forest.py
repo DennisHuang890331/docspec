@@ -1,10 +1,16 @@
 """森林地圖（derive，不另存）：把多棵樹的 root 文件＋跨樹 governed-by 關係攤成一張地圖。
 
 關係只活一處＝`concept.governed-by`（單向、子→父）。這裡的階層/平行/一句話**全 derive**：
-- documents：每個 root（section == article）的一句話＋狀態。
+- documents：每個 root（section == article）的一句話＋狀態；root 未結晶但樹已有帶 concept
+  的 leaf 的 article 也列入（`conceptId: null`、oneLiner 取 group.yaml title／humanize slug、
+  `rootCrystallized: false`）——否則施工中的樹從 documents 蒸發、其 leaf cid 卻在 hierarchy
+  露臉＝地圖自相矛盾。
 - hierarchy：doc-level rollup——childDoc 治於 parentDoc ⟺ childDoc 樹內某 concept 的
-  governed-by 指到 parentDoc 樹內某 concept。
-- parallel：任兩 root 之間「hierarchy 無邊（任一方向）」即同層平行。
+  governed-by 指到 parentDoc 樹內某 concept。位於 doc-level 環上的邊（parentDoc 遞移可
+  反向抵達 childDoc；含 A⇄B 互治與更長的環）帶 additive `cycle: true`——只標不擋，
+  governs 成環的硬紅燈仍是 `check` 的。
+- parallel：任兩文件在 hierarchy 遞移閉包下**任一方向皆不可達**才同層平行
+  （只排除直接邊會把爺孫文件誤標平行）。
 
 刪掉 governed-by → hierarchy 立刻消失（證明 derive 自它、無第二份）。只投 develop。
 """
@@ -13,10 +19,11 @@ from __future__ import annotations
 
 from itertools import combinations
 
+from dspx.layout import Layout
 from dspx.model import Leaf
 
 
-def forest_view(leaves: list[Leaf]) -> dict:
+def forest_view(leaves: list[Leaf], layout: Layout | None = None) -> dict:
     # concept.id → 擁有它的 leaf 的 article（rollup 用：governed-by 目標 → parentDoc）
     cid_to_article: dict[str, str] = {}
     # concept.id → (title, section)：anchors 投影用（下游作者接 governed-by 時可發現目標 id）
@@ -36,24 +43,44 @@ def forest_view(leaves: list[Leaf]) -> dict:
             for target in (lf.concept.get("governed-by") or []):
                 governed_targets.add(str(target))
 
-    # documents：每個 root（section == article）且有 concept
+    def _anchors(article: str, root_cid: object) -> list[dict]:
+        anchor_ids = {str(root_cid)} if root_cid else set()
+        anchor_ids |= {cid for cid in governed_targets
+                       if cid_to_article.get(cid) == article}
+        return sorted(
+            ({"id": cid, "title": cid_info[cid][0], "section": cid_info[cid][1]}
+             for cid in anchor_ids if cid in cid_info),
+            key=lambda a: a["section"])
+
+    # documents：(a) 已結晶 root（section == article 且有 concept）；
+    # (b) root 未結晶但樹已有帶 concept 的 leaf 的 article（施工中——不蒸發、明確標註）。
+    roots = {lf.article: lf for lf in leaves if lf.section == lf.article and lf.concept}
+    concept_articles = sorted({lf.article for lf in leaves if lf.concept})
     documents = []
-    for lf in leaves:
-        if lf.section == lf.article and lf.concept:
-            root_cid = lf.concept.get("id")
-            anchor_ids = {str(root_cid)} if root_cid else set()
-            anchor_ids |= {cid for cid in governed_targets
-                           if cid_to_article.get(cid) == lf.article}
-            anchors = sorted(
-                ({"id": cid, "title": cid_info[cid][0], "section": cid_info[cid][1]}
-                 for cid in anchor_ids if cid in cid_info),
-                key=lambda a: a["section"])
+    for article in concept_articles:
+        root = roots.get(article)
+        if root is not None:
             documents.append({
-                "article": lf.article,
-                "conceptId": lf.concept.get("id"),
-                "oneLiner": lf.concept.get("concept"),
-                "status": lf.concept.get("status"),
-                "anchors": anchors,
+                "article": article,
+                "conceptId": root.concept.get("id"),
+                "oneLiner": root.concept.get("concept"),
+                "status": root.concept.get("status"),
+                "anchors": _anchors(article, root.concept.get("id")),
+                "rootCrystallized": True,
+            })
+        else:
+            # oneLiner＝corpus/<article>/group.yaml 的 title（與 render 封面標題同機制）、
+            # 缺則 humanize slug；不偽造 concept。
+            from dspx.render import _group_title, _humanize_segment
+            one_liner = (_group_title(layout, article, article) if layout is not None
+                         else _humanize_segment(article))
+            documents.append({
+                "article": article,
+                "conceptId": None,
+                "oneLiner": one_liner,
+                "status": None,
+                "anchors": _anchors(article, None),
+                "rootCrystallized": False,
             })
 
     # hierarchy：doc-level rollup（childDoc, parentDoc）→ via:[(childCid, parentCid)…]
@@ -69,18 +96,40 @@ def forest_view(leaves: list[Leaf]) -> dict:
                 continue
             edges.setdefault((child_doc, parent_doc), []).append([child_cid, str(target)])
 
-    hierarchy = [
-        {"childDoc": cd, "parentDoc": pd, "via": sorted(via)}
-        for (cd, pd), via in sorted(edges.items())
-    ]
+    # 遞移閉包（child→parent 有向圖上的可達集）：parallel 判準＋環偵測共用。
+    # 節點＝documents 的 article 全集（root 文件數＝個位數~數十，DFS O(V·E) 可忽略）。
+    adj: dict[str, set[str]] = {}
+    for cd, pd in edges:
+        adj.setdefault(cd, set()).add(pd)
 
-    # parallel：任兩個 root article（去重）之間 hierarchy 無邊（任一方向）
-    root_articles = sorted({lf.article for lf in leaves if lf.section == lf.article and lf.concept})
-    edge_pairs = {(cd, pd) for (cd, pd) in edges}
+    def _reachable(start: str) -> set[str]:
+        seen: set[str] = set()
+        stack = list(adj.get(start, ()))
+        while stack:
+            node = stack.pop()
+            if node in seen:
+                continue
+            seen.add(node)
+            stack.extend(adj.get(node, ()))
+        return seen
+
+    reach = {article: _reachable(article) for article in concept_articles}
+
+    # 環上邊（parentDoc 遞移可反向抵達 childDoc）帶 additive cycle 旗標；無環邊不加欄（省噪）。
+    # 只標不擋：check 對 governs 成環的硬紅燈不變。
+    hierarchy = []
+    for (cd, pd), via in sorted(edges.items()):
+        edge: dict = {"childDoc": cd, "parentDoc": pd, "via": sorted(via)}
+        if cd in reach.get(pd, ()):
+            edge["cycle"] = True
+        hierarchy.append(edge)
+
+    # parallel：遞移閉包下任一方向皆不可達才同層平行（直接邊是閉包子集——
+    # 只排除直接邊會把爺孫文件誤標平行）；未結晶 root 的文件一併參與。
     parallel = [
         [a, b]
-        for a, b in combinations(root_articles, 2)
-        if (a, b) not in edge_pairs and (b, a) not in edge_pairs
+        for a, b in combinations(concept_articles, 2)
+        if b not in reach[a] and a not in reach[b]
     ]
 
     return {"documents": documents, "hierarchy": hierarchy, "parallel": parallel}

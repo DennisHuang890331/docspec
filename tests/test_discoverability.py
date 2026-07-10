@@ -261,6 +261,70 @@ def test_list_noarg_text_unchanged_on_groupless_corpus(make_project, write_leaf,
     assert capsys.readouterr().out == golden
 
 
+def _outline_order_corpus(home, write_leaf):
+    """projection-order-and-map-fixes 3.3 fixture：末節 order 與字典序相反（annex-b 字典序
+    最前、order=99 殿後；foreword order=0.5 最前）＋ annex 群 group.yaml order 殿後。"""
+    write_leaf(home, "demo/foreword", concept={"id": "c-fw", "title": "前言", "order": 0.5,
+                                               "concept": "開場"})
+    write_leaf(home, "demo/intro", concept={"id": "c-in", "title": "簡介", "order": 1,
+                                            "concept": "導入"})
+    write_leaf(home, "demo/annex-b/ground", concept={"id": "c-bg", "title": "地面", "order": 1,
+                                                     "concept": "附錄內容"})
+    (home / "corpus" / "demo" / "annex-b" / "group.yaml").write_text(
+        yaml.safe_dump({"title": "附錄B", "order": 99}, allow_unicode=True), encoding="utf-8")
+
+
+def test_list_text_follows_outline_order(make_project, write_leaf, monkeypatch, capsys):
+    """3.3：text 輸出依共用 outline 排序器（非字典序；group order 生效、group 列 interleave
+    進 outline 位置）；縮排／[group] 標記格式不變。"""
+    home = make_project()
+    _outline_order_corpus(home, write_leaf)
+    monkeypatch.chdir(home.parent)
+    assert list_cmd.run([]) == 0
+    out = capsys.readouterr().out
+    golden = ("\ndemo/\n"
+              "    demo/foreword — 前言\n"
+              "    demo/intro — 簡介\n"
+              "    [group] demo/annex-b/ — 附錄B\n"
+              "      demo/annex-b/ground — 地面\n")
+    assert out == golden          # 順序＝outline（字典序會是 annex-b 最前）；格式逐 byte 不變
+
+
+def test_list_json_follows_outline_order_fields_unchanged(make_project, write_leaf,
+                                                          monkeypatch, capsys):
+    """3.3：--json 列序同 text（leaf/group interleave 進 outline 順序）；欄位名值不變。"""
+    home = make_project()
+    _outline_order_corpus(home, write_leaf)
+    monkeypatch.chdir(home.parent)
+    assert list_cmd.run(["--json"]) == 0
+    rows = json.loads(capsys.readouterr().out)
+    assert [r["section"] for r in rows] == [
+        "demo/foreword", "demo/intro", "demo/annex-b", "demo/annex-b/ground"]
+    g = next(r for r in rows if r["kind"] == "group")
+    assert set(g) == {"section", "article", "title", "id", "order", "concept", "status", "kind"}
+    assert g["title"] == "附錄B" and g["order"] == 99.0 and g["id"] is None
+
+
+def test_list_develop_only_interleaves_at_default_order(make_project, write_leaf,
+                                                        monkeypatch, capsys):
+    """3.3：develop-only 節無 concept order → 預設 0.0 參與 outline 排序（interleave、不掉隊）；
+    article 之間維持字典序分組。"""
+    home = make_project()
+    _outline_order_corpus(home, write_leaf)
+    write_leaf(home, "aaa/x", concept={"id": "c-ax", "title": "X", "order": 1, "concept": "x"})
+    monkeypatch.chdir(home.parent)
+    new_cmd.run(["demo/fresh"])
+    capsys.readouterr()
+    assert list_cmd.run(["--json"]) == 0
+    rows = json.loads(capsys.readouterr().out)
+    secs = [r["section"] for r in rows]
+    # article 間字典序：aaa 在 demo 前；demo 內 develop-only（order 預設 0.0）排最前
+    assert secs == ["aaa/x", "demo/fresh", "demo/foreword", "demo/intro",
+                    "demo/annex-b", "demo/annex-b/ground"]
+    dev = next(r for r in rows if r["section"] == "demo/fresh")
+    assert dev["kind"] == "develop-only" and dev["status"] == "developing"
+
+
 # ── 5. status / check / lint scoping ────────────────────────────────────────
 
 def _two_article_project(home, write_leaf):

@@ -328,6 +328,76 @@ def test_document_map_is_structure_only_no_sibling_prose(make_project, write_lea
     assert "SIBLING_DECISION_STMT" not in blob           # 鄰節 decision 不洩
 
 
+def _ordered_group_corpus(home, write_leaf):
+    """projection-order-and-map-fixes 2.4 fixture：annex 群 order 殿後（group.yaml order=99）、
+    末節 order 與字典序相反（annex-b 字典序最前、outline 殿後；foreword 0.5 最前）。"""
+    write_leaf(home, "art/foreword", concept={"id": "c-fw", "title": "前言", "order": 0.5,
+                                              "concept": "開場"})
+    write_leaf(home, "art/intro", concept={"id": "c-in", "title": "簡介", "order": 1,
+                                           "concept": "導入"})
+    write_leaf(home, "art/annex-b/ground", concept={"id": "c-bg", "title": "地面", "order": 1,
+                                                    "concept": "附錄內容"})
+    (home / "corpus" / "art" / "annex-b").mkdir(parents=True, exist_ok=True)
+    (home / "corpus" / "art" / "annex-b" / "group.yaml").write_text(
+        "title: 附錄B\norder: 99\n", encoding="utf-8")
+
+
+def test_document_map_follows_shared_outline_order_with_groups(make_project, write_leaf,
+                                                               monkeypatch):
+    """2.4：documentMap 列序＝render 交付物順序（group.yaml order 生效、非字典序）；
+    group 列存在（kind=group、在地化 title、group order、無 role）；leaf 列 additive 補 kind。"""
+    home = make_project()
+    _ordered_group_corpus(home, write_leaf)
+    proj = _project(home, "draft", "art/intro")
+    secs = [n["section"] for n in proj.document_map]
+    # 字典序會是 annex-b 最前；outline 順序＝foreword(0.5) < intro(1) < 附錄B群(99)
+    assert secs == ["art/foreword", "art/intro", "art/annex-b", "art/annex-b/ground"]
+    by_sec = {n["section"]: n for n in proj.document_map}
+    g = by_sec["art/annex-b"]
+    assert g["kind"] == "group" and g["title"] == "附錄B" and g["order"] == 99.0
+    assert g["role"] is None
+    assert set(g) == {"section", "title", "order", "role", "kind"}   # structure-only、無散文欄
+    assert by_sec["art/intro"]["kind"] == "leaf"
+
+    # documentMap 列序＝render 交付物章節順序（同一共用排序器）
+    from dspx.commands import render as render_cmd
+    monkeypatch.chdir(home.parent)
+    assert render_cmd.run(["art"]) == 0
+    text = (home.parent / "docs" / "art" / "_latest.md").read_text(encoding="utf-8")
+    assert (text.index("## 前言") < text.index("## 簡介")
+            < text.index("## 附錄B") < text.index("### 地面"))
+
+
+def test_document_map_groupless_project_unchanged_except_kind(make_project, write_leaf):
+    """2.4：無 group.yaml 專案的 documentMap 除 additive `kind` 外不變（列序、既有欄位）。"""
+    home = make_project()
+    write_leaf(home, "art", concept={"id": "r", "title": "Root", "order": 0, "concept": "總覽",
+                                     "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
+    write_leaf(home, "art/beta", concept={"id": "b", "title": "Beta", "order": 2, "concept": "界定 B"})
+    write_leaf(home, "art/alpha", concept={"id": "a", "title": "Alpha", "order": 1, "concept": "界定 A"})
+    proj = _project(home, "draft", "art/alpha")
+    assert [n["section"] for n in proj.document_map] == ["art", "art/alpha", "art/beta"]
+    for n in proj.document_map:
+        assert set(n) == {"section", "title", "order", "role", "kind"}
+        assert n["kind"] == "leaf"
+
+
+def test_instructions_draft_prints_group_row_without_you_are_here(make_project, write_leaf,
+                                                                  monkeypatch, capsys):
+    """2.3：document map 人讀輸出把 group 列印成可辨分組行；group 行不印 "◀ you are here"。"""
+    home = make_project()
+    _ordered_group_corpus(home, write_leaf)
+    monkeypatch.chdir(home.parent)
+    from dspx.commands import instructions as instr
+    assert instr.run(["draft", "art/annex-b/ground"]) == 0
+    out = capsys.readouterr().out
+    group_line = next(ln for ln in out.splitlines() if "[group]" in ln)
+    assert "art/annex-b/" in group_line and "附錄B" in group_line
+    assert "you are here" not in group_line
+    here_line = next(ln for ln in out.splitlines() if "◀ you are here" in ln)
+    assert "art/annex-b/ground" in here_line
+
+
 def test_document_map_only_for_draft(make_project, write_leaf):
     home = make_project()
     write_leaf(home, "art", concept={"id": "r", "title": "R", "order": 0, "concept": "總覽",

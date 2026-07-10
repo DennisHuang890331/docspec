@@ -176,25 +176,26 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
                              for p in docs_asset_files(layout, leaf.article)]
 
     # ── 整篇章節骨架（draft：structure-visible / prose-blind）──
-    # 投本文件每節的 section/title/order/role（concept 一句話），依 outline 順序；
+    # 投本文件每節的 section/title/order/role（concept 一句話）＋分組節點列（group.yaml
+    # title/order、無 role），依共用 outline 排序器（同 render 交付物順序，含 group order 合併）；
     # 只含結構，絕不含 sibling 的散文/decisions/material——draft 用它寫「角色開場」、不指名鄰節。
     if skill in _DOCUMENT_MAP_SKILLS:
+        from dspx.render import (_group_order, _group_title, outline_group_nodes,
+                                 outline_order_by_section, outline_sort_key)
         article = leaf.article
-        art_leaves = [lf for lf in leaves
-                      if lf.article == article and lf.concept is not None]
-        order_by_section = {lf.section: lf.order for lf in art_leaves}
-
-        def _okey(sec: str) -> list:
-            parts = [p for p in sec.split("/") if p]
-            return [(order_by_section.get("/".join(parts[:i]), 0.0), parts[i - 1])
-                    for i in range(1, len(parts) + 1)]
-
-        art_leaves.sort(key=lambda lf: _okey(lf.section))
-        proj.document_map = [
+        art_leaves = [lf for lf in leaves if lf.article == article]
+        order_by_section = outline_order_by_section(layout, art_leaves)
+        rows = [
             {"section": lf.section, "title": lf.title, "order": lf.order,
-             "role": (lf.concept.get("concept") or "")}
-            for lf in art_leaves
+             "role": (lf.concept.get("concept") or ""), "kind": "leaf"}
+            for lf in art_leaves if lf.concept is not None
+        ] + [
+            {"section": gs, "title": _group_title(layout, gs, gs.rsplit("/", 1)[-1]),
+             "order": _group_order(layout, gs), "role": None, "kind": "group"}
+            for gs in outline_group_nodes(art_leaves)
         ]
+        rows.sort(key=lambda r: outline_sort_key(r["section"], order_by_section))
+        proj.document_map = rows
 
     # ── 寫作守則（專案級、一份；draft/edit 注入，連貫靠它）──
     if skill in _GUIDE_SKILLS and layout.writing_guide.is_file():
@@ -284,7 +285,7 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
 
     # ── 森林地圖（derive；只投 develop——確認本文件在森林位置/被誰治理/跟誰平行）──
     if skill == "develop":
-        proj.forest = forest_view(leaves)
+        proj.forest = forest_view(leaves, layout)
         # ── 待辦 backlog（derive；只投 develop——開工先看計劃了還沒做的工作）──
         # reuse build_backlog_view（已掉 done/dropped、算 blocked/unblocked、按文件分組），
         # 只取「本文件 target」桶 ＋ forest 桶；其餘文件的 backlog 不投（aperture 紀律）。

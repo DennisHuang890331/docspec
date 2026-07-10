@@ -272,6 +272,49 @@ def test_group_node_without_order_keeps_default(make_project, write_leaf, monkey
     assert text.index("## 方法") < text.index("## 簡介")
 
 
+def test_render_output_locked_byte_for_byte(make_project, write_leaf, monkeypatch):
+    """projection-order-and-map-fixes 1.1 回歸鎖：抽共用 outline 排序器前先鎖住 render 輸出。
+
+    golden＝抽取**前**（d700c68）對本 fixture（group.yaml order＋concept.order＋非字典序末節
+    ＋兩節散文）實跑的 `_latest.md` 全文與各節指紋——重構後 MUST 逐 byte 相同（行為不變）。"""
+    from dspx.layout import Layout
+    from dspx.render import read_ledger
+    home = make_project()
+    write_leaf(home, "g/foreword", concept={"id": "c-fw", "title": "前言", "order": 0.5})
+    write_leaf(home, "g/intro", concept={"id": "c-in", "title": "簡介", "order": 1})
+    write_leaf(home, "g/methods/analysis", concept={"id": "c-ma", "title": "分析", "order": 2})
+    write_leaf(home, "g/methods/survey", concept={"id": "c-ms", "title": "調查", "order": 1})
+    write_leaf(home, "g/annex-b", concept={"id": "c-ab", "title": "附錄B", "order": 99})
+    (home / "corpus" / "g" / "methods" / "group.yaml").write_text(
+        "title: 方法\norder: 3.0\n", encoding="utf-8")
+    monkeypatch.chdir(home.parent)
+    assert render_cmd.run(["g"]) == 0
+    latest = _latest(home)
+    text = latest.read_text(encoding="utf-8")
+    text = text.replace("### 調查\n", "### 調查\n\n調查散文內容。\n")
+    text = text.replace("## 前言\n", "## 前言\n\n前言散文內容。\n")
+    latest.write_text(text, encoding="utf-8")
+    assert render_cmd.run(["g"]) == 0
+
+    golden = (
+        "---\narticle: g\nversion: 0.0.0\n---\n# G\n\n"
+        "<!-- dspx:section g/foreword -->\n## 前言\n\n前言散文內容。\n\n"
+        "<!-- dspx:section g/intro -->\n## 簡介\n\n\n"
+        "<!-- dspx:group g/methods -->\n## 方法\n\n"
+        "<!-- dspx:section g/methods/survey -->\n### 調查\n\n調查散文內容。\n\n"
+        "<!-- dspx:section g/methods/analysis -->\n### 分析\n\n\n"
+        "<!-- dspx:section g/annex-b -->\n## 附錄B\n\n"
+    )
+    assert latest.read_text(encoding="utf-8") == golden          # 全文逐 byte
+    golden_ledger = {
+        "g/foreword": {"own": "37c6c80a45b30a04", "anc": "e3b0c44298fc1c14", "deps": "",
+                       "style": "96a296d224f285c6", "prose": "70bd4b9c2c6996e3"},
+        "g/methods/survey": {"own": "9c1efe93a99fb846", "anc": "e3b0c44298fc1c14", "deps": "",
+                             "style": "96a296d224f285c6", "prose": "3caa63c3965f8115"},
+    }
+    assert read_ledger(Layout(home), "g") == golden_ledger       # 各節指紋逐 byte
+
+
 def test_heading_level_clamped_to_max(make_project, write_leaf, monkeypatch):
     """③ 過深章節樹：render clamp 至 H5（四級），絕不吐字面 #######。"""
     home = make_project()

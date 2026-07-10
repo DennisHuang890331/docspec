@@ -142,11 +142,13 @@ def run(argv: list[str]) -> int:
         print("── Forest map (this document's place in the forest / who governs it / who it parallels; set governed-by against this) ──")
         print("   (backstage — wire structure with these, but NEVER write forest/governed-by/Tier-N/L2a/fan-in into the deliverable; name the document in domain language)")
         for d in f.get("documents", []):
-            print(f"  [{d['article']}] {d.get('oneLiner') or ''}")
+            note = "" if d.get("rootCrystallized", True) else "  (root not yet crystallized)"
+            print(f"  [{d['article']}] {d.get('oneLiner') or ''}{note}")
             for a in d.get("anchors", []):
                 print(f"    anchor: {a['id']} — {a.get('title') or ''}  ({a['section']})")
         for h in f.get("hierarchy", []):
-            print(f"  {h['childDoc']} → {h['parentDoc']}")
+            warn = "  ⚠ governs cycle — `docspec check` will fail" if h.get("cycle") else ""
+            print(f"  {h['childDoc']} → {h['parentDoc']}{warn}")
         for pair in f.get("parallel", []):
             print(f"  {pair[0]} ∥ {pair[1]}")
         print("  (full concept catalogue of a document: docspec list <article> --json)")
@@ -189,6 +191,11 @@ def run(argv: list[str]) -> int:
     if proj.document_map:
         print("── Document map (the whole article's sections in order — frame THIS section's role in the whole; do NOT read/name siblings' prose) ──")
         for n in proj.document_map:
+            if n.get("kind") == "group":
+                # 分組節點：印 group.yaml 標題（同 render 交付物的章標題）、無 role、
+                # 不印 "◀ you are here"（group 不可能是本節）。
+                print(f"  [{n.get('order')}] {n.get('section')}/  —  [group] {n.get('title') or ''}")
+                continue
             marker = " ◀ you are here" if n.get("section") == proj.section else ""
             print(f"  [{n.get('order')}] {n.get('section')}  —  {n.get('role') or ''}{marker}")
         print()
