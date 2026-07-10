@@ -83,7 +83,12 @@ def _leaf_row(layout: Layout, leaf: Leaf, schema: Schema, check_ok: bool,
         anc_now = ancestor_brief_fingerprint(leaf.section, by_section)
         deps_now = deps_fingerprint(leaf, dindex)
         style_now = style_fingerprint(layout)
-        if rec_own != own_now:
+        if isinstance(recorded, dict) and recorded.get("redraft"):
+            # 標髒旗標（docspec stale / redraft）：在 own 比對**前**投影成 stale-own——
+            # draft 的 pickup 集合（stale-own）零改動接手；散文真重寫（render 重算）或
+            # render --ack-own 才清旗標。舊帳本無此鍵＝行為不變（零遷移）。
+            sync = "stale-own"
+        elif rec_own != own_now:
             sync = "stale-own"          # 自己的源改了 → draft 重渲染
         elif rec_deps is not None and rec_deps != deps_now:
             sync = "stale-upstream"     # realizes 的共享真相改了 → draft 重渲染

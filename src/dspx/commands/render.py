@@ -56,11 +56,31 @@ def run(argv: list[str]) -> int:
              "glossary) and re-stamp its ancestor + style fingerprints; refused if the section is "
              "actually stale-own/upstream (rewrite its prose instead). Repeatable.")
     parser.add_argument(
+        "--ack-own", action="append", default=[], metavar="SECTION", dest="ack_own",
+        help="acknowledge a stale-own / stale-upstream SECTION whose prose legitimately needs no "
+             "change (the source change was structural wiring / metadata only — e.g. a sources: "
+             "path move, a realizes/governed-by re-wire, an order or title renumbering) and "
+             "re-stamp its own + deps fingerprints to current; anc/style are kept, so a masked "
+             "stale-inherited/stale-style surfaces. Requires --reason. Repeatable; composable "
+             "with --ack.")
+    parser.add_argument(
+        "--reason", default=None, metavar="TEXT",
+        help="why this verdict is legitimate — recorded in the article's append-only verdicts "
+             "journal (docspec/.ledger/<article>.verdicts.yaml). Mandatory with --ack-own; "
+             "optional with --ack.")
+    parser.add_argument(
         "--rebaseline", action="store_true",
         help="explicit rebuild: I know the deliverable file is gone (or the ledger is corrupt) — "
              "regenerate the skeleton and reset the fingerprint baseline. Without this flag, "
              "render refuses to overwrite the ledger in those states.")
     args = parser.parse_args(argv)
+
+    # --ack-own 強制 --reason（裁決入 journal；改變 own/deps 裁決＝事後最需考古的一類）。
+    if args.ack_own and not args.reason:
+        sys.stderr.write(
+            "docspec: --ack-own requires --reason <text> — you are attesting the prose still "
+            "implements CHANGED source material; the verdict is journaled, say why.\n")
+        return 2
 
     try:
         layout, config = bootstrap()
@@ -92,7 +112,8 @@ def run(argv: list[str]) -> int:
             "the baseline.\n")
         return 1
 
-    result = render_article(layout, leaves, args.article, ack_sections=set(args.ack))
+    result = render_article(layout, leaves, args.article, ack_sections=set(args.ack),
+                            ack_own_sections=set(args.ack_own), reason=args.reason or "")
     total = len(result["sections"])
     print(f"synced \"{args.article}\" skeleton -> {result['written_path']}")
     print(f"  {total} section(s), of which {result['drafted']} have prose and "
@@ -103,6 +124,18 @@ def run(argv: list[str]) -> int:
         # 是否仍與上游一致＝語義、staleness 照不到（revision-coherence-probes）。導向覆檢、非 gate。
         print("  ↳ also re-check these sections' own brief / concept framing / figures are still "
               "consistent with the moved ancestor (the ledger can't see that — factcheck owns it).")
+    if result.get("ack_owned"):
+        print(f"  ack-own (own/deps re-stamped over a CHANGED source; anc/style kept): "
+              f"{', '.join(result['ack_owned'])}")
+        # 加重版責任註記：--ack 證言「散文與沒動的內容仍對齊」；--ack-own 證言「散文仍實現
+        # **已變更**的源料」——語義風險高一級，導向 factcheck 覆檢（非阻塞、永不 gate）。
+        print("  ↳ you are ATTESTING these sections' prose still implements the CHANGED source "
+              "material — a stronger claim than --ack, and the ledger cannot verify it. Run a "
+              "factcheck review over them (non-blocking, but expected).")
+    if result.get("ack_own_skipped"):
+        sys.stderr.write(
+            "docspec: ⚠ --ack-own skipped for (no ledger entry — an unwritten section is draft's "
+            f"work, there is nothing to acknowledge): {', '.join(result['ack_own_skipped'])}\n")
     if result.get("ack_refused"):
         sys.stderr.write(
             "docspec: ⚠ --ack refused for (these are stale-own/upstream — rewrite the prose, "

@@ -40,8 +40,10 @@ from dspx.commands import proof as _proof  # noqa: E402
 from dspx.commands import reference as _reference  # noqa: E402
 from dspx.commands import publish as _publish  # noqa: E402
 from dspx.commands import ready as _ready  # noqa: E402
+from dspx.commands import redraft as _redraft  # noqa: E402
 from dspx.commands import render as _render  # noqa: E402
 from dspx.commands import retire as _retire  # noqa: E402
+from dspx.commands import stale as _stale  # noqa: E402
 from dspx.commands import roadmap as _roadmap  # noqa: E402
 from dspx.commands import retire_section as _retire_section  # noqa: E402
 from dspx.commands import retired as _retired  # noqa: E402
@@ -67,6 +69,8 @@ _register(_doctor)
 _register(_upgrade)
 _register(_version)
 _register(_render)
+_register(_stale)
+_register(_redraft)
 _register(_export)
 _register(_proof)
 _register(_measure_fonts)

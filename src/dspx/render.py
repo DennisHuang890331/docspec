@@ -16,7 +16,7 @@ import re
 import yaml
 
 from dspx.frontmatter import FrontmatterError, parse_frontmatter, render_frontmatter
-from dspx.layout import Layout
+from dspx.layout import LEDGER_DIR_NAME, Layout
 from dspx.model import (
     Leaf,
     ancestor_brief_fingerprint,
@@ -94,6 +94,45 @@ def read_ledger_groups(layout: Layout, article: str) -> str | None:
         groups = data.get("groups") if isinstance(data, dict) else None
         return str(groups) if isinstance(groups, str) else None
     return None
+
+
+def verdicts_path(layout: Layout, article: str):
+    """verdicts journal 的家：`docspec/.ledger/<article>.verdicts.yaml`（機器簿記、不進 docs/）。"""
+    return layout.planning_home / LEDGER_DIR_NAME / f"{article}.verdicts.yaml"
+
+
+def verdict_entry(verb: str, section: str, reason: str,
+                  own_before: str | None, own_after: str | None,
+                  prose: str | None) -> dict:
+    """一筆 verdicts journal 記錄——四動詞（ack/ack-own/stale/redraft）schema 均一、可按節 grep。
+
+    `own_before`/`own_after`＝裁決前後帳本的 `own` 值（stale/redraft 不動指紋＝兩者相同）；
+    `prose`＝該節當下散文指紋。`when`＝ISO 8601（含時區）。"""
+    import datetime
+    return {
+        "when": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "verb": verb,
+        "section": section,
+        "reason": reason or "",
+        "own_before": own_before,
+        "own_after": own_after,
+        "prose": prose,
+    }
+
+
+def append_verdicts(layout: Layout, article: str, entries: list[dict]) -> None:
+    """append-only verdicts journal：對 `docspec/.ledger/<article>.verdicts.yaml` 追加記錄。
+
+    每筆＝一個 YAML list item（整檔恆為合法 YAML list）。**只 append**——任何指令不得重寫/
+    重排/重生此檔（sections 帳本每輪 render 整檔重生，正因如此 reason 住這裡不住那裡）；
+    引擎也永不讀它當輸入（純留痕簿記、供人/agent 考古）。空 entries＝不建檔、不動檔。"""
+    if not entries:
+        return
+    path = verdicts_path(layout, article)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as fh:
+        for e in entries:
+            fh.write(yaml.safe_dump([e], allow_unicode=True, sort_keys=False))
 
 
 def groups_fingerprint(layout: Layout, article: str) -> str:
@@ -268,16 +307,25 @@ def outline_group_nodes(leaves: list[Leaf]) -> list[str]:
     return out
 
 
-def parse_section_bodies(text: str) -> dict[str, str]:
-    """從現有 _latest.md 解析每節已寫散文（去掉 marker 與其後第一行標題）。"""
+def parse_section_bodies(text: str, on_discard=None) -> dict[str, str]:
+    """從現有 _latest.md 解析每節已寫散文（去掉 marker 與其後第一行標題）。
+
+    〔#02〕`on_discard` 選配回呼：本函式對「無主內容」——首個 marker 前的 preamble、
+    group marker 後的區塊（分組節點無散文槽）——一律丟棄；傳入回呼即逐塊回報
+    `(位置, 原始內容)`（位置＝`"preamble"` 或該 group section id），由呼叫端決定要不要警告。
+    預設 `None`＝既有呼叫端（detect_drift／lint／check）行為位元零變化。"""
     _, body = parse_frontmatter(text)
     lines = body.split("\n")
     bodies: dict[str, str] = {}
     current: str | None = None
+    discard_loc = "preamble"    # current=None 時 buf 的歸屬位置（preamble 或 group section id）
     buf: list[str] = []
 
     def flush():
         if current is None:
+            # 無主內容：照舊丟棄；有回呼才回報（#02，render 據此吐 WARN）。
+            if on_discard is not None and buf:
+                on_discard(discard_loc, "\n".join(buf))
             return
         block = buf[:]
         # 去掉前導空行 + 一行 markdown 標題（render 會重生標題）
@@ -294,20 +342,24 @@ def parse_section_bodies(text: str) -> dict[str, str]:
             current = m.group(1)
             buf = []
             continue
-        if GROUP_MARKER_RE.match(line):
+        gm = GROUP_MARKER_RE.match(line)
+        if gm:
             # 分組標記：切斷前一節，隨後的分組標題行歸 current=None（忽略、不算任何節的散文）
             flush()
             current = None
+            discard_loc = gm.group(1)
             buf = []
             continue
-        if current is not None:
-            buf.append(line)
+        # 無主行（preamble／group 後）也入 buf——owned 節行為不變，無主塊靠 flush 回報（#02）
+        buf.append(line)
     flush()
     return bodies
 
 
 def render_article(layout: Layout, leaves: list[Leaf], article: str,
-                   ack_sections: set[str] | None = None) -> dict:
+                   ack_sections: set[str] | None = None,
+                   ack_own_sections: set[str] | None = None,
+                   reason: str = "") -> dict:
     """同步 docs/<article>/_latest.md 骨架；保留已寫散文；回報統計。
 
     `ack_sections`（F5）：作者確認這些節已對齊上游（散文依設計合理不需改）→ 重蓋其
@@ -316,9 +368,19 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     「祖先 brief／寫作 doctrine 動了但本節散文合理不需改（已符新風格／術語）」這一類，不能拿來吞掉
     真正的 re-draft 需求。
 
-    回傳 {sections, drafted, written_path, acked, ack_refused}。
+    `ack_own_sections`：內容軸（own/deps）的 acknowledge——源料變了但散文依設計合理不需改
+    （結構接線／元資料類變更）→ 只把該節 `own`＋`deps` 蓋至現值，`anc`／`style` 沿用舊帳本值
+    （被 stale-own 遮蔽的 stale-inherited/stale-style 自然浮出），並清掉 `redraft` 旗標。
+    與 `ack_sections` 正交可組合（同節雙旗標＝全四軸蓋現值；ack 守門在 ack-own 先蓋後自然通過）。
+    無帳本記錄（未撰寫）→ 跳過並回報於 `ack_own_skipped`。
+
+    `reason`：本輪裁決理由——執行成功的 ack/ack-own 一律寫入 append-only verdicts journal
+    （`--ack` 的 reason 選配可空；強制性由指令層把關）。被拒絕/跳過的裁決不留 journal。
+
+    回傳 {sections, drafted, written_path, acked, ack_refused, ack_owned, ack_own_skipped}。
     """
     ack_sections = ack_sections or set()
+    ack_own_sections = ack_own_sections or set()
     by_section = {lf.section: lf for lf in leaves}   # 全專案，供祖先 brief 查找
     dindex = decision_index(leaves)                  # 全專案決策索引，供 deps 指紋
     art_leaves = [lf for lf in leaves if lf.article == article]
@@ -327,8 +389,11 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
 
     latest = layout.docs_latest(article)
     existing_bodies: dict[str, str] = {}
+    discarded: list[tuple[str, str]] = []   # 〔#02〕無主散文塊 (位置, 原始內容)——寫檔時吐 WARN
     if latest.is_file():
-        existing_bodies = parse_section_bodies(latest.read_text(encoding="utf-8"))
+        existing_bodies = parse_section_bodies(
+            latest.read_text(encoding="utf-8"),
+            on_discard=lambda loc, block: discarded.append((loc, block)))
     # 上次帳本：F2——指紋綁「散文上次基於什麼源料寫」。散文未重寫時沿用舊源指紋，
     # 不被「現在源料」抹掉 stale-own/stale-upstream 信號（sidecar 優先、舊 frontmatter fallback）。
     prior_ledger = read_ledger(layout, article)
@@ -346,6 +411,8 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     drafted = 0
     acked: list[str] = []
     ack_refused: list[str] = []
+    ack_owned: list[str] = []
+    verdicts: list[dict] = []     # 本輪執行成功的裁決（ack/ack-own）→ 寫檔後 append 進 journal
     emitted_groups: set[str] = set()
     prose_bodies: list[str] = []   # 非空節散文（CJK 封面提示的語言偵測用）
     for lf in art_leaves:
@@ -395,24 +462,56 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
                     # 散文未重寫：own/anc/deps/style 全沿用舊值＝保住既有 stale 信號（含 stale-style）。
                     # 例外＝舊帳本沒有 style 欄（本軸上線前寫的）：以現值補基準（遷移用，視既有內容為
                     # 「當前 doctrine 已對齊」，往後 doctrine 變更才會把它標 stale-style）。
-                    return {"own": prev.get("own"), "anc": prev.get("anc"),
-                            "deps": prev.get("deps"),
-                            "style": prev.get("style") or style_now,
-                            "prose": prose_now}
+                    rec = {"own": prev.get("own"), "anc": prev.get("anc"),
+                           "deps": prev.get("deps"),
+                           "style": prev.get("style") or style_now,
+                           "prose": prose_now}
+                    # 標髒旗標（stale/redraft 動詞）隨沿用分支攜帶＝信號跨（骨架）render 存活；
+                    # 散文真重寫走 _current()（不含旗標）＝自然清除，無需顯式 un-mark 動詞。
+                    if prev.get("redraft"):
+                        rec["redraft"] = True
+                    return rec
                 return _current()
+
+            def _verdict(verb: str, rec: dict) -> dict:
+                return verdict_entry(verb, lf.section, reason,
+                                     prev.get("own") if isinstance(prev, dict) else None,
+                                     rec.get("own"), rec.get("prose"))
+
+            # --ack-own：只對「有帳本記錄」的節生效；未撰寫（無記錄）→ 跳過（回報在
+            # ack_own_skipped）——本輪若首寫散文本就走 _current() 全蓋，無需裁決。
+            ack_own_hit = lf.section in ack_own_sections and isinstance(prev, dict)
 
             if lf.section in ack_sections:
                 # F5：作者確認此節已對齊上游。只有當 own/deps 與帳本相符（即「僅 anc 變了」＝
                 # stale-inherited、非 stale-own/upstream）才准重蓋章；否則拒絕、保住 re-draft 信號。
+                # 同節同給 --ack-own：own/deps 先被 ack-own 蓋至現值 → 守門自然通過（全四軸蓋章、
+                # 正交可組合）；--ack 單獨用於 stale-own 的 refusal 語義逐字不變。
                 cur = _current()
                 prev_own = prev.get("own") if isinstance(prev, dict) else None
                 prev_deps = prev.get("deps") if isinstance(prev, dict) else None
-                if prev is not None and prev_own == cur["own"] and prev_deps == cur["deps"]:
+                if ack_own_hit or (
+                        prev is not None and prev_own == cur["own"] and prev_deps == cur["deps"]):
                     rec = cur                      # 重蓋 anc 至現值 → 清 stale-inherited
+                    if ack_own_hit:
+                        ack_owned.append(lf.section)
+                        verdicts.append(_verdict("ack-own", rec))
                     acked.append(lf.section)
+                    verdicts.append(_verdict("ack", rec))
                 else:
                     rec = _reuse_or_current()      # own/deps 真的變了＝需重寫散文，ack 不吞
                     ack_refused.append(lf.section)
+            elif ack_own_hit:
+                # --ack-own 語義：own+deps 蓋現值、anc/style 沿用舊帳本值（被 stale-own 遮蔽的
+                # stale-inherited/stale-style 自然浮出——precedence 本就只顯最重的）；清 redraft 旗標
+                # （作者的顯式反裁決）。
+                cur = _current()
+                rec = {"own": cur["own"], "anc": prev.get("anc"),
+                       "deps": cur["deps"],
+                       "style": prev.get("style") or style_now,
+                       "prose": prose_now}
+                ack_owned.append(lf.section)
+                verdicts.append(_verdict("ack-own", rec))
             else:
                 # F2：散文未重寫則沿用舊源指紋（保住 stale-own/upstream 信號）；
                 #     散文重寫或首次撰寫才以現在源料重算。
@@ -451,9 +550,34 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     # 即遷出（frontmatter 不再寫 sections、改寫 sidecar）。
     meta = {"article": article, "version": version}
     latest.parent.mkdir(parents=True, exist_ok=True)
+
+    # 〔#02〕無主散文丟棄 WARN：preamble／group marker 後的內容不屬任何節、寫檔即被丟棄。
+    # 防誤報：先剝除 render 自產行——group marker 後緊接的 `#…` 分組標題行、無 root 節時的
+    # 封面 `#` 標題行（有 root 時 preamble 無自產行、標題行一律視為人寫＝寧報勿吞）——剝除後
+    # 仍非空白才 WARN。advisory：只上 stderr，不改 exit code、不改輸出檔。
+    if discarded:
+        import sys
+        for loc, block in discarded:
+            blines = block.split("\n")
+            while blines and not blines[0].strip():
+                blines.pop(0)
+            strip_own_heading = (loc != "preamble") or (not has_root)
+            if strip_own_heading and blines and re.match(r"^#{1,6}\s", blines[0]):
+                blines.pop(0)
+            if "\n".join(blines).strip():
+                where = ("the preamble (before the first section marker)"
+                         if loc == "preamble" else f"group \"{loc}\"")
+                sys.stderr.write(
+                    f"docspec: ⚠ \"{article}\": unowned prose at {where} belongs to no section "
+                    "and was DISCARDED by this render — hand-edits there are never preserved; "
+                    "move the content into a section's own slot (or a corpus file).\n")
+
     latest.write_text(render_frontmatter(meta, "\n".join(out)), encoding="utf-8")
     # groups 指紋一併入帳（D4）：render 完成＝骨架與 group.yaml 對齊，蓋現值。
     write_ledger(layout, article, hashes, groups_fp=groups_fingerprint(layout, article))
+    # 執行成功的裁決留痕（append-only journal）；被拒/跳過的不留。render 對 journal 只 append、
+    # 永不重寫/重生（sections 帳本才是每輪重生的那個）。
+    append_verdicts(layout, article, verdicts)
 
     return {
         "sections": [lf.section for lf in art_leaves],
@@ -461,6 +585,8 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
         "written_path": str(latest),
         "acked": acked,
         "ack_refused": ack_refused,
+        "ack_owned": ack_owned,
+        "ack_own_skipped": sorted(ack_own_sections - set(ack_owned)),
     }
 
 

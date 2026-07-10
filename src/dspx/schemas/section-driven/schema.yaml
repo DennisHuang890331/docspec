@@ -69,12 +69,27 @@ workflow:
       summary: Writer. Blind-render prose into the section's slot in docs/_latest from the aperture projection.
       steps:
         - Render only stale-own / not-yet-written sections; never read develop.md or history.
+        - >-
+          A redraft-flagged section (marked via docspec stale / docspec redraft) surfaces as
+          ordinary stale-own — your pickup set is unchanged; your real rewrite clears the flag
+          on render.
         - Honor the brief as a hard contract; lead with the payload.
       transaction: render
     - id: edit
       summary: Copy-prep. Line → copy → proofread on docs/_latest; narrative-align stale-inherited sections.
       steps:
         - Route each check — deterministic → engine (lint/check); judgment → a clean-context subagent.
+        - >-
+          Clear a staleness verdict with the matching verb — NEVER fabricate an edit (nor a
+          perturb-render-revert dance) to force a re-stamp. Prose changed → plain docspec render.
+          stale-inherited / stale-style with prose legitimately unchanged → render --ack <section>
+          (refused on stale-own/upstream). stale-own / stale-upstream where the source change is
+          structural wiring / metadata ONLY (realizes/governed-by re-wiring, order changes,
+          sources: path moves, decided-in corrections, title renumbering) →
+          render --ack-own <section> --reason <text>; a content-bearing change (must_cover,
+          breadth, a decision statement) → docspec stale / docspec redraft + draft, never ack-own.
+          Every verdict is journaled — give a real --reason; after an ack-own a factcheck
+          follow-up is expected (you attested the prose still implements CHANGED source).
         - Touch only docs/_latest; never the outline or decisions.
       transaction: render
     - id: factcheck

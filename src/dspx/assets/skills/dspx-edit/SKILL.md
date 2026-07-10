@@ -104,6 +104,28 @@ so you do a **light alignment pass**, not a rewrite:
      the prose genuinely needs rewriting, which is `draft`'s job, not an acknowledge.)
    Then `docspec lint`/`docspec check` as usual.
 
+### Source-change verdicts (`stale-own`/`stale-upstream` whose prose needs no change)
+`--ack` cannot clear the opposite direction. When a section is `stale-own`/`stale-upstream` and your
+review concludes the prose **legitimately needs no change**, route by WHAT changed in the source:
+
+- **Structural wiring / metadata only** — a `realizes`/`governed-by` edge re-wired, an `order`
+  change, a `sources:` path move, a `decided-in` correction, a title renumbering →
+  `docspec render <article> --ack-own <section> --reason <text>`. That re-stamps `own`/`deps` to
+  current while `anc`/`style` are kept, so a masked `stale-inherited`/`stale-style` may surface —
+  that is the point: clear it on its own merits, don't absorb it. This whitelist is exhaustive:
+  if the change isn't on it, it isn't an ack-own case.
+- **Content-bearing change** — `must_cover`, `breadth`, or a decision `statement` moved → the
+  prose DOES need rewriting: leave the stale signal for `draft` (or mark explicitly with
+  `docspec stale <section> --reason <text>` / `docspec redraft <article> --reason <text>`).
+  NEVER ack-own a content change.
+
+Every verdict is recorded in the article's append-only verdicts journal — give a **real**
+`--reason`, not boilerplate. An ack-own attests the prose still implements **changed** source
+material — a stronger claim than `--ack` — so a factcheck follow-up over the acked sections is
+expected (non-blocking, never a gate). And NEVER fabricate an edit or run the
+perturb-render-revert dance (change a character, render, revert, render): its end state is
+byte-identical to an honest `--ack-own`, but it leaves zero trace and launders the verdict.
+
 ---
 ## Restyle (the `stale-style` job)
 When `docspec status` reports a section as **`stale-style`**, nothing in its `concept`/`decisions`/

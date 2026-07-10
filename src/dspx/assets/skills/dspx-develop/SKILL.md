@@ -158,6 +158,15 @@ not from scratch.
   is yours: after a pivot/supersede, walk the descendants' briefs, framing fields, figures, and roadmap
   and bring them onto the new framing. (`factcheck`'s coherence pass backstops you — but fix it at the
   source, don't wait for the finding.)
+- **After a deep restructuring, mark prose dirty EXPLICITLY — never fake-edit to force staleness.**
+  A restructuring or wholesale re-projection can leave prose that must be rewritten even though its
+  source bytes did not move (no fingerprint change = no stale signal). The verbs for that are
+  `docspec stale <section> --reason <text>` (one section) and `docspec redraft <article> --reason
+  <text>` (every written section; the engine backs up the current `_latest.md` into its ledger area
+  first, so the pre-redraft prose survives). Both are journaled — give a real reason. Flagged
+  sections surface as ordinary `stale-own`, so `draft` picks them up unchanged. NEVER touch
+  `concept.yaml` with a fake edit just to trigger staleness — that corrupts the source of truth to
+  move a bookkeeping flag.
 - **Establish the byline once — never let it be invented downstream.** Who the document is authored
   by (and the contact/affiliation that ships on its cover/front matter) is a develop-level decision,
   like audience and scope — settle it up front and home it in the root section's `material`/front
