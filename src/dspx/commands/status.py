@@ -62,12 +62,17 @@ def develop_only_sections(layout: Layout, leaf_sections: set[str]) -> list[str]:
 
 
 def _leaf_row(layout: Layout, leaf: Leaf, schema: Schema, check_ok: bool,
-              docs_hashes: dict, by_section: dict, dindex: dict) -> dict:
+              docs_hashes: dict, by_section: dict, dindex: dict,
+              deliverable_missing: bool = False) -> dict:
     has_concept = (leaf.dir / "concept.yaml").is_file()
     has_decisions = (leaf.dir / "decisions.yaml").is_file()
     recorded = docs_hashes.get(leaf.section)
     if recorded is None:
         sync = "unwritten"
+    elif deliverable_missing:
+        # 存在性互驗（corpus-fail-loud-batch D2）：帳本有記錄但交付檔不見了——
+        # 「曾經有交付物、現在缺席」＝必然異常，不得以帳本指紋照算 synced/stale。
+        sync = "deliverable-missing"
     else:
         # 相容舊格式（str=只有 own）與新格式（{own, anc, deps}）
         rec_own = recorded.get("own") if isinstance(recorded, dict) else recorded
@@ -137,17 +142,29 @@ def run(argv: list[str]) -> int:
     if args.section:
         shown = [lf for lf in shown if lf.section == args.section]
 
-    from dspx.render import detect_drift
+    from dspx.render import detect_drift, groups_fingerprint, read_ledger_groups
     hashes_by_article: dict[str, dict] = {}
     drift_by_article: dict[str, set] = {}
+    missing_by_article: dict[str, bool] = {}
+    skeleton_stale: list[str] = []
     rows = []
     for leaf in shown:
         if leaf.article not in hashes_by_article:
             hashes_by_article[leaf.article] = _docs_hashes(layout, leaf.article)
             drift_by_article[leaf.article] = {
                 d["section"] for d in detect_drift(layout, leaf.article)}
+            # 存在性互驗（D2）：帳本非空 ∧ 交付檔缺席 → 全文章各節顯 deliverable-missing
+            missing_by_article[leaf.article] = bool(
+                hashes_by_article[leaf.article]) and not layout.docs_latest(leaf.article).is_file()
+            # group.yaml 骨架面（D4）：帳本記的 groups 指紋 vs 現值不符＝改了 title/order
+            # 但交付物還是舊骨架 → 需 render（舊帳本無 groups 欄＝無信號，下次 render 補記）。
+            recorded_groups = read_ledger_groups(layout, leaf.article)
+            if (recorded_groups is not None
+                    and recorded_groups != groups_fingerprint(layout, leaf.article)):
+                skeleton_stale.append(leaf.article)
         row = _leaf_row(layout, leaf, schema, check_ok,
-                        hashes_by_article[leaf.article], by_section, dindex)
+                        hashes_by_article[leaf.article], by_section, dindex,
+                        deliverable_missing=missing_by_article[leaf.article])
         row["drifted"] = leaf.section in drift_by_article[leaf.article]
         rows.append(row)
 
@@ -168,7 +185,8 @@ def run(argv: list[str]) -> int:
         })
 
     if args.as_json:
-        print(json.dumps({"checkOk": check_ok, "sections": rows},
+        print(json.dumps({"checkOk": check_ok, "sections": rows,
+                          "skeletonStale": skeleton_stale},
                          ensure_ascii=False, indent=2))
         return 0
 
@@ -189,6 +207,13 @@ def run(argv: list[str]) -> int:
         ])
         drift = " ✎hand-edited(docspec diff)" if r.get("drifted") else ""
         print(f"  {r['section']:<28} {r['state']:<16} {r['sync']:<16} [{flags}]{drift}")
+    for art in skeleton_stale:
+        print(f"\n  ⚠ deliverable skeleton of \"{art}\" is stale: a group.yaml title/order "
+              f"changed since the last render — run docspec render {art}")
+    if any(r["sync"] == "deliverable-missing" for r in rows):
+        print("\n  ⚠ deliverable-missing: the rendered file was deleted but the ledger still has "
+              "records — restore it from git/Drive history, or run "
+              "`docspec render <article> --rebaseline` to rebuild explicitly")
     print("\n  flags: c=concept d=decisions m=material v=develop h=history")
     print("  sync → who picks it up: stale-own / stale-upstream → draft (re-render the section) · "
           "stale-inherited → edit (narrative-align, or render --ack if no change needed) · "

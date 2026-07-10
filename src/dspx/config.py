@@ -52,6 +52,10 @@ DEFAULTS: dict = {
 # export.profile 合法文類（Typst 模板依此切換字型/段落/邊界/標題/場景分隔）。
 EXPORT_PROFILES = ("default", "academic", "paper", "manual", "essay", "novel")
 
+# docs_layout 封閉 enum（corpus-fail-loud-batch D1）：非法值（typo/大小寫/空白）一律
+# ConfigError fail-loud——曾實測 `falt` 靜默切佈局並連鎖抹帳本，絕不 fallback。
+DOCS_LAYOUTS = ("flat", "per-article")
+
 KNOWN_KEYS = frozenset(DEFAULTS)
 
 AUTONOMY_KNOBS = ("publish",)
@@ -149,9 +153,21 @@ def load_config(
             continue
         if key == "autonomy":
             config[key] = _merge_autonomy(value, path, warn)
+        elif key == "docs_layout":
+            config[key] = _validate_docs_layout(value, path)
         else:
             config[key] = value
     return config
+
+
+def _validate_docs_layout(value: object, path: Path) -> str:
+    """docs_layout 封閉 enum 驗證：只收精確 `flat`/`per-article`（含大小寫/空白變體皆拒）。"""
+    if value in DOCS_LAYOUTS:
+        return value  # type: ignore[return-value]
+    raise ConfigError(
+        f"config error: {path} (docs_layout is \"{value}\" but must be one of: "
+        f"{' | '.join(DOCS_LAYOUTS)} — the engine never silently falls back to a layout)"
+    )
 
 
 def _merge_autonomy(value: object, path: Path, warn: Callable[[str], None]) -> dict:

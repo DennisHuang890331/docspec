@@ -18,6 +18,24 @@ import yaml
 
 MANIFEST_NAME = ".freeze.yaml"
 
+# 凍結區驗證的同步/系統垃圾白名單：同步工具/OS 自動生成、清了會長回來、非人為放置——
+# 不觸發「not registered」ERROR（曾實測 desktop.ini 布滿真專案、第一次 publish 後必然全紅）。
+# 真正的未登記內容檔（如 .md）行為不變。
+_SYNC_JUNK_NAMES = frozenset({"desktop.ini", "thumbs.db", ".ds_store"})
+
+
+class FreezeError(Exception):
+    """freeze manifest 無法解析（壞 YAML）。"""
+
+
+def is_sync_junk(name: str) -> bool:
+    """同步/系統垃圾檔名（大小寫不敏感）：desktop.ini/Thumbs.db/.DS_Store/~$*（Office 鎖檔）/
+    *.tmp.drive*（Drive 暫存）。"""
+    low = name.lower()
+    return (low in _SYNC_JUNK_NAMES
+            or low.startswith("~$")
+            or ".tmp.drive" in low)
+
 
 def is_frozen_path(path: str | Path) -> bool:
     """路徑落在某個 `archive/` 資料夾內＝凍結（資料夾級規則）。"""
@@ -36,7 +54,13 @@ def load_manifest(home: Path) -> dict[str, str]:
     p = _manifest_path(home)
     if not p.is_file():
         return {}
-    data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    try:
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        # 壞檔（Drive 衝突截斷）→ domain error 帶路徑（cli 包成友善一行），不裸 traceback。
+        mark = getattr(exc, "problem_mark", None)
+        position = f" (line {mark.line + 1})" if mark is not None else ""
+        raise FreezeError(f"YAML parse failed: {p}{position}") from exc
     frozen = data.get("frozen") if isinstance(data, dict) else None
     return frozen if isinstance(frozen, dict) else {}
 
@@ -64,10 +88,11 @@ def verify(home: Path, project_root: Path, docs_dir: Path) -> list[tuple[str, st
             problems.append((rel, "was deleted"))
         elif _hash(f) != want:
             problems.append((rel, "content was tampered with"))
-    # 2) 磁碟上 archive/ 內、卻沒登記的檔（手動塞進凍結區）
+    # 2) 磁碟上 archive/ 內、卻沒登記的檔（手動塞進凍結區）；同步垃圾（desktop.ini 類）
+    #    白名單排除——它們由同步工具自動生成、非人為放置，不該鎖發布。
     if docs_dir.is_dir():
         for f in docs_dir.rglob("*"):
-            if f.is_file() and is_frozen_path(f):
+            if f.is_file() and is_frozen_path(f) and not is_sync_junk(f.name):
                 rel = f.resolve().relative_to(root).as_posix()
                 if rel not in frozen:
                     problems.append((rel, "not registered (not produced by publish)"))

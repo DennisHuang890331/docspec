@@ -14,8 +14,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
-
 from dspx.layout import Layout
 
 KINDS = ("gap", "task")
@@ -28,8 +26,8 @@ def _load_entries(path: Path, store: str) -> list[dict]:
     """讀 {entries:[...]}；缺席→[]。標每筆 `_store`。"""
     if not path.is_file():
         return []
-    from dspx.model import ModelError, keyed_list
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    from dspx.model import ModelError, _load_yaml, keyed_list
+    raw = _load_yaml(path)   # 壞檔（Drive 截斷）→ ModelError 帶路徑，不裸 traceback
     entries = keyed_list(raw, path, "entries", error=ModelError)  # 誤名頂層 key fail-loud
     out: list[dict] = []
     for e in entries:

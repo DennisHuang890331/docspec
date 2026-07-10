@@ -40,6 +40,12 @@ class AuditError(Exception):
     """audit 操作失敗（id 不存在、欄位非法、targets 無法路由等）。"""
 
 
+def _yaml_position(exc: yaml.YAMLError) -> str:
+    """YAML 解析錯誤 → ` (line N)` 定位字串（無 mark → 空字串）。"""
+    mark = getattr(exc, "problem_mark", None)
+    return f" (line {mark.line + 1})" if mark is not None else ""
+
+
 @dataclass
 class AuditStore:
     """一個 audit.yaml（findings 清單）；可為某 doc-root 或 forest。"""
@@ -53,7 +59,11 @@ class AuditStore:
         if not path.is_file():
             return cls(path=path, findings=[], store=store)
         from dspx.model import keyed_list
-        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        try:
+            raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except yaml.YAMLError as exc:
+            # 壞檔（Drive 衝突截斷）→ domain error 帶路徑，比照 model._load_yaml；不裸 traceback。
+            raise AuditError(f"YAML parse failed: {path}{_yaml_position(exc)}") from exc
         items = keyed_list(raw, path, "findings", error=AuditError)  # 誤名頂層 key fail-loud
         return cls(path=path, findings=items, store=store)
 

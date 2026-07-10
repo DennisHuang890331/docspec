@@ -40,10 +40,13 @@ def read_ledger(layout: Layout, article: str) -> dict:
             data = yaml.safe_load(ledger.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as exc:
             # 壞掉的 sidecar（如 Drive/OneDrive sync 衝突截斷）：**可見警告、非靜默**——
-            # 否則 drift 偵測會默默失效（手改交付物不再被抓）。下次 render 會重生帳本。
+            # 否則 drift 偵測會默默失效（手改交付物不再被抓）。注意：render **不會**默默修復
+            # （那會把待重寫的 stale 信號永久吸收成新基準）——render 遇壞帳本會隔離備份並拒跑。
             sys.stderr.write(
                 f"docspec: ⚠ ledger sidecar {ledger} is malformed ({exc}); "
-                "drift detection is degraded until the next `docspec render`.\n")
+                "staleness/drift signals are unavailable. Restore it from git/Drive history, "
+                "or run `docspec render <article> --rebaseline` to quarantine it and rebuild "
+                "the baseline (this permanently absorbs any pending stale signals).\n")
             return {}
         sections = data.get("sections") if isinstance(data, dict) else None
         return dict(sections) if isinstance(sections, dict) else {}
@@ -62,14 +65,52 @@ def read_ledger(layout: Layout, article: str) -> dict:
     return {}
 
 
-def write_ledger(layout: Layout, article: str, hashes: dict) -> None:
-    """把指紋帳本寫進隱藏 sidecar（機器簿記，與人讀的 `_latest.md` 分離）。"""
+def write_ledger(layout: Layout, article: str, hashes: dict,
+                 groups_fp: str | None = None) -> None:
+    """把指紋帳本寫進隱藏 sidecar（機器簿記，與人讀的 `_latest.md` 分離）。
+
+    `groups_fp`＝該文章 group.yaml 骨架面指紋（title/order；D4）——status 比對它偵測
+    「改了 group.yaml 但沒人提醒重新 render」的盲區。"""
     ledger = layout.docs_ledger(article)
     ledger.parent.mkdir(parents=True, exist_ok=True)
+    data: dict = {"article": article}
+    if groups_fp is not None:
+        data["groups"] = groups_fp
+    data["sections"] = hashes
     ledger.write_text(
-        yaml.safe_dump({"article": article, "sections": hashes},
-                       allow_unicode=True, sort_keys=False),
+        yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
         encoding="utf-8")
+
+
+def read_ledger_groups(layout: Layout, article: str) -> str | None:
+    """讀帳本記的 group.yaml 骨架面指紋；缺檔/壞檔/舊帳本（無 groups 欄）→ None（無信號）。"""
+    for ledger in (layout.docs_ledger(article), layout.docs_ledger_legacy(article)):
+        if not ledger.is_file():
+            continue
+        try:
+            data = yaml.safe_load(ledger.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            return None   # 壞檔警告由 read_ledger 負責，這裡不重複
+        groups = data.get("groups") if isinstance(data, dict) else None
+        return str(groups) if isinstance(groups, str) else None
+    return None
+
+
+def groups_fingerprint(layout: Layout, article: str) -> str:
+    """文章骨架的 group.yaml 比對面指紋：全部（非封存）group.yaml 的路徑＋title＋order。
+
+    title/order 變動＝「交付物骨架變了、需重新 render」（D4，與 concept 的 title/order 同性質）；
+    只取這兩欄、不 hash 整檔——group.yaml 加註解不算骨架變動。"""
+    h = hashlib.sha256()
+    art_dir = layout.section_dir(article)
+    if art_dir.is_dir():
+        for gy in sorted(art_dir.rglob("group.yaml")):
+            if layout.is_archived_path(gy.parent):
+                continue
+            meta = _group_meta(layout, layout.section_id(gy.parent))
+            rel = gy.parent.relative_to(layout.corpus_dir).as_posix()
+            h.update(f"{rel}\0{meta.get('title')!r}\0{meta.get('order')!r}\0".encode("utf-8"))
+    return h.hexdigest()[:16]
 
 # markdown 圖片引用 ![alt](path "optional title")：抓 path（到空白或 ) 為止）
 IMAGE_REF_RE = re.compile(r"!\[[^\]]*\]\(\s*([^)\s]+)")
@@ -122,16 +163,29 @@ def _humanize_segment(segment: str) -> str:
     return " ".join(w for w in words if w)
 
 
+# 壞 group.yaml 已警告過的檔（同輪 render 對同檔多次讀取只警告一次，防洗版）
+_warned_group_files: set[str] = set()
+
+
 def _group_meta(layout: Layout, group_section: str) -> dict:
-    """讀分組節點可選 `group.yaml`（`title`／`order`）；缺檔／壞檔 → {}（向後相容）。"""
+    """讀分組節點可選 `group.yaml`（`title`／`order`）；缺檔 → {}（向後相容）。
+
+    壞檔（非法 YAML／讀取失敗）→ {} 但 **stderr 指名警告、非靜默**——否則中文標題會
+    默默降級成 humanize slug（機械 drift、人不會發現）。fallback 行為維持、不擋 render。"""
+    import sys
+    gy = layout.section_dir(group_section) / "group.yaml"
     try:
-        gy = layout.section_dir(group_section) / "group.yaml"
         if gy.is_file():
             data = yaml.safe_load(gy.read_text(encoding="utf-8"))
             if isinstance(data, dict):
                 return data
-    except (OSError, yaml.YAMLError):
-        pass
+    except (OSError, yaml.YAMLError) as exc:
+        key = str(gy)
+        if key not in _warned_group_files:
+            _warned_group_files.add(key)
+            sys.stderr.write(
+                f"docspec: ⚠ {gy} is malformed ({exc}); its title/order are ignored "
+                "and the heading falls back to the humanized slug — fix the file.\n")
     return {}
 
 
@@ -366,7 +420,8 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     meta = {"article": article, "version": version}
     latest.parent.mkdir(parents=True, exist_ok=True)
     latest.write_text(render_frontmatter(meta, "\n".join(out)), encoding="utf-8")
-    write_ledger(layout, article, hashes)
+    # groups 指紋一併入帳（D4）：render 完成＝骨架與 group.yaml 對齊，蓋現值。
+    write_ledger(layout, article, hashes, groups_fp=groups_fingerprint(layout, article))
 
     return {
         "sections": [lf.section for lf in art_leaves],

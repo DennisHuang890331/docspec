@@ -10,7 +10,18 @@ from __future__ import annotations
 from dspx.model import Leaf
 from dspx.schema import Schema
 
-from . import _audit, _cross_section, _cycles, _fieldmap, _hierarchy, _ids_and_refs, _images, _roadmap
+from . import (
+    _audit,
+    _cross_section,
+    _cycles,
+    _fieldmap,
+    _groups,
+    _hierarchy,
+    _hygiene,
+    _ids_and_refs,
+    _images,
+    _roadmap,
+)
 from ._fieldmap import run_file_check
 from ._types import CheckResult, IdRecord, Index
 
@@ -52,8 +63,11 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
         errors.extend(validate_glossary(load_glossary(layout)))
         errors.extend(_roadmap._validate_roadmap(layout, leaves, id_set, concept_ids))  # ⑧ — same `if layout`
         errors.extend(_images._validate_image_refs(layout, leaves))         # ⑨ — same `if layout`
+        errors.extend(_groups._validate_groups(layout, leaves))             # ⑩ — group.yaml 輕量驗證
 
     ref_errors, warnings = _cross_section._cross_section_decision_refs(leaves)  # trailing F1 check
     errors.extend(ref_errors)
+    if layout is not None:
+        warnings.extend(_hygiene._scan_hygiene(layout))   # 衛生 WARN（衝突副本/死資料夾，非阻塞）
 
     return CheckResult(ok=not errors, errors=errors, index=index, warnings=warnings)

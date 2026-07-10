@@ -79,10 +79,12 @@ def _domain_error_types() -> tuple[type, ...]:
     from dspx.audit import AuditError
     from dspx.config import ConfigError
     from dspx.format_config import FormatConfigError
+    from dspx.freeze import FreezeError
     from dspx.frontmatter import FrontmatterError
     from dspx.model import ModelError
     from dspx.schema import SchemaError
-    return (ModelError, SchemaError, AuditError, FrontmatterError, ConfigError, FormatConfigError)
+    return (ModelError, SchemaError, AuditError, FrontmatterError, ConfigError,
+            FormatConfigError, FreezeError)
 
 
 _DOMAIN_ERRORS = _domain_error_types()
