@@ -113,3 +113,22 @@ def test_init_lang_en_seeds_en(tmp_path, monkeypatch):
     guide = (proj / "docspec" / "writing-guide.md").read_text(encoding="utf-8")
     assert "Verb-centric" in guide
     assert "docspec reference writing-en" in guide
+
+
+def test_init_scaffolds_gitattributes_lf_pin(tmp_path, monkeypatch):
+    """fingerprint-v2 D2 第三層防禦：init 附 .gitattributes（docspec 管的文字檔釘 eol=lf）；
+    既有檔不覆寫（保留使用者客製）。"""
+    proj = tmp_path / "換行專案"
+    proj.mkdir()
+    monkeypatch.chdir(proj)
+    assert init_cmd.run([]) == 0
+    ga = proj / ".gitattributes"
+    assert ga.is_file()
+    raw = ga.read_text(encoding="utf-8")
+    for pattern in ("*.md", "*.yaml", "*.yml"):
+        assert f"{pattern} text eol=lf" in raw
+    assert b"\r\n" not in ga.read_bytes()          # 腳手架本身也是 LF
+    # 重 init 不覆寫使用者客製
+    ga.write_text("*.md text eol=lf\n# custom\n", encoding="utf-8")
+    assert init_cmd.run([]) == 0
+    assert "# custom" in ga.read_text(encoding="utf-8")

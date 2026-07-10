@@ -16,6 +16,7 @@ import sys
 from dspx.commands._shared import BootstrapError, bootstrap, load_model
 from dspx.render import (
     append_verdicts,
+    ledger_needs_migration,
     read_ledger,
     read_ledger_groups,
     verdict_entry,
@@ -55,6 +56,12 @@ def run(argv: list[str]) -> int:
         return 1
 
     article = section.split("/", 1)[0]
+    # v1 帳本閘：write_ledger 會蓋上現行版本鍵——對 v1 帳本標髒＝把未遷移的舊值謊稱 v2。
+    if ledger_needs_migration(layout, article):
+        sys.stderr.write(
+            f"docspec: the ledger of \"{article}\" is fingerprint v1 — migrate first with "
+            f"`docspec render {article} --rebaseline`, then mark sections.\n")
+        return 1
     ledger = read_ledger(layout, article)
     rec = ledger.get(section)
     if not isinstance(rec, dict):

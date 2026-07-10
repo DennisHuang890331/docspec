@@ -97,7 +97,7 @@ def _write(path: Path, content: str, *, force: bool, results: list[str]) -> None
         return
     verb = "overwrote" if path.exists() else "created"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content, encoding="utf-8")
+    path.write_text(content, encoding="utf-8", newline="\n")
     results.append(f"  + {verb}: {rel}")
 
 
@@ -251,7 +251,8 @@ def _write_hook_settings(path: Path, guard_entry: dict, postcheck_entry: dict) -
     post.append(postcheck_entry)
     hooks["PostToolUse"] = post
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(settings, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8", newline="\n")
 
 
 def _install_hook(root: Path, tool: str, results: list[str]) -> None:

@@ -186,4 +186,4 @@ def _write_lock(tlmgr: Path | None, xelatex: Path | None, packages: list[str],
         "tlmgr_packages": packages,
     }
     paths.tex_lock_path().write_text(
-        json.dumps(lock, ensure_ascii=False, indent=2), encoding="utf-8")
+        json.dumps(lock, ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")

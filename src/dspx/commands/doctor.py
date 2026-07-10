@@ -253,7 +253,7 @@ def _check_latest() -> _Check | None:
                     p.parent.mkdir(parents=True, exist_ok=True)
                     p.write_text(json.dumps(
                         {"fetched_at": time.time(), "latest_tinytex_tag": latest},
-                        ensure_ascii=False, indent=2), encoding="utf-8")
+                        ensure_ascii=False, indent=2), encoding="utf-8", newline="\n")
                 except OSError:
                     pass
     if not latest:

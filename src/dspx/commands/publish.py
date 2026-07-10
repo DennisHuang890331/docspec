@@ -161,12 +161,12 @@ def run(argv: list[str]) -> int:
 
     # ── 蓋版號到 _latest（保留標記，它是工作副本）──
     meta["version"] = version
-    latest.write_text(render_frontmatter(meta, body), encoding="utf-8")
+    latest.write_text(render_frontmatter(meta, body), encoding="utf-8", newline="\n")
 
     # ── 凍結快照：完全剝除隱形標記 ──
     snapshot = layout.docs_snapshot(args.article, version)
     snapshot.parent.mkdir(parents=True, exist_ok=True)
-    snapshot.write_text(clean_body, encoding="utf-8")
+    snapshot.write_text(clean_body, encoding="utf-8", newline="\n")
     # 凍結區 hash 抓包（主保證，跨工具、Drive 有效）＋ OS 唯讀（加分，Drive 可能失效）
     from dspx import freeze
     freeze.record(layout.planning_home, layout.project_root, snapshot)
@@ -185,10 +185,11 @@ def run(argv: list[str]) -> int:
     changelog.parent.mkdir(parents=True, exist_ok=True)
     if not changelog.is_file():
         changelog.write_text(
-            f"# {args.article} — revision history\n\n{header}", encoding="utf-8")
+            f"# {args.article} — revision history\n\n{header}", encoding="utf-8",
+            newline="\n")
     elif not any(h in changelog.read_text(encoding="utf-8") for h in _ALL_HEADERS):
         # 既有檔但無任何已知表頭（舊格式）→ 補表頭，新列接在後面（比對全變體，免雙表頭）。
-        with changelog.open("a", encoding="utf-8") as fh:
+        with changelog.open("a", encoding="utf-8", newline="\n") as fh:
             fh.write(f"\n{header}")
     summary = " ".join(args.note.split()).strip() or _NO_SUMMARY[clang]
     when = date.today().isoformat()
@@ -198,7 +199,7 @@ def run(argv: list[str]) -> int:
     if is_first and args.level != "patch":
         sys.stderr.write(
             f"docspec: note — --level {args.level} has no effect on the first version (it is {version}).\n")
-    with changelog.open("a", encoding="utf-8") as fh:
+    with changelog.open("a", encoding="utf-8", newline="\n") as fh:
         fh.write(f"| {version} | {when} | {level_label} | {summary} |\n")
 
     print(f"published \"{args.article}\" v{version}")

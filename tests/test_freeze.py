@@ -138,3 +138,75 @@ def test_claude_install_preserves_existing_settings(tmp_path):
     data = json.loads(settings.read_text(encoding="utf-8"))
     assert data["permissions"]["allow"] == ["Bash(ls)"]            # 既有設定保留
     assert data["hooks"]["PreToolUse"]                              # hook 加上
+
+
+# ── fingerprint v2：凍結 hash 換行正規化＋舊 manifest 自動遷移（change fingerprint-v2 D6）──
+
+
+def _freeze_home(tmp_path):
+    home = tmp_path / "docspec"
+    home.mkdir()
+    arch = tmp_path / "docs" / "guide" / "archive"
+    arch.mkdir(parents=True)
+    return home, tmp_path, arch
+
+
+def test_crlf_lf_checkout_is_not_tamper(tmp_path):
+    """LF 檢出不再全報竄改：CRLF 登記 → LF 檢出（同內容）→ verify 零誤報。"""
+    home, root, arch = _freeze_home(tmp_path)
+    snap = arch / "v1.md"
+    snap.write_bytes("frozen content\r\nline two\r\n".encode("utf-8"))
+    freeze.record(home, root, snap)
+    snap.write_bytes("frozen content\nline two\n".encode("utf-8"))   # 模擬 LF worktree 檢出
+    assert freeze.verify(home, root, root / "docs") == []
+
+
+def test_old_algorithm_manifest_auto_migrates_once(tmp_path, capsys):
+    """舊算法 hash 條目：verify 舊算法命中 → 改寫 manifest＋stderr 提示；二次 verify 直接命中。"""
+    import hashlib
+    import yaml as _yaml
+    home, root, arch = _freeze_home(tmp_path)
+    snap = arch / "v1.md"
+    snap.write_bytes("frozen content\r\nline two\r\n".encode("utf-8"))
+    # 手植舊算法（raw bytes 不正規化）hash＝模擬 v2 前 publish 的 manifest
+    old_hash = hashlib.sha256(snap.read_bytes()).hexdigest()
+    (home / ".freeze.yaml").write_text(
+        _yaml.safe_dump({"frozen": {"docs/guide/archive/v1.md": old_hash}}), encoding="utf-8")
+    capsys.readouterr()
+    assert freeze.verify(home, root, root / "docs") == []            # 命中舊算法、非竄改
+    assert "migrated" in capsys.readouterr().err                     # 一行可見提示（非靜默）
+    migrated = freeze.load_manifest(home)["docs/guide/archive/v1.md"]
+    assert migrated != old_hash                                      # 條目已改寫成新算法
+    capsys.readouterr()
+    assert freeze.verify(home, root, root / "docs") == []            # 二次 verify 直接命中
+    assert "migrated" not in capsys.readouterr().err                 # 遷移一次性
+
+
+def test_real_tamper_not_laundered_by_fallback(tmp_path):
+    """真竄改（內容變）：新舊算法皆不命中 → 照報 tampered、manifest 不被改寫。"""
+    home, root, arch = _freeze_home(tmp_path)
+    snap = arch / "v1.md"
+    snap.write_bytes("frozen content\r\n".encode("utf-8"))
+    freeze.record(home, root, snap)
+    want = freeze.load_manifest(home)["docs/guide/archive/v1.md"]
+    snap.write_bytes("TAMPERED\r\n".encode("utf-8"))
+    problems = freeze.verify(home, root, root / "docs")
+    assert any("tampered" in p for _, p in problems)
+    assert freeze.load_manifest(home)["docs/guide/archive/v1.md"] == want   # 零洗白
+
+
+def test_legacy_table_gets_same_fallback(tmp_path, capsys):
+    """legacy 表（register-legacy 遷入歷版）與封存 hash 走同一 _hash → 同一 fallback 遷移。"""
+    import hashlib
+    import yaml as _yaml
+    home, root, arch = _freeze_home(tmp_path)
+    old = arch / "legacy-v0.md"
+    old.write_bytes("pre-docspec version\r\n".encode("utf-8"))
+    old_hash = hashlib.sha256(old.read_bytes()).hexdigest()
+    (home / ".freeze.yaml").write_text(
+        _yaml.safe_dump({"frozen": {}, "legacy": {"docs/guide/archive/legacy-v0.md": old_hash}}),
+        encoding="utf-8")
+    capsys.readouterr()
+    assert freeze.verify(home, root, root / "docs") == []
+    assert "migrated" in capsys.readouterr().err
+    assert freeze.load_legacy(home)["docs/guide/archive/legacy-v0.md"] != old_hash

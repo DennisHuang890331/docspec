@@ -51,6 +51,16 @@ def is_frozen_path(path: str | Path) -> bool:
 
 
 def _hash(path: Path) -> str:
+    """凍結 hash（v2）：換行正規化（`\\r\\n`→`\\n`）後 sha256。
+
+    換行符是 git autocrlf／checkout／同步工具的產物、非內容——同一份凍結快照在 LF worktree
+    檢出不得被報竄改、鎖死 publish。「只改換行符」自此不構成竄改（接受此縮小：語義內容位元不變）。"""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def _hash_legacy_algo(path: Path) -> str:
+    """舊算法（v2 前）＝raw bytes 不正規化。只供 verify 的自動遷移 fallback：mismatch 時以
+    舊算法重比、命中＝內容與登記時位元一致、僅算法升級 → 改寫 manifest（零洗白窗口）。"""
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
@@ -95,7 +105,7 @@ def _write_manifest(home: Path, frozen: dict[str, str], legacy: dict[str, str]) 
         data["legacy"] = legacy
     _manifest_path(home).write_text(
         yaml.safe_dump(data, allow_unicode=True, sort_keys=True),
-        encoding="utf-8",
+        encoding="utf-8", newline="\n",
     )
 
 
@@ -131,11 +141,19 @@ def record_legacy(home: Path, project_root: Path, files: list[Path]) -> list[str
 
 
 def verify(home: Path, project_root: Path, docs_dir: Path) -> list[tuple[str, str]]:
-    """抽查凍結區完整性。回傳 (相對路徑, 問題) 清單；空＝全部完好。"""
+    """抽查凍結區完整性。回傳 (相對路徑, 問題) 清單；空＝全部完好。
+
+    舊 manifest 自動遷移（fingerprint v2 D6）：條目為舊算法（未正規化）hash 時，新算法必
+    mismatch——先以舊算法重比一次，命中＝檔案內容從未變、只是算法升級 → 自動把該條目改寫成
+    新算法 hash＋stderr 一行提示（非靜默）；不命中＝真竄改，照報。只有「可證明與舊記錄位元
+    一致」的檔案會被改寫＝零洗白窗口；不另立 rehash 指令（遷移在 mismatch 首次被看見處——
+    lint V11／publish 閘——自動完成、一次性）。"""
+    import sys
     raw = _load_raw(home)
     frozen, legacy = _table(raw, "frozen"), _table(raw, "legacy")
     root = project_root.resolve()
     problems: list[tuple[str, str]] = []
+    migrated: list[str] = []
     # 1) 兩表逐筆：被刪 or hash 不符（legacy 訊息分流＝遷入歷版，稽核時出處可辨）
     for table, deleted, tampered in (
             (frozen, "was deleted", "content was tampered with"),
@@ -145,7 +163,18 @@ def verify(home: Path, project_root: Path, docs_dir: Path) -> list[tuple[str, st
             if not f.is_file():
                 problems.append((rel, deleted))
             elif _hash(f) != want:
-                problems.append((rel, tampered))
+                if _hash_legacy_algo(f) == want:
+                    # 舊算法命中＝內容位元未變、僅算法升級 → 遷移該條目（一次性）
+                    table[rel] = _hash(f)
+                    migrated.append(rel)
+                else:
+                    problems.append((rel, tampered))
+    if migrated:
+        _write_manifest(home, frozen, legacy)
+        for rel in sorted(migrated):
+            sys.stderr.write(
+                f"docspec: freeze manifest entry for {rel} migrated to the newline-normalized "
+                "hash algorithm (content verified byte-identical under the old algorithm).\n")
     # 2) 磁碟上 archive/ 內、卻沒登記的檔（手動塞進凍結區）＝兩表聯集都查無；同步垃圾
     #    （desktop.ini 類）白名單排除——它們由同步工具自動生成、非人為放置，不該鎖發布。
     if docs_dir.is_dir():

@@ -14,9 +14,10 @@ from dataclasses import dataclass, field
 import yaml
 
 from dspx.forest import forest_view
-from dspx.glossary import load_glossary
+from dspx.glossary import GLOSSARY_INDEX_FIELDS, load_glossary
 from dspx.layout import Layout
 from dspx.model import (
+    ACTIVE_DECISION_STATUSES,
     ASSET_DIR_NAME,
     Leaf,
     ancestor_leaves,
@@ -29,10 +30,12 @@ from dspx.schema import Schema
 
 # draft 讀 concept 的准投欄位（治理欄 realizes 不投）
 _DRAFT_CONCEPT_FIELDS = ("concept", "brief", "must_cover", "sources")
-# glossary 注入＝精瘦索引（省 token）；definition/english 是下鑽欄（`docspec show <id>`），不注入
-_GLOSSARY_INDEX_FIELDS = ("id", "canonical", "bucket", "code", "aliases_forbidden")
-# draft 讀 decisions 的 active 狀態
-_ACTIVE_STATUS = ("proposed", "accepted")
+# glossary 注入＝精瘦索引（省 token）；definition/english 是下鑽欄（`docspec show <id>`），不注入。
+# 白名單單一來源住 glossary.GLOSSARY_INDEX_FIELDS——style 面 gloss 子軸指紋（model）同源共用，
+# 「投給 agent 的術語義務」與「入帳的術語義務」不可能漂移。
+_GLOSSARY_INDEX_FIELDS = GLOSSARY_INDEX_FIELDS
+# draft 讀 decisions 的 active 狀態（單一來源住 model.ACTIVE_DECISION_STATUSES；norm 軸同源共用）
+_ACTIVE_STATUS = ACTIVE_DECISION_STATUSES
 
 
 class ApertureError(Exception):

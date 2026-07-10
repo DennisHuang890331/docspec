@@ -198,6 +198,18 @@ terms: []
 """
 
 
+# .gitattributes 腳手架（fingerprint v2 D2 防禦縱深第三層）：repo 端把 docspec 管的文字檔
+# 釘 eol=lf——引擎讀端已正規化（D1）、寫端已釘 LF（D2），這層讓 git autocrlf 也不再翻譯換行
+# ＝三層任一失守其餘仍保住。建議性、非閘門；既有專案自行補上（`docspec guide` 有提示）。
+_GITATTRIBUTES_TEMPLATE = """\
+# docspec: pin LF for the text files the engine fingerprints/writes, so fingerprints
+# and the freeze hash net stay byte-identical across OS / git autocrlf / worktrees.
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+"""
+
+
 # 可整合的 agent 工具（chatgpt＝codex 別名）
 _AGENTS = ("claude", "antigravity", "codex")
 DEFAULT_AGENT = "claude"   # 非互動預設只裝這一家（要全裝＝ `--tool all`）
@@ -291,7 +303,12 @@ def run(argv: list[str]) -> int:
     ):
         p = home / fname
         if not p.is_file():
-            p.write_text(body, encoding="utf-8")
+            p.write_text(body, encoding="utf-8", newline="\n")
+
+    # .gitattributes（專案根）：釘 LF、跨 OS 指紋位元一致；既有檔不覆寫（保留使用者客製）。
+    gitattributes = project_root / ".gitattributes"
+    if not gitattributes.is_file():
+        gitattributes.write_text(_GITATTRIBUTES_TEMPLATE, encoding="utf-8", newline="\n")
 
     # 載入/刷新 skill 到選定 agent（重 init＝刷新，force 覆寫舊 skill 檔）
     from dspx.commands.skills_cmd import _install
@@ -309,6 +326,8 @@ def run(argv: list[str]) -> int:
     if is_reinit:
         print("  (existing config/writing-guide/glossary kept, not overwritten)")
     print(f"  docspec/: {CONFIG_FILE_NAME}  {CORPUS_DIR_NAME}/  writing-guide.md  glossary.yaml")
+    print("  .gitattributes: pins eol=lf for the fingerprinted text files (keeps fingerprints "
+          "byte-identical across OS/worktrees)")
     print("  skills installed to (per tool = skill auto-load + command explicit invocation):")
     _dest = {
         "claude": ".claude/skills/<name>/SKILL.md + .claude/commands/dspx/<id>.md (/dspx:<id>)",

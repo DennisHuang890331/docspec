@@ -53,7 +53,7 @@ def _build_pdf_typst(pandoc: str, typst: str, typst_template: Path, fonts_src: P
     with tempfile.TemporaryDirectory(prefix="dspx_typst_") as td:
         build = Path(td)
         shutil.copy2(typst_template, build / "template.typ")
-        (build / "doc.md").write_text(body_md, encoding="utf-8")
+        (build / "doc.md").write_text(body_md, encoding="utf-8", newline="\n")
         # 圖片資產：被引用的 `assets/<file>` copy 進 build/assets/（typst image("assets/…") 解析；SVG 原生）
         _copy_assets_into(build, assets or {})
 
@@ -76,7 +76,8 @@ def _build_pdf_typst(pandoc: str, typst: str, typst_template: Path, fonts_src: P
         # pandoc 後處理：① 等分百分比欄寬 → auto（治表格擠爆＋硬斷字）；② 修數學符號錯位（sect→inter）。
         doc_typ = build / "doc.typ"
         _src = doc_typ.read_text(encoding="utf-8")
-        doc_typ.write_text(_fix_typst_math(_balance_table_columns(_src)), encoding="utf-8")
+        doc_typ.write_text(_fix_typst_math(_balance_table_columns(_src)), encoding="utf-8",
+                           newline="\n")
 
         # typst compile（受控字型夾、忽略系統字型＝確定性）。
         proc = subprocess.run(

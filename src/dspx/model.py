@@ -95,6 +95,22 @@ def _load_yaml(path: Path) -> object:
         raise ModelError(f"YAML parse failed: {path}{position}") from exc
 
 
+def _normalize_newlines(data: bytes) -> bytes:
+    """位元級指紋的換行正規化（fingerprint v2 D1）：hash 前 `\\r\\n`→`\\n`。
+
+    換行符是 git autocrlf／編輯器／OS 的產物、非內容——同一份源料在 CRLF worktree 與 LF
+    worktree 必須算出相同指紋（帳本入版控後跨 worktree 檢出不得假 stale）。孤 `\\r`（老 Mac
+    格式）刻意不處理：git/編輯器不會產生，過度正規化反而稀釋「內容真的變了」的偵測面。
+    以 parsed 結構計算的軸（anc/deps/norm/gloss/purpose）與 universal-newlines 的 prose 天然免疫。
+    """
+    return data.replace(b"\r\n", b"\n")
+
+
+# 決策 active 狀態（draft 只投 active 條目；norm 軸只 hash active normative）。
+# aperture 與 model 共用單一來源——「投給 agent 的活決策」與「入帳的活決策」定義不可能漂移。
+ACTIVE_DECISION_STATUSES = ("proposed", "accepted")
+
+
 def decision_index(leaves: list) -> dict:
     """全專案決策索引：決策/history id → {section, statement, kind, status}。
 
@@ -172,14 +188,22 @@ def deps_fingerprint(leaf, dindex: dict) -> str:
     hash statement **＋ status**：改 rationale 不動 statement 仍不觸發下游；但 supersede/deprecate
     改 status＝決策死了，下游必須轉 stale-upstream 重渲（否則 draft 繼續渲染死真相、status 卻報
     synced＝false-green，違 draft「只給 active 決策」契約）。無 realizes → 空字串。
+
+    v2 補**終端活接替** (succ_id, succ_stmt)（第二跳入帳）：A→B 有信號（A 的 status 變）、
+    B→C 第二跳時 A 的三元組一個 byte 都不動＝零信號，但 aperture 投給 draft 的活真相
+    （successor_statement）已從 B 換成 C。值取自 `realized_statements` 既有解析（與投影同一
+    函式輸出＝投什麼就 hash 什麼，不可能漂移；零新遍歷）。附帶收益：終端接替 C 的 statement
+    文字被改寫也有信號（draft 渲染的正是它）。活決策（無接替）succ 兩欄為 None＝單跳語義不變。
     """
-    items = sorted((r["id"], r["statement"], r.get("status"))
+    items = sorted((r["id"], r["statement"], r.get("status"),
+                    r.get("superseded_by"), r.get("successor_statement"))
                    for r in realized_statements(leaf, dindex))
     if not items:
         return ""
     h = hashlib.sha256()
-    for rid, stmt, status in items:
-        h.update(json.dumps({"id": rid, "stmt": stmt, "status": status},
+    for rid, stmt, status, succ_id, succ_stmt in items:
+        h.update(json.dumps({"id": rid, "stmt": stmt, "status": status,
+                             "succ_id": succ_id, "succ_stmt": succ_stmt},
                             ensure_ascii=False).encode("utf-8"))
         h.update(b"\0")
     return h.hexdigest()[:16]
@@ -266,34 +290,105 @@ def ancestor_brief_fingerprint(section: str, by_section: dict,
     return h.hexdigest()[:16]
 
 
+def ancestor_normative_fingerprint(section: str, by_section: dict,
+                                   concept_by_id: dict | None = None) -> str:
+    """祖先集 active `normative` 決策的指紋（`norm` 軸；不符 → `stale-norm`）。
+
+    aperture 沿祖先集把 active normative 決策投給 draft「落筆必須遵守」——投影輸入變了
+    （新增/改寫/退場一條祖先 ruling）而下游散文的既有指紋軸全不動＝上游改規矩、下游全 synced
+    的盲區，本軸關閉之。祖先集＝`ancestor_leaves`（路徑父鏈 ∪ governed-by 遞移閉包，與 aperture
+    投影**共用同一函式**＝投什麼就 hash 什麼）；條目篩選同 aperture（`kind == normative` 且
+    status ∈ active）。hash (祖先 section, id, statement) 排序後 canonical JSON——status 從
+    active 退場＝條目自集合消失→指紋變，不需把 status 值入 hash。自己節的決策已在 own 軸
+    （decisions.yaml 屬 source_hash），本軸只管祖先。無祖先 normative → 穩定空字串
+    （與 deps 無 realizes 同一慣例）。
+    """
+    if concept_by_id is None:
+        concept_by_id = _concept_by_id(by_section)
+    items: list = []
+    for anc, _is_governed in ancestor_leaves(section, by_section, concept_by_id):
+        for e in anc.decisions:
+            if e.get("kind") == "normative" and str(e.get("status")) in ACTIVE_DECISION_STATUSES:
+                items.append((anc.section, str(e.get("id") or ""), e.get("statement")))
+    if not items:
+        return ""
+    items.sort(key=lambda t: (t[0], t[1]))
+    h = hashlib.sha256()
+    for sec, did, stmt in items:
+        h.update(json.dumps({"section": sec, "id": did, "stmt": stmt},
+                            ensure_ascii=False).encode("utf-8"))
+        h.update(b"\0")
+    return h.hexdigest()[:16]
+
+
 def content_hash(path: Path) -> str | None:
-    """檔案內容的 sha256（前 16 碼）。不存在 → None。
+    """檔案內容的 sha256（前 16 碼，換行正規化後）。不存在 → None。
 
     刻意只看內容、不看 mtime——工作區可能在 Google Drive / OneDrive /
     Dropbox / 本機任一，各家同步都會擾動 mtime。
     """
     if not path.is_file():
         return None
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
+    return hashlib.sha256(_normalize_newlines(path.read_bytes())).hexdigest()[:16]
 
 
-def style_fingerprint(layout) -> str:
-    """專案級寫作 doctrine 指紋＝`writing-guide.md` ＋ `glossary.yaml` 的內容雜湊。
+def _config_purpose(layout) -> str:
+    """`config.purpose` 字串（style 面 purpose 子軸的輸入）；缺檔/缺鍵/空＝""（穩定空值）。
 
-    這兩份是「跨節風格／術語一致性」的載體（draft/edit/factcheck 的 aperture 注入、全文件共用一份），
-    但歷史上**不在**任何節的 source_hash——改它們，節的 own/anc/deps/prose 全不動＝改寫作風格／改術語
-    對 staleness 完全隱形（風格換了、引擎不提示哪些節要重套，工作清單只能靠人腦）。這正是 anc 軸的同類
-    機械漂移（祖先 brief 也是「怎麼寫」的指導、卻**有**入指紋）——對稱地，doctrine 變了就該讓吃它的節
-    轉 stale。本指紋讓 doctrine 變更可被偵測：指紋變 → 吃它的節轉 **stale-style**（路由到 **edit** 就地
-    重套風格／對齊術語，**不**像 stale-own 那樣回 draft 重生散文＝不毀已寫內容）。
-
-    缺檔以空 bytes 入雜湊（缺也是一種穩定狀態）；回傳前 16 碼，與其他指紋同寬。
+    直接輕量讀 yaml、不走 load_config（避免重複吐 unknown-key 警告）；壞 config 由 bootstrap
+    的 load_config fail-loud 擋在所有指令之前，這裡防禦性回空字串即可。
     """
-    h = hashlib.sha256()
-    for path in (layout.writing_guide, layout.planning_home / "glossary.yaml"):
-        h.update(path.read_bytes() if path.is_file() else b"")
-        h.update(b"\0")
-    return h.hexdigest()[:16]
+    from dspx.config import CONFIG_FILE_NAME
+    path = layout.planning_home / CONFIG_FILE_NAME
+    if not path.is_file():
+        return ""
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    return str(data.get("purpose") or "")
+
+
+def style_fingerprint(layout) -> dict:
+    """專案級寫作 doctrine 指紋（style 面）＝三子軸 mapping `{guide, gloss, purpose}`。
+
+    doctrine 載體（writing-guide／glossary／config.purpose）注入 draft/edit/factcheck/develop 的
+    aperture、承載跨節一致性，卻不在任何節的 own/anc/deps/prose——沒有本面，純 doctrine 變更
+    對 staleness 完全隱形。status 標籤仍統一 `stale-style`（三者路由 edit、ack 語義、嚴重度相同），
+    拆子軸的收益＝噪音收斂＋診斷指名哪個載體動了：
+    - `guide`＝writing-guide.md 全檔 bytes（換行正規化後；整檔皆為投影內容，全檔 hash 正確）。
+    - `gloss`＝glossary 各 term 的**投影索引欄位**（GLOSSARY_INDEX_FIELDS，與 aperture 注入
+      白名單同源共用），依 id 排序後 canonical JSON。definition/english 只供下鑽、不注入索引
+      → 改它們不構成散文義務、**零擾動**；純排序/註解變動亦然。glossary 壞到不可解析 →
+      fallback 全檔（正規化）bytes（信號保住、不因壞檔靜默；壞檔的吵鬧由 loader domain error 負責）。
+    - `purpose`＝config.purpose 字串（缺/空＝穩定空值）。purpose 投給 develop/draft 當北極星、
+      與 doctrine 同屬專案級寫作指導，同家族併入 style 面、不值得獨立標籤。
+    各子軸回前 16 碼；帳本 `style` 欄存本 mapping（fingerprint v2 格式的一部分）。
+    """
+    from dspx.glossary import GLOSSARY_INDEX_FIELDS, glossary_path, load_glossary
+
+    guide_h = hashlib.sha256()
+    gp = layout.writing_guide
+    guide_h.update(_normalize_newlines(gp.read_bytes()) if gp.is_file() else b"")
+
+    gloss_h = hashlib.sha256()
+    try:
+        terms = load_glossary(layout)
+        index = sorted(
+            ({k: t.get(k) for k in GLOSSARY_INDEX_FIELDS if k in t} for t in terms),
+            key=lambda t: str(t.get("id")))
+        gloss_h.update(json.dumps(index, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+    except ModelError:
+        glp = glossary_path(layout)
+        gloss_h.update(_normalize_newlines(glp.read_bytes()) if glp.is_file() else b"")
+
+    purpose_h = hashlib.sha256(_config_purpose(layout).encode("utf-8"))
+
+    return {"guide": guide_h.hexdigest()[:16],
+            "gloss": gloss_h.hexdigest()[:16],
+            "purpose": purpose_h.hexdigest()[:16]}
 
 
 @dataclass
@@ -355,12 +450,12 @@ class Leaf:
         return files
 
     def source_hash(self) -> str:
-        """投影輸入的彙總內容指紋（staleness 用）。"""
+        """投影輸入的彙總內容指紋（staleness 用）。換行正規化後 hash（CRLF 免疫，見 D1）。"""
         h = hashlib.sha256()
         for f in self.source_files():
             h.update(f.relative_to(self.dir).as_posix().encode("utf-8"))
             h.update(b"\0")
-            h.update(f.read_bytes())
+            h.update(_normalize_newlines(f.read_bytes()))
             h.update(b"\0")
         return h.hexdigest()[:16]
 

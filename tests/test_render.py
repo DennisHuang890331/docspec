@@ -44,11 +44,12 @@ def test_ledger_lives_in_sidecar_not_frontmatter(make_project, write_leaf, monke
     assert "g/intro" in read_ledger(Layout(home), "g")
 
 
-def test_ledger_migrates_from_old_frontmatter(make_project, write_leaf, monkeypatch):
-    """舊交付物 frontmatter 仍帶 sections、無 sidecar → read_ledger fallback 讀得到；
-    一次 render 後遷出（sidecar 建立、frontmatter sections 消失）。"""
+def test_ledger_migrates_from_old_frontmatter(make_project, write_leaf, monkeypatch, capsys):
+    """更舊格式（sections 在 frontmatter、無 sidecar）＝fingerprint v1：read_ledger fallback
+    仍讀得到；常規 render 拒跑（v1 值與 v2 算法不可比）、`--rebaseline` 一次遷移
+    （sidecar 建立＋版本鍵、frontmatter sections 消失、散文保留）。"""
     from dspx.layout import Layout
-    from dspx.render import read_ledger
+    from dspx.render import read_ledger, read_ledger_version
     home = _setup(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
     latest = _latest(home)
@@ -60,10 +61,17 @@ def test_ledger_migrates_from_old_frontmatter(make_project, write_leaf, monkeypa
         encoding="utf-8")
     assert not Layout(home).docs_ledger("g").is_file()
     assert read_ledger(Layout(home), "g").get("g/intro", {}).get("prose") == "deadbeef"  # fallback
-    render_cmd.run(["g"])                       # 遷移
+    assert read_ledger_version(Layout(home), "g") == 1
+    capsys.readouterr()
+    assert render_cmd.run(["g"]) != 0           # v1 帳本：常規 render 拒跑、零改動
+    assert "fingerprint v1" in capsys.readouterr().err
+    assert not Layout(home).docs_ledger("g").is_file()
+    assert render_cmd.run(["g", "--rebaseline"]) == 0   # 顯式一次遷移
     assert Layout(home).docs_ledger("g").is_file()
+    assert read_ledger_version(Layout(home), "g") == 2
     meta, _ = parse_frontmatter(latest.read_text("utf-8"))
     assert "sections" not in meta               # frontmatter 已遷出
+    assert "舊文。" in latest.read_text("utf-8")  # 散文原樣保留
 
 
 def test_render_builds_skeleton_in_order(make_project, write_leaf, monkeypatch):
@@ -306,11 +314,16 @@ def test_render_output_locked_byte_for_byte(make_project, write_leaf, monkeypatc
         "<!-- dspx:section g/annex-b -->\n## 附錄B\n\n"
     )
     assert latest.read_text(encoding="utf-8") == golden          # 全文逐 byte
+    # 指紋 golden＝fingerprint v2 算法（換行正規化＋deps 二跳＋norm 軸＋style 三子軸）實跑值——
+    # own 經 CRLF 正規化後**跨 OS 位元一致**（同 fixture 在 Windows/Linux 得同值）；
+    # prose 算法未變（與 v1 同值）。v1 golden 已隨算法版本跳點汰換（fingerprint-v2 change）。
+    _style = {"guide": "e3b0c44298fc1c14", "gloss": "4f53cda18c2baa0c",
+              "purpose": "e3b0c44298fc1c14"}
     golden_ledger = {
-        "g/foreword": {"own": "37c6c80a45b30a04", "anc": "e3b0c44298fc1c14", "deps": "",
-                       "style": "96a296d224f285c6", "prose": "70bd4b9c2c6996e3"},
-        "g/methods/survey": {"own": "9c1efe93a99fb846", "anc": "e3b0c44298fc1c14", "deps": "",
-                             "style": "96a296d224f285c6", "prose": "3caa63c3965f8115"},
+        "g/foreword": {"own": "9221a22f795c420d", "anc": "e3b0c44298fc1c14", "deps": "",
+                       "norm": "", "style": _style, "prose": "70bd4b9c2c6996e3"},
+        "g/methods/survey": {"own": "5315339037ab6523", "anc": "e3b0c44298fc1c14", "deps": "",
+                             "norm": "", "style": _style, "prose": "3caa63c3965f8115"},
     }
     assert read_ledger(Layout(home), "g") == golden_ledger       # 各節指紋逐 byte
 

@@ -82,11 +82,12 @@ def _emit_journal(pandoc: str, template: Path, title: str, body_md: str,
     with tempfile.TemporaryDirectory(prefix="dspx_journal_") as td:
         build = Path(td)
         shutil.copy2(template, build / "template.tex")
-        (build / "doc.md").write_text(body_md, encoding="utf-8")
+        (build / "doc.md").write_text(body_md, encoding="utf-8", newline="\n")
         # slot metadata（除 body 外）寫成 YAML metadata file 餵 pandoc（list/people 才表達得了）。
         meta = {k: v for k, v in built.items() if k != "body"}
         (build / "meta.yaml").write_text(
-            yaml.safe_dump(meta, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            yaml.safe_dump(meta, allow_unicode=True, sort_keys=False), encoding="utf-8",
+            newline="\n")
         # 兩欄期刊 class 拒 longtable → 用共用 Lua filter 把表格改寫成 tabular（table* 跨欄）。
         lua = paths.bundled_journal_filter()
         lua_args: list[str] = []

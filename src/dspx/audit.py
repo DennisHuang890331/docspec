@@ -72,7 +72,7 @@ class AuditStore:
         body = yaml.safe_dump({"findings": self.findings}, allow_unicode=True,
                               sort_keys=False, width=10000)
         header = "# audit findings (maintained by the docspec audit command; do not edit by hand). append-only adversarial log.\n"
-        self.path.write_text(header + body, encoding="utf-8")
+        self.path.write_text(header + body, encoding="utf-8", newline="\n")
 
     def by_id(self, fid: str) -> dict | None:
         for f in self.findings:

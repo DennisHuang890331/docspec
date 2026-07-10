@@ -221,7 +221,7 @@ def run(argv: list[str]) -> int:
         "# 本節歷史 entries：死決策（kind normative/rationale，散文在 history.md）"
         "＋整節退場（kind section，細節在 archive 資料夾）。\n"
         + yaml.safe_dump({"entries": entries}, allow_unicode=True, sort_keys=False),
-        encoding="utf-8")
+        encoding="utf-8", newline="\n")
 
     # 整包搬進扁平封存區（可回復、引擎隱形）
     archive_root.mkdir(parents=True, exist_ok=True)

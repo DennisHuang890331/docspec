@@ -82,6 +82,9 @@ workflow:
         - >-
           Clear a staleness verdict with the matching verb — NEVER fabricate an edit (nor a
           perturb-render-revert dance) to force a re-stamp. Prose changed → plain docspec render.
+          stale-norm (an ancestor's active normative ruling changed) → re-check the prose
+          sentence by sentence against the new ruling first: conforming with no change needed →
+          render --ack <section>; violating → rewrite (escalate via docspec stale / redraft).
           stale-inherited / stale-style with prose legitimately unchanged → render --ack <section>
           (refused on stale-own/upstream). stale-own / stale-upstream where the source change is
           structural wiring / metadata ONLY (realizes/governed-by re-wiring, order changes,
@@ -117,6 +120,7 @@ workflow:
     - release touches the format layer only (template-pack params), never content — content's one source is the frozen snapshot md (export byte-lock guards it); a layout problem fixable only by changing content → raise an audit finding upstream, the human re-edits → re-publishes → re-releases; the agent never self-fixes content.
     - Completeness gates sit at advancement (docspec ready / publish), not at write time — half-formed work is free inside the loop, it just stays "developing".
     - Semantic judgment → audit (factcheck), never an engine gate (audit itself can hallucinate).
+    - Pin line endings at the repo level — a .gitattributes with `*.md` / `*.yaml` / `*.yml` as `text eol=lf` (docspec init scaffolds it for new projects; EXISTING projects should add it themselves). The engine normalizes CRLF when fingerprinting and writes LF, but the repo pin is the third defense layer against git autocrlf rewriting checkouts.
     - corpus/_archive/ = retired sections (decision history): engine-invisible in active work (status/check/draft never see it); query with docspec retired, drill with docspec show <id>. It is history — never touch it in current work (unlocked, by convention, like OpenSpec's changes/archive).
   # Migration onboarding: how an EXISTING project (pre-docspec published versions + an existing
   # version history) enters docspec. The recipe lives here and is projected by `docspec guide` —

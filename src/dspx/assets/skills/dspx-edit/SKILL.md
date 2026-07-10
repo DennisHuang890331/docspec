@@ -127,11 +127,35 @@ perturb-render-revert dance (change a character, render, revert, render): its en
 byte-identical to an honest `--ack-own`, but it leaves zero trace and launders the verdict.
 
 ---
+## Ruling re-check (the `stale-norm` job)
+When `docspec status` reports a section as **`stale-norm`**, its own `concept`/`decisions`/
+`material` are unchanged — an **ancestor's active `normative` ruling** changed (added, rewritten,
+or retired from the active set), on the path-parent chain or a cross-tree `governed-by` parent.
+The aperture projects those rulings to `draft` as "obey when writing", so the prose on record may
+now violate (or still render) a rule that moved. This is more serious than `stale-inherited`
+(a rule, not a narrative frame) but still below `stale-own`/`stale-upstream` — the common outcome
+is "the prose is still legal, acknowledge it":
+
+1. `docspec instructions edit <section> --json` — existing prose plus the parent chain; read the
+   changed ancestor's `decisions.yaml` normative entries.
+2. **Re-check the prose sentence by sentence against the new/changed/retired ruling.** Content
+   stays byte-for-byte unless a sentence actually violates the ruling; if the fix needs new facts
+   or a re-derivation, that's `draft`'s job — escalate with `docspec stale <section> --reason`
+   (or `docspec redraft <article> --reason`), don't invent.
+3. Re-stamp by the path that matches what you did, exactly as for `stale-inherited`:
+   - **prose changed** → `docspec render <article>` re-stamps it.
+   - **prose already conforms to the changed ruling** (no change needed) →
+     `docspec render <article> --ack <section>` (re-stamps `norm` together with `anc`/`style`;
+     refused if the section is actually `stale-own`/`stale-upstream`).
+
+---
 ## Restyle (the `stale-style` job)
 When `docspec status` reports a section as **`stale-style`**, nothing in its `concept`/`decisions`/
 `material`/ancestors moved — the **writing doctrine itself** did: the shared `writing-guide.md`
-(tone/structure/register conventions) or `glossary.yaml` (canonical terms) was rewritten since this
-section's prose was last rendered. Because the doctrine is document-wide, a doctrine change re-stales
+(tone/structure/register conventions), `glossary.yaml` (canonical terms — only the projected index
+fields: canonical/bucket/code/aliases_forbidden; a definition-only edit never restales), or
+`config.purpose` (the project north star) was rewritten since this
+section's prose was last rendered — `docspec status` names which carrier moved. Because the doctrine is document-wide, a doctrine change re-stales
 **every** written section at once — that list **is** your worklist (the engine cannot supply it any
 other way; the doctrine is not in any section's source hash, so this `stale-style` flag is the only
 signal you get that the deliverable still carries the old style). Same discipline as `stale-inherited`:

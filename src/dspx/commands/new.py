@@ -120,7 +120,7 @@ def run(argv: list[str]) -> int:
         body = artifact.template.read_text(encoding="utf-8")
         for key, val in fills.items():
             body = body.replace("{" + key + "}", val)
-        (target / artifact.generates).write_text(body, encoding="utf-8")
+        (target / artifact.generates).write_text(body, encoding="utf-8", newline="\n")
         created.append(artifact.generates)
 
     print(f"created section \"{section}\" (develop stage): {target}")

@@ -48,4 +48,4 @@ def render_frontmatter(data: dict, body: str) -> str:
 
 
 def write_frontmatter(path: Path, data: dict, body: str) -> None:
-    path.write_text(render_frontmatter(data, body), encoding="utf-8")
+    path.write_text(render_frontmatter(data, body), encoding="utf-8", newline="\n")

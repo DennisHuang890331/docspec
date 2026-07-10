@@ -20,10 +20,15 @@ from dspx.layout import LEDGER_DIR_NAME, Layout
 from dspx.model import (
     Leaf,
     ancestor_brief_fingerprint,
+    ancestor_normative_fingerprint,
     decision_index,
     deps_fingerprint,
     style_fingerprint,
 )
+
+# 指紋帳本的算法/格式版本（頂層 `fingerprint:` 鍵）。v2＝本版四項算法（換行正規化、deps 二跳、
+# style 三子軸、norm 新軸）；無此鍵＝v1（不可比、需一次 `--rebaseline` 遷移，見 read_ledger_version）。
+LEDGER_FINGERPRINT_VERSION = 2
 
 
 def read_ledger(layout: Layout, article: str) -> dict:
@@ -70,16 +75,54 @@ def write_ledger(layout: Layout, article: str, hashes: dict,
     """把指紋帳本寫進隱藏 sidecar（機器簿記，與人讀的 `_latest.md` 分離）。
 
     `groups_fp`＝該文章 group.yaml 骨架面指紋（title/order；D4）——status 比對它偵測
-    「改了 group.yaml 但沒人提醒重新 render」的盲區。"""
+    「改了 group.yaml 但沒人提醒重新 render」的盲區。
+    頂層一律寫 `fingerprint: <版本>`（v2 起）：算法一改、舊值與新算法現值不可比，版本鍵讓
+    讀端確定性判別、不靠啟發式（見 read_ledger_version）。"""
     ledger = layout.docs_ledger(article)
     ledger.parent.mkdir(parents=True, exist_ok=True)
-    data: dict = {"article": article}
+    data: dict = {"article": article, "fingerprint": LEDGER_FINGERPRINT_VERSION}
     if groups_fp is not None:
         data["groups"] = groups_fp
     data["sections"] = hashes
     ledger.write_text(
         yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
-        encoding="utf-8")
+        encoding="utf-8", newline="\n")
+
+
+def read_ledger_version(layout: Layout, article: str) -> int | None:
+    """指紋帳本的算法/格式版本。
+
+    None＝無帳本（全新文章，render 直接以現行版本入帳）；1＝v1（sidecar 無頂層 `fingerprint`
+    鍵，或更舊的 frontmatter-sections 格式＝本 change 前的算法）；≥2＝頂層版本鍵的值。
+    壞檔（不可解析）→ None——壞帳本由 render 的隔離閘／read_ledger 的警告另行負責，這裡不重複。
+    v1 的舊值與 v2 算法現值**不可比**：status 顯 needs-migration、render 拒跑，
+    `docspec render <article> --rebaseline` 一次遷移。"""
+    for ledger in (layout.docs_ledger(article), layout.docs_ledger_legacy(article)):
+        if not ledger.is_file():
+            continue
+        try:
+            data = yaml.safe_load(ledger.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            return None
+        if not isinstance(data, dict):
+            return 1
+        fp = data.get("fingerprint")
+        return fp if isinstance(fp, int) and not isinstance(fp, bool) else 1
+    latest = layout.docs_latest(article)
+    if latest.is_file():
+        try:
+            meta, _ = parse_frontmatter(latest.read_text(encoding="utf-8"))
+        except FrontmatterError:
+            return None
+        if isinstance(meta.get("sections"), dict):
+            return 1        # 更舊格式（frontmatter 內嵌 sections）＝v1
+    return None
+
+
+def ledger_needs_migration(layout: Layout, article: str) -> bool:
+    """帳本存在且版本低於現行算法版本＝需一次顯式 `--rebaseline` 遷移。"""
+    version = read_ledger_version(layout, article)
+    return version is not None and version < LEDGER_FINGERPRINT_VERSION
 
 
 def read_ledger_groups(layout: Layout, article: str) -> str | None:
@@ -130,7 +173,7 @@ def append_verdicts(layout: Layout, article: str, entries: list[dict]) -> None:
         return
     path = verdicts_path(layout, article)
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as fh:
+    with path.open("a", encoding="utf-8", newline="\n") as fh:
         for e in entries:
             fh.write(yaml.safe_dump([e], allow_unicode=True, sort_keys=False))
 
@@ -359,7 +402,8 @@ def parse_section_bodies(text: str, on_discard=None) -> dict[str, str]:
 def render_article(layout: Layout, leaves: list[Leaf], article: str,
                    ack_sections: set[str] | None = None,
                    ack_own_sections: set[str] | None = None,
-                   reason: str = "") -> dict:
+                   reason: str = "",
+                   rebaseline: bool = False) -> dict:
     """同步 docs/<article>/_latest.md 骨架；保留已寫散文；回報統計。
 
     `ack_sections`（F5）：作者確認這些節已對齊上游（散文依設計合理不需改）→ 重蓋其
@@ -373,6 +417,10 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     （被 stale-own 遮蔽的 stale-inherited/stale-style 自然浮出），並清掉 `redraft` 旗標。
     與 `ack_sections` 正交可組合（同節雙旗標＝全四軸蓋現值；ack 守門在 ack-own 先蓋後自然通過）。
     無帳本記錄（未撰寫）→ 跳過並回報於 `ack_own_skipped`。
+
+    `rebaseline`：顯式重建基準——**忽略舊帳本**、每個有散文的節以現行算法全軸重算（散文與
+    `_latest.md` 內容原樣保留、只重算指紋）。v1→v2 帳本遷移、deliverable-missing、壞帳本三情境
+    共用此語義；遷移當下未處理的 stale 信號（含 redraft 旗標）被吸收成新基準——訊息由指令層明講。
 
     `reason`：本輪裁決理由——執行成功的 ack/ack-own 一律寫入 append-only verdicts journal
     （`--ack` 的 reason 選配可空；強制性由指令層把關）。被拒絕/跳過的裁決不留 journal。
@@ -396,7 +444,9 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
             on_discard=lambda loc, block: discarded.append((loc, block)))
     # 上次帳本：F2——指紋綁「散文上次基於什麼源料寫」。散文未重寫時沿用舊源指紋，
     # 不被「現在源料」抹掉 stale-own/stale-upstream 信號（sidecar 優先、舊 frontmatter fallback）。
-    prior_ledger = read_ledger(layout, article)
+    # --rebaseline＝顯式重置基準：忽略舊帳本（v1 值與 v2 算法不可比；或作者明示重建），
+    # 每節走 _current() 全軸重算——吸收警語由指令層輸出。
+    prior_ledger = {} if rebaseline else read_ledger(layout, article)
     # 專案級寫作 doctrine（writing-guide＋glossary）指紋：全文件共用一份，整輪 render 算一次。
     # 散文未重寫時沿用舊值（保住 stale-style 信號）；散文重寫/首次撰寫才記現值（見下方 _current）。
     style_now = style_fingerprint(layout)
@@ -453,17 +503,20 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
                     "own": lf.source_hash(),
                     "anc": ancestor_brief_fingerprint(lf.section, by_section),
                     "deps": deps_fingerprint(lf, dindex),
+                    "norm": ancestor_normative_fingerprint(lf.section, by_section),
                     "style": style_now,
                     "prose": prose_now,
                 }
 
             def _reuse_or_current() -> dict:
                 if isinstance(prev, dict) and prev.get("prose") == prose_now:
-                    # 散文未重寫：own/anc/deps/style 全沿用舊值＝保住既有 stale 信號（含 stale-style）。
-                    # 例外＝舊帳本沒有 style 欄（本軸上線前寫的）：以現值補基準（遷移用，視既有內容為
-                    # 「當前 doctrine 已對齊」，往後 doctrine 變更才會把它標 stale-style）。
+                    # 散文未重寫：own/anc/deps/norm/style 全沿用舊值＝保住既有 stale 信號
+                    # （含 stale-norm/stale-style）。style 缺欄（軸上線前的帳本）以現值補基準
+                    # （視既有內容為「當前 doctrine 已對齊」）；norm 缺欄不補——v1→v2 由版本閘
+                    # ＋rebaseline 統一遷移，v2 帳本必有 norm，缺欄（手改）只是無信號、不假造基準。
                     rec = {"own": prev.get("own"), "anc": prev.get("anc"),
                            "deps": prev.get("deps"),
+                           "norm": prev.get("norm"),
                            "style": prev.get("style") or style_now,
                            "prose": prose_now}
                     # 標髒旗標（stale/redraft 動詞）隨沿用分支攜帶＝信號跨（骨架）render 存活；
@@ -483,16 +536,17 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
             ack_own_hit = lf.section in ack_own_sections and isinstance(prev, dict)
 
             if lf.section in ack_sections:
-                # F5：作者確認此節已對齊上游。只有當 own/deps 與帳本相符（即「僅 anc 變了」＝
-                # stale-inherited、非 stale-own/upstream）才准重蓋章；否則拒絕、保住 re-draft 信號。
-                # 同節同給 --ack-own：own/deps 先被 ack-own 蓋至現值 → 守門自然通過（全四軸蓋章、
+                # F5：作者確認此節已對齊上游。只有當 own/deps 與帳本相符（即「僅 anc/norm/style
+                # 變了」＝stale-inherited/norm/style、非 stale-own/upstream）才准重蓋章；否則拒絕、
+                # 保住 re-draft 信號。重蓋集合＝anc＋norm＋style（規矩變了、散文合法不需變＝ack 語義）。
+                # 同節同給 --ack-own：own/deps 先被 ack-own 蓋至現值 → 守門自然通過（全軸蓋章、
                 # 正交可組合）；--ack 單獨用於 stale-own 的 refusal 語義逐字不變。
                 cur = _current()
                 prev_own = prev.get("own") if isinstance(prev, dict) else None
                 prev_deps = prev.get("deps") if isinstance(prev, dict) else None
                 if ack_own_hit or (
                         prev is not None and prev_own == cur["own"] and prev_deps == cur["deps"]):
-                    rec = cur                      # 重蓋 anc 至現值 → 清 stale-inherited
+                    rec = cur                      # 重蓋 anc/norm/style 至現值 → 清 stale-inherited/norm/style
                     if ack_own_hit:
                         ack_owned.append(lf.section)
                         verdicts.append(_verdict("ack-own", rec))
@@ -502,12 +556,13 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
                     rec = _reuse_or_current()      # own/deps 真的變了＝需重寫散文，ack 不吞
                     ack_refused.append(lf.section)
             elif ack_own_hit:
-                # --ack-own 語義：own+deps 蓋現值、anc/style 沿用舊帳本值（被 stale-own 遮蔽的
-                # stale-inherited/stale-style 自然浮出——precedence 本就只顯最重的）；清 redraft 旗標
-                # （作者的顯式反裁決）。
+                # --ack-own 語義：own+deps 蓋現值、anc/norm/style 沿用舊帳本值（被 stale-own 遮蔽的
+                # stale-norm/stale-inherited/stale-style 自然浮出——precedence 本就只顯最重的）；
+                # 清 redraft 旗標（作者的顯式反裁決）。
                 cur = _current()
                 rec = {"own": cur["own"], "anc": prev.get("anc"),
                        "deps": cur["deps"],
+                       "norm": prev.get("norm"),
                        "style": prev.get("style") or style_now,
                        "prose": prose_now}
                 ack_owned.append(lf.section)
@@ -572,7 +627,7 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
                     "and was DISCARDED by this render — hand-edits there are never preserved; "
                     "move the content into a section's own slot (or a corpus file).\n")
 
-    latest.write_text(render_frontmatter(meta, "\n".join(out)), encoding="utf-8")
+    latest.write_text(render_frontmatter(meta, "\n".join(out)), encoding="utf-8", newline="\n")
     # groups 指紋一併入帳（D4）：render 完成＝骨架與 group.yaml 對齊，蓋現值。
     write_ledger(layout, article, hashes, groups_fp=groups_fingerprint(layout, article))
     # 執行成功的裁決留痕（append-only journal）；被拒/跳過的不留。render 對 journal 只 append、

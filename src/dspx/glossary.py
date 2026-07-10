@@ -15,6 +15,12 @@ from dspx.layout import Layout
 
 BUCKETS = ("module", "standard", "protocol")
 
+# glossary 的**投影索引欄位**白名單＝aperture 注入寫作 agent 的精瘦索引（definition/english
+# 是下鑽欄、不注入）。單一來源：aperture（投影）與 model.style_fingerprint 的 gloss 子軸（入帳）
+# 共用本 tuple——「投給 agent 的術語義務」與「入帳的術語義務」不可能漂移；若未來 definition
+# 入投影，這裡擴欄會強迫兩處同步。
+GLOSSARY_INDEX_FIELDS = ("id", "canonical", "bucket", "code", "aliases_forbidden")
+
 
 def glossary_path(layout: Layout) -> Path:
     return layout.planning_home / "glossary.yaml"

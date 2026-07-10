@@ -40,7 +40,7 @@ def _load_entries(path) -> list[dict]:
 
 def _dump_entries(path, entries: list[dict], header: str) -> None:
     block = yaml.safe_dump({"entries": entries}, allow_unicode=True, sort_keys=False)
-    path.write_text(header + block, encoding="utf-8")
+    path.write_text(header + block, encoding="utf-8", newline="\n")
 
 
 def _md_has_section(existing: str, anchor_id: str) -> bool:
@@ -62,7 +62,7 @@ def append_history_md(section_dir: Path, anchor_id: str, heading: str, body: str
     if not existing.strip():
         existing = _HISTORY_MD_HEADER
     block = f"\n## {heading}\n{body}\n" if body else f"\n## {heading}\n"
-    path.write_text(existing.rstrip() + "\n" + block, encoding="utf-8")
+    path.write_text(existing.rstrip() + "\n" + block, encoding="utf-8", newline="\n")
 
 
 def _prose_body(e: dict) -> str:

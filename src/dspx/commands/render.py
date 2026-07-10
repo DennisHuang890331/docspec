@@ -6,7 +6,7 @@ import argparse
 import sys
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.render import read_ledger, render_article
+from dspx.render import ledger_needs_migration, read_ledger, render_article
 
 NAME = "render"
 HELP = "sync leaf section prose skeleton into docs/<article>/_latest.md (deterministic, preserves written prose)"
@@ -51,10 +51,11 @@ def run(argv: list[str]) -> int:
     parser.add_argument("article", help="name of the article to assemble")
     parser.add_argument(
         "--ack", action="append", default=[], metavar="SECTION", dest="ack",
-        help="acknowledge a stale-inherited / stale-style SECTION as aligned (prose needs no "
-             "change — already matches the moved ancestor brief or the updated writing-guide/"
-             "glossary) and re-stamp its ancestor + style fingerprints; refused if the section is "
-             "actually stale-own/upstream (rewrite its prose instead). Repeatable.")
+        help="acknowledge a stale-inherited / stale-norm / stale-style SECTION as aligned (prose "
+             "needs no change — already matches the moved ancestor brief, the changed ancestor "
+             "ruling, or the updated writing-guide/glossary/purpose) and re-stamp its ancestor + "
+             "norm + style fingerprints; refused if the section is actually stale-own/upstream "
+             "(rewrite its prose instead). Repeatable.")
     parser.add_argument(
         "--ack-own", action="append", default=[], metavar="SECTION", dest="ack_own",
         help="acknowledge a stale-own / stale-upstream SECTION whose prose legitimately needs no "
@@ -70,9 +71,11 @@ def run(argv: list[str]) -> int:
              "optional with --ack.")
     parser.add_argument(
         "--rebaseline", action="store_true",
-        help="explicit rebuild: I know the deliverable file is gone (or the ledger is corrupt) — "
-             "regenerate the skeleton and reset the fingerprint baseline. Without this flag, "
-             "render refuses to overwrite the ledger in those states.")
+        help="explicit rebuild: I know the deliverable file is gone, the ledger is corrupt, or "
+             "the ledger is fingerprint v1 (pre-v2 algorithms) — regenerate the skeleton, "
+             "recompute every fingerprint axis with the current algorithms (prose is preserved) "
+             "and reset the baseline. Absorbs any pending stale signals. Without this flag, "
+             "render refuses to touch the ledger in those states.")
     args = parser.parse_args(argv)
 
     # --ack-own 強制 --reason（裁決入 journal；改變 own/deps 裁決＝事後最需考古的一類）。
@@ -98,6 +101,21 @@ def run(argv: list[str]) -> int:
     if rc is not None:
         return rc
 
+    # 帳本版本閘（fingerprint v2 D7）：v1 舊值與 v2 算法現值不可比（四項算法全變）——逐軸
+    # 比對必然全紅＝假 stale 風暴；靜默以新算法重蓋＝吸收待處理信號。故常規 render 拒跑
+    # （非零退出、帳本與交付物零改動）、指示顯式一次遷移。
+    if ledger_needs_migration(layout, args.article) and not args.rebaseline:
+        sys.stderr.write(
+            f"docspec: the fingerprint ledger of \"{args.article}\" is fingerprint v1 "
+            "(written by pre-v2 algorithms) — its values are not comparable with the current "
+            "algorithms, so per-axis staleness would be a false-stale storm.\n"
+            "  refusing to render (nothing was changed). Migrate once with "
+            f"`docspec render {args.article} --rebaseline`: every axis is recomputed with the "
+            "v2 algorithms and the prose is preserved. NOTE: any stale signals pending at "
+            "migration time are absorbed into the new baseline — review `docspec status` "
+            "concerns first if that matters.\n")
+        return 1
+
     # 存在性互驗（D2）：帳本非空 ∧ 交付檔缺 ＝「曾經有交付物、現在不見了」——拒生空骨架
     # 蓋帳本（帳本零改動）；--rebaseline 才重生骨架並重置基準。
     latest = layout.docs_latest(args.article)
@@ -112,8 +130,16 @@ def run(argv: list[str]) -> int:
             "the baseline.\n")
         return 1
 
+    if args.rebaseline:
+        # 吸收警語（D7 誠實代價）：rebaseline 把遷移/重建當下未處理的 stale 信號吸收成新基準。
+        sys.stderr.write(
+            "docspec: --rebaseline — recomputing every fingerprint axis with the current "
+            "algorithms; prose is preserved, but any pending stale signals (and redraft flags) "
+            "are absorbed into the new baseline.\n")
+
     result = render_article(layout, leaves, args.article, ack_sections=set(args.ack),
-                            ack_own_sections=set(args.ack_own), reason=args.reason or "")
+                            ack_own_sections=set(args.ack_own), reason=args.reason or "",
+                            rebaseline=args.rebaseline)
     total = len(result["sections"])
     print(f"synced \"{args.article}\" skeleton -> {result['written_path']}")
     print(f"  {total} section(s), of which {result['drafted']} have prose and "
