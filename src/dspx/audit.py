@@ -177,7 +177,9 @@ def validate_finding(f: dict, faces: tuple[str, ...]) -> list[str]:
         errs.append(f"finding {f.get('id')}: severity \"{f.get('severity')}\" not in {SEVERITIES}")
     if f.get("status") not in STATUSES:
         errs.append(f"finding {f.get('id')}: status \"{f.get('status')}\" not in {STATUSES}")
-    if not f.get("finding"):
+    # 晉升指標（promoted-to）collapse 後全文搬走，缺 finding 合法（搬家不複製）；
+    # 一般 finding 仍必須帶內容。
+    if not f.get("finding") and not f.get("promoted-to"):
         errs.append(f"finding {f.get('id')}: missing finding content")
     if not f.get("targets"):
         errs.append(f"finding {f.get('id')}: missing targets (the list of sections it touches)")

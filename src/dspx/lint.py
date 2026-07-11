@@ -25,6 +25,11 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   Ve2 非標準 markdown（@import）  WARN  ← MPE 指令不會在 docx/PDF 渲染
   Ve3 非 backend-neutral 圖記法     WARN  ← ```mermaid（不渲染）或 raw `{=latex}`/`{=tex}`（TikZ）
                                           ＝非 backend-neutral；改用嵌入式 drawio 圖片
+  Vr1 roadmap per-doc entry 過多（>7）  WARN  ← 在檔全是待辦（無 status 了）、別讓 backlog 變傾倒場
+  Vr2 promoted entry 仍帶實質內容        WARN  ← 含 promoted-to 卻超出 id/title/promoted-to ＝搬家沒搬乾淨
+  Vr3 roadmap↔audit 雙帳鏡像            WARN  ← entry.what 散文引用一條仍全文開放的 finding id ＝該晉升搬家、非複製
+  Va1 promoted finding 仍帶全文          WARN  ← 含 promoted-to 卻 finding 欄仍有實質內容 ＝搬家沒搬乾淨
+  Va2 finding 散文殘留行號錨點           WARN  ← `finding` 文字內 `L###`/`L###/###` 形態 ＝ render 後座標會漂
   V6（散文滲入 docs 偵測）→ 後補。
 
   export-safety（Ve）＝把「匯出時才炸的機械問題」前移成 lint 事前驗證：交付物潔淨＝
@@ -553,6 +558,7 @@ def run_lint(layout: Layout, leaves: list[Leaf], schema: Schema) -> list[Finding
     findings.extend(_lint_orphan_assets(layout, leaves))
     findings.extend(_lint_freeze(layout))
     findings.extend(_lint_roadmap(layout, leaves))
+    findings.extend(_lint_audit_findings(layout, leaves))
     return findings
 
 
@@ -664,54 +670,94 @@ def _bare_token(token: str, body: str) -> bool:
     return re.search(r"(?<![A-Za-z0-9])" + re.escape(token) + r"(?![A-Za-z0-9])", body) is not None
 
 
-_ROADMAP_OPEN_MAX = 7  # per-doc 開啟項上限：超過＝backlog 變筆記傾倒場（軟提醒）
+_ROADMAP_OPEN_MAX = 7  # per-doc entry 上限：超過＝backlog 變筆記傾倒場（軟提醒）
+_FINDING_ID_IN_PROSE_RE = re.compile(r"\bF\d+\b")
 
 
 def _lint_roadmap(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
-    """roadmap 軟提醒（皆 WARN、非阻塞；「該不該做」是 audit，這裡只抓機械徵兆）。
-    Vr1 per-doc 開啟項（open）過多（>7）→ backlog 淪為筆記傾倒場。
-    Vr2 status:doing 但 target 節無 develop.md 活動 → doing 沒拉進 develop。
-    Vr3 status:done 缺 done-to → 完成記錄不完整（去向不明）。
+    """roadmap 軟提醒（皆 WARN、非阻塞；「該不該做」是 audit，這裡只抓機械徵兆）。統無狀態模型
+    後：在檔＝待辦，故 Vr1 直接數全部 entry（不再篩 status:open）；舊 Vr2（status:doing 無
+    develop.md）/舊 Vr3（status:done 缺 done-to）隨欄位刪除一起退場，同代號改指新規則：
+    Vr1 per-doc entry 數過多（>7）→ backlog 淪為筆記傾倒場。
+    Vr2 含 promoted-to 卻仍帶實質內容（超出 id/title/promoted-to）→ 搬家沒搬乾淨。
+    Vr3 entry 的 what 散文引用一條仍全文開放的 audit finding id → 雙帳鏡像，該晉升搬家、非複製。
     """
+    from dspx import audit as audit_mod
     from dspx import roadmap as roadmap_mod
 
     findings: list[Finding] = []
 
-    # target（section id ∪ section 路徑）→ leaf，供解析 develop.md 活動。
-    by_target: dict[str, Leaf] = {}
-    for leaf in leaves:
-        by_target[leaf.section] = leaf
-        if leaf.concept_id:
-            by_target[str(leaf.concept_id)] = leaf
-
-    # Vr1：每個 distinct article 的 per-doc roadmap 開啟項計數。
+    # Vr1：每個 distinct article 的 per-doc roadmap entry 計數（全部 entry＝全部待辦）。
     seen_articles: list[str] = []
     for leaf in leaves:
         if leaf.article and leaf.article not in seen_articles:
             seen_articles.append(leaf.article)
     for art in seen_articles:
         entries = roadmap_mod.load_doc_roadmap(layout.section_dir(art), art)
-        opens = [e for e in entries if e.get("status") == "open"]
-        if len(opens) > _ROADMAP_OPEN_MAX:
+        if len(entries) > _ROADMAP_OPEN_MAX:
             findings.append(Finding("Vr1", WARN, f"corpus/{art}/roadmap.yaml",
-                f"{len(opens)} open items (>{_ROADMAP_OPEN_MAX}) -- don't let the backlog become a notes dump; "
-                "split, start, or drop some"))
+                f"{len(entries)} entries (>{_ROADMAP_OPEN_MAX}) -- don't let the backlog become a "
+                "notes dump; split, start, promote, or `docspec roadmap done` some"))
 
-    # Vr2/Vr3：跨全部 entry（含 forest）。
+    # 開放且仍帶全文的 finding（供 Vr3 鏡像偵測）。
+    open_full_findings: dict[str, dict] = {}
+    for f in audit_mod.all_findings(layout, leaves):
+        fid = f.get("id")
+        if fid and f.get("status") == "open" and f.get("finding") and not f.get("promoted-to"):
+            open_full_findings[str(fid)] = f
+
     for e in roadmap_mod.all_entries(layout, leaves):
         rid = e.get("id")
         store = e.get("_store", "roadmap")
         where = f"{store}/roadmap.yaml"
-        status = e.get("status")
-        if status == "doing":
-            leaf = by_target.get(str(e.get("target")))
-            if leaf is None or not (leaf.dir / "develop.md").is_file():
+
+        # Vr2：promoted-to 存在卻超出 id/title/promoted-to（搬家不複製沒落實）。
+        if e.get("promoted-to"):
+            extra = sorted(set(e) - {"id", "title", "promoted-to", "_store"})
+            if extra:
                 findings.append(Finding("Vr2", WARN, where,
-                    f"entry \"{rid}\" status:doing but target \"{e.get('target')}\" has no develop.md "
-                    "activity -- starting work means pulling it into develop.md"))
-        elif status == "done" and not e.get("done-to"):
-            findings.append(Finding("Vr3", WARN, where,
-                f"entry \"{rid}\" status:done missing done-to -- the completion record has no destination"))
+                    f"entry \"{rid}\" carries promoted-to but still has {extra} -- move, don't "
+                    "copy: collapse to id/title/promoted-to only"))
+
+        # Vr3：what 散文引用一條仍全文開放的 finding id。
+        what = str(e.get("what") or "")
+        for m in _FINDING_ID_IN_PROSE_RE.finditer(what):
+            fid = m.group(0)
+            if fid in open_full_findings:
+                findings.append(Finding("Vr3", WARN, where,
+                    f"entry \"{rid}\" what mirrors open audit finding {fid} in prose -- "
+                    "double-ledger; promote (move, don't copy) instead of duplicating"))
+                break
+    return findings
+
+
+_LINE_ANCHOR_PROSE_RE = re.compile(r"(?<![A-Za-z0-9])L\d+(?:/\d+)*(?![A-Za-z0-9])")
+
+
+def _lint_audit_findings(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
+    """audit 軟提醒（皆 WARN、非阻塞）：
+    Va1 finding 含 promoted-to 卻仍帶實質 finding 全文 → 搬家沒搬乾淨（一事一帳）。
+    Va2 finding 散文（`finding` 欄）殘留行號形錨點（`L123`/`L123/124`）→ render 後座標會漂，
+        改綁穩定節路徑／§slug（targets 裡的行號錨點是 check ERROR，這裡管散文內文的軟提醒）。
+    """
+    from dspx import audit as audit_mod
+
+    findings: list[Finding] = []
+    for f in audit_mod.all_findings(layout, leaves):
+        fid = f.get("id")
+        store = f.get("_store", "audit")
+        where = f"{store}/audit.yaml"
+        body = str(f.get("finding") or "")
+
+        if f.get("promoted-to") and body.strip():
+            findings.append(Finding("Va1", WARN, where,
+                f"finding \"{fid}\" carries promoted-to but still has a full finding body -- "
+                "move, don't copy: collapse to id/face/severity/status/promoted-to"))
+
+        if body and _LINE_ANCHOR_PROSE_RE.search(body):
+            findings.append(Finding("Va2", WARN, where,
+                f"finding \"{fid}\" prose contains a line-number-shaped anchor (e.g. L###) -- "
+                "coordinates rot on re-render; bind a stable section identifier or §<slug> instead"))
     return findings
 
 

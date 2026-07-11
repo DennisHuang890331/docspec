@@ -22,6 +22,7 @@ def _register(module: ModuleType) -> None:
 
 
 from dspx.commands import audit as _audit  # noqa: E402
+from dspx.commands import change as _change  # noqa: E402
 from dspx.commands import check as _check  # noqa: E402
 from dspx.commands import diff as _diff  # noqa: E402
 from dspx.commands import doctor as _doctor  # noqa: E402
@@ -62,6 +63,7 @@ from dspx.commands import version as _version  # noqa: E402
 
 _register(_init)
 _register(_new)
+_register(_change)
 _register(_status)
 _register(_check)
 _register(_instructions)

@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+import re
+
 from dspx.model import Leaf
+
+from ._roadmap import _promoted_to_errors
+
+# targets 內的行號形錨點（`#L123`／裸 `L123` token）——deliverable 行號會隨 render 漂移，
+# 只准穩定節路徑／§slug（★audit spec「錨點只准穩定節路徑，禁行號」）。
+_LINE_ANCHOR_RE = re.compile(r"(?:#L\d+\b|(?<![A-Za-z0-9])L\d+(?![A-Za-z0-9]))")
 
 
 def _audit_faces(layout) -> tuple[str, ...]:
@@ -25,7 +33,10 @@ def _validate_audit(layout, leaves: list[Leaf], id_set: set[str],
     """audit.yaml 結構閘（per-doc-root ＋ forest；結構查、語義/「攻防對不對」不查）：
     - id 全域唯一（跨所有 store）/ status / severity / **face**（補漏：舊 check 漏驗 face）；
     - 每個 target 死引用（section path 或 concept id 要存在）；
-    - 放對檔——target 的 distinct 文件數對應 store：1→該文件 doc-root、≥2→forest。
+    - 放對檔——target 的 distinct 文件數對應 store：1→該文件 doc-root、≥2→forest；
+    - targets 錨點禁行號（`#L123`/裸 `L123`）——只准穩定節路徑／§slug；
+    - promoted-to 反查（★G6：指向 roadmap id 或 active/archived change 健康、abandoned 孤兒 ERROR、
+      死指標 ERROR）。
     放錯/死引會讓「audit→roadmap from-audit」與彙總算錯 → 違「引擎＝可信索引」，故 check 硬擋。"""
     from dspx.audit import all_findings, distinct_articles, validate_finding
 
@@ -36,6 +47,11 @@ def _validate_audit(layout, leaves: list[Leaf], id_set: set[str],
 
     # section 識別：concept id ∪ section 路徑（target 可是任一；§anchor 取 '#' 前段）。
     section_paths = {leaf.section for leaf in leaves}
+
+    from dspx import change as _chg
+    from dspx import roadmap as _roadmap
+    change_states = _chg.all_change_states(layout)
+    roadmap_ids = {str(e["id"]) for e in _roadmap.all_entries(layout, leaves) if e.get("id")}
 
     errs: list[str] = []
     seen_ids: set[str] = set()
@@ -53,11 +69,21 @@ def _validate_audit(layout, leaves: list[Leaf], id_set: set[str],
             else:
                 seen_ids.add(fid)
 
+        # promoted-to 反查（★G6）
+        pt = f.get("promoted-to")
+        if pt:
+            errs.extend(_promoted_to_errors(where, pt, change_states, roadmap_ids=roadmap_ids))
+
         targets = f.get("targets")
         if not isinstance(targets, list) or not targets:
             continue  # 形式錯誤已由 validate_finding 報
-        # target 死引用：每個都要解析到真實 section
+        # target 死引用：每個都要解析到真實 section；行號形錨點一律拒（禁行號，只准節路徑/§slug）
         for t in targets:
+            if _LINE_ANCHOR_RE.search(str(t)):
+                errs.append(f"{where}: target \"{t}\" uses a line-number-shaped anchor -- "
+                            "anchors must be stable section identifiers (a section path or "
+                            "§<slug>), never deliverable line numbers (they rot on re-render)")
+                continue
             sec = str(t).split("#", 1)[0]
             if sec not in id_set and sec not in section_paths and sec not in concept_ids:
                 errs.append(f"{where}: target points to nonexistent section id \"{t}\"")

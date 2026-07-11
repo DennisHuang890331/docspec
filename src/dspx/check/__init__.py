@@ -12,6 +12,8 @@ from dspx.schema import Schema
 
 from . import (
     _audit,
+    _authored,
+    _changes,
     _cross_section,
     _cycles,
     _fieldmap,
@@ -66,10 +68,13 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
         errors.extend(_images._validate_image_refs(layout, leaves))         # ⑨ — same `if layout`
         errors.extend(_groups._validate_groups(layout, leaves))             # ⑩ — group.yaml 輕量驗證
         errors.extend(_prose_anchors.check_prose_anchor_refs(layout, leaves, seen))  # ⑪ — 散文錨死引用（P1b）
+        errors.extend(_changes._validate_changes(layout, leaves, id_set, concept_ids))  # ⑫ — changes/ 容器（change-event-layer 1.4）
 
     ref_errors, warnings = _cross_section._cross_section_decision_refs(leaves)  # trailing F1 check
     errors.extend(ref_errors)
     if layout is not None:
         warnings.extend(_hygiene._scan_hygiene(layout))   # 衛生 WARN（衝突副本/死資料夾，非阻塞）
+        warnings.extend(_authored.check_inherited_conflicts(leaves))   # ★#27 繼承信封矛盾（非阻塞）
+        warnings.extend(_authored.check_authored_state(layout, leaves))  # ★#6.2b 手寫規定檔帶狀態
 
     return CheckResult(ok=not errors, errors=errors, index=index, warnings=warnings)

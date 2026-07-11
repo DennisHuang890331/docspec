@@ -46,6 +46,38 @@ def _guard_ledger_health(layout, article: str, rebaseline: bool) -> int | None:
     return None
 
 
+def _render_change(layout, args) -> int:
+    """render --change：從 union view（staging 優先、正式補底）渲染到 change 的 preview 區。
+    正式 docs/ 零寫入；預覽成品與帳本從正式版 seed（★G2）。"""
+    from dspx import change as chg
+    if chg.change_state(layout, args.change) != chg.STATE_ACTIVE:
+        sys.stderr.write(f"docspec: no active change \"{args.change}\".\n")
+        return 1
+    change = chg.load_change_at(chg.change_dir(layout, args.change, chg.STATE_ACTIVE),
+                                chg.STATE_ACTIVE)
+    union_leaves = chg.load_union(layout, change)
+    if not any(lf.article == args.article for lf in union_leaves):
+        sys.stderr.write(
+            f"docspec: no leaf sections found for article \"{args.article}\" in the union view "
+            f"of change \"{args.change}\".\n")
+        return 1
+    # ★G2：seed preview 成品與帳本從正式版（否則首次 preview render 全 unwritten）。
+    chg.seed_preview(layout, change, args.article)
+    overlay = chg.OverlayLayout(layout, change)
+    result = render_article(overlay, union_leaves, args.article,
+                            ack_sections=set(args.ack), ack_own_sections=set(args.ack_own),
+                            reason=args.reason or "")
+    total = len(result["sections"])
+    print(f"synced change \"{args.change}\" preview of \"{args.article}\" -> {result['written_path']}")
+    print(f"  {total} section(s), of which {result['drafted']} have prose and "
+          f"{total - result['drafted']} are unwritten. (official docs/ untouched)")
+    if result.get("acked"):
+        print(f"  acknowledged: {', '.join(result['acked'])}")
+    if result.get("ack_owned"):
+        print(f"  ack-own: {', '.join(result['ack_owned'])}")
+    return 0
+
+
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec render", description=HELP)
     parser.add_argument("article", help="name of the article to assemble")
@@ -76,6 +108,11 @@ def run(argv: list[str]) -> int:
              "the skeleton, recompute every fingerprint axis with the current algorithms (prose "
              "is preserved) and reset the baseline. Absorbs any pending stale signals. Without "
              "this flag, render refuses to touch the ledger in those states.")
+    parser.add_argument(
+        "--change", default=None, metavar="CHANGE-ID",
+        help="render the UNION view (staging over official) into changes/<id>/preview/<article>_"
+             "latest.md with a staging-side sidecar ledger; official docs/ is never written "
+             "(the preview + ledger are seeded from the official version, ★G2)")
     args = parser.parse_args(argv)
 
     # --ack-own 強制 --reason（裁決入 journal；改變 own/deps 裁決＝事後最需考古的一類）。
@@ -91,6 +128,10 @@ def run(argv: list[str]) -> int:
         leaves = load_model(layout)
     except BootstrapError as exc:
         return exc.exit_code
+
+    # ── --change：union view 渲染到 preview（正式 docs 零寫入，D2/G2）──
+    if args.change is not None:
+        return _render_change(layout, args)
 
     if not any(lf.article == args.article for lf in leaves):
         sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n")

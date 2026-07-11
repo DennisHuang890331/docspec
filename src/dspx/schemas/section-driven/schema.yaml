@@ -145,6 +145,9 @@ workflow:
     - Mechanical text edits are ENGINE transactions, never hand-typed occurrence-by-occurrence — a rename/move goes through `docspec mv` (atomic; rewrites the path-keyed prose markers + audit/roadmap targets, self-checks, rolls back on failure), punctuation width through `docspec normalize`, corpus hygiene / empty-shell + verbatim-brief + title-number cleanup through `docspec tidy`, a project-wide term substitution through `docspec rename-term` (prose-span only; identifiers/code/URLs byte-exact). Hand-editing these — or an ad-hoc find-replace script — is the drift/corruption class the real corpus died on (a 22-script replace run that poisoned `OCC_LIMIT_*` identifier codes); use the command or a script that calls it, never a blind sweep.
     - Pin line endings at the repo level — a .gitattributes with `*.md` / `*.yaml` / `*.yml` as `text eol=lf` (docspec init scaffolds it for new projects; EXISTING projects should add it themselves). The engine normalizes CRLF when fingerprinting and writes LF, but the repo pin is the third defense layer against git autocrlf rewriting checkouts.
     - corpus/_archive/ = retired sections (decision history): engine-invisible in active work (status/check/draft never see it); query with docspec retired, drill with docspec show <id>. It is history — never touch it in current work (unlocked, by convention, like OpenSpec's changes/archive).
+    - Work that touches a NORMATIVE ruling or spans sections runs inside a CHANGE (docspec change new … --publish advisory|release-bound) — a staging draft branch: edits land in changes/<id>/staging/, official corpus/docs stay byte-frozen, render --change previews the union view, and `docspec change status` DERIVES per-target acceptance. Open it mid-develop (the moment you realize you're superseding a decision / rippling across documents), not as an upfront ceremony; the enlistment line is "touches a ruling?", not section count. The human's one gate is `docspec change archive` (running it = acceptance; "reject" = keep editing until the derivation goes green; abandon a dead end with --abandon, official never moved). NEVER hand-check off a task and NEVER author a progress/status/checkbox file — completeness is always derived; "tasks" names the derived view only.
+    - Engine commands (docspec new/render/ready/check/status/stale/normalize/tidy/mv/rename-term/change …) are the agent's internal machinery — run them autonomously, never ask the human "should I run docspec X?", never narrate command invocations. The human interface is intent-in / deliverable-out (they read docs/, not corpus/ or the engine). This is a runtime-conversation discipline the engine cannot observe — it is doctrine and reviewer vigilance, NOT a mechanical gate; the projection must not claim enforcement it does not have.
+    - Contradictory inherited writing requirements converging on ONE section (a tree-parent brief vs a cross-tree governor brief, or two sibling governors) → STOP and surface both sources verbatim to the human; never pick a winner yourself (no precedence order is defined — it is a semantic call). check/lint back you up with a WARN when the aperture ancestor set supplies one brief field from two sources with divergent values, but the stop-and-ask is yours.
   # Migration onboarding: how an EXISTING project (pre-docspec published versions + an existing
   # version history) enters docspec. The recipe lives here and is projected by `docspec guide` —
   # never restated in drifting prose (guide omits the block when a schema lacks this key).
@@ -258,36 +261,50 @@ project-files:
       the working context, visible via `docspec guide`); with multiple roots and no apex document, it is purpose's only home.
       Writing doctrine → writing-guide.md; term identity → glossary.yaml.
   - id: roadmap
-    file: corpus/<article>/roadmap.yaml (per-doc, travels with the tree) | docspec/roadmap.yaml (forest, cross-document)
+    file: corpus/<article>/roadmap.yaml (per-doc, travels with the tree) | docspec/roadmap.yaml (forest, cross-document); completion
+      record (append-only) lives alongside as roadmap-archive.yaml
     meaning: >
-      Planned-work backlog — holds only work that is "planned, not yet done, about this forest's documents"; done items fall out
-      (it never accumulates into a big table). entry = {id, kind(gap|task), title, what, status(open|doing|done|dropped),
-      target(<section-id> | forest), depends-on(a DAG within roadmap → computes unblocked), waits-on(external prerequisite = prose,
-      not a gate), from-audit(promoted from an audit finding, one-way), priority? / note? / done-to?}. per-doc (single-document owner)
-      vs forest (cross-document, no single owner) split by target. Generated on demand (no file = no backlog).
-    reader: [develop]   # at start-of-work develop projects "this document's + the forest's open/doing"; queryable any time via the `docspec roadmap` derived view
-    writer: [develop]   # develop records planned work; start → status doing, pull into develop.md; finished → done + done-to (falls out)
+      Planned-work backlog — holds only work that is "planned, not yet done, about this forest's documents". **Stateless model: present
+      in the file = backlog (to-do); fallen out = done — there is no status/done-to field.** entry = {id, kind(gap|task), title, what,
+      target(<section-id> | forest)}; may carry depends-on(a DAG within roadmap → computes unblocked: a dep still present = still
+      blocking), waits-on(external prerequisite = prose, not a gate), from-audit(promoted from an audit finding, one-way), priority? /
+      note? / promoted-to(a change id — this entry has been promoted into engineering work; content moved with it, only this pointer
+      remains, and the entry MUST carry nothing substantial beyond id/title/promoted-to). Completion leaves the file by exactly one of
+      two routes: (a) promoted-to a change → the change-archive transaction prunes the entry (the archived dossier IS the completion
+      record); (b) small direct work, no change needed → `docspec roadmap done <id> --note "..."` moves it into roadmap-archive.yaml
+      (append-only {id, title, note, date}). per-doc (single-document owner) vs forest (cross-document, no single owner) split by
+      target. Generated on demand (no file = no backlog).
+    reader: [develop]   # at start-of-work develop projects "this document's + the forest's backlog"; queryable any time via the `docspec roadmap` derived view
+    writer: [develop]   # develop records planned work (id/kind/title/what/target); completion routes via `roadmap done` or promotion, never a hand-edited status
     when: >
-      develop looks at the backlog before starting work; records gap/task (target, optional depends-on). check (structure): depends-on
-      dead reference + cycle, target dead reference + filed in the right place, from-audit dead reference; lint soft WARN: Vr1 open items > 7
-      / Vr2 doing without develop.md / Vr3 done missing done-to. **Non-blocking.**
+      develop looks at the backlog before starting work; records gap/task (target, optional depends-on). check (structure): rejects
+      legacy `status`/`done-to` fields (route completion instead), depends-on dead reference + cycle, target dead reference + filed in
+      the right place, from-audit dead reference, promoted-to dead/abandoned-change pointer (★G6: abandoned = orphaned finding, resurrect
+      or re-point — never auto-resurrected). lint soft WARN: Vr1 per-doc entries > 7 / Vr2 promoted entry still carrying substantial
+      content / Vr3 entry's `what` mirrors an open audit finding in prose (double-ledger — promote, don't copy). **Non-blocking.**
     fence: >
       Holds only "planned, not yet done" backlog. Does not draw the forest map (forest_view derived), does not store completed work
-      (revision_history/history), does not hold flaws in existing content (audit) — those three each have their own home.
+      (revision_history/history/roadmap-archive), does not hold flaws in existing content (audit) — those each have their own home.
   - id: audit
     file: corpus/<article>/audit.yaml (per-doc) | docspec/audit.yaml (forest, cross-document)
     meaning: >
       Red-team audit log of attack and response (factcheck's non-blocking findings). finding = {id, face(5 core + packs), severity,
-      status, finding, suggestion, targets(list of sections touched), sot-owner(cross-document owner of the truth), verdict?(optional
+      status, finding, suggestion, targets(list of sections touched — stable section identifiers only, e.g. a section path or
+      §<slug>; NEVER deliverable line numbers, which rot on re-render), sot-owner(cross-document owner of the truth), verdict?(optional
       NLI ruling for citation factchecks: contradicted = a source refutes the claim | unsupported = no source backs it; a claim that is
-      entailed/supported raises NO finding — silence is the pass state), log(append-only raised→responded trail)}. Stored at "the lowest
-      level that can contain all sections touched": touches 1 document → that doc-root; ≥ 2 → forest (criterion = number of distinct documents).
+      entailed/supported raises NO finding — silence is the pass state), promoted-to?(a roadmap id or change id — remediation has been
+      promoted into engineering work; the finding collapses to id/face/severity/status/promoted-to, its full body moves with the
+      promotion), log(append-only raised→responded trail)}. Stored at "the lowest level that can contain all sections touched": touches
+      1 document → that doc-root; ≥ 2 → forest (criterion = number of distinct documents).
     reader: [develop, factcheck]   # factcheck raises/queries, develop/human triages (docspec audit list/show); not injected via the aperture
     writer: [factcheck]            # all via command (audit raise/resolve), append-only, validated on write; the agent does not hand-edit audit.yaml
     when: >
       factcheck `audit raise --target` (the sections touched); routed to doc/forest by number of distinct documents, marking sot-owner
-      when cross-document. check validates id unique / face / severity / status + target dead reference + filed in the right place.
-      **Non-blocking, never blocks publish**; a finding that requires engineering work → promoted into a roadmap entry (roadmap from-audit, one-way).
+      when cross-document. check validates id unique / face / severity / status + target dead reference + filed in the right place +
+      targets never line-number-shaped (ERROR — use a section path or §<slug>) + promoted-to resolves to a live roadmap entry or an
+      active/archived change (★G6: pointing at an abandoned change raises an orphan ERROR, never auto-resurrected). lint soft WARN:
+      promoted finding still carrying its full body / `L###`-shaped anchors left in the finding prose. **Non-blocking, never blocks
+      publish**; a finding that requires engineering work → promoted into a roadmap entry (roadmap from-audit, one-way) or a change.
     fence: >
       Holds only "flaws in existing content" (discovered). Planned work → roadmap, terminology → glossary. Append-only, via command, not hand-edited.
   - id: group
@@ -311,6 +328,35 @@ project-files:
     fence: >
       Holds only the grouping node's display title (`title`) and optional sibling position (`order`). Leaf identity/brief → that section's
       concept.yaml (a grouping node has none); writing tone → writing-guide.md.
+  - id: change
+    file: changes/<id>/change.yaml (engine-owned) + changes/<id>/notes.md (cross-section discussion) — project root, sibling of corpus/roadmap/audit
+    meaning: >
+      A modification event container — the home for work that touches a NORMATIVE ruling or spans sections. STATE = LOCATION +
+      DERIVATION, never a status field: changes/<id>/ = active, changes/_archive/<id>/ = accepted, changes/_abandoned/<id>/ = dropped;
+      per-target acceptance is DERIVED on demand (never a stored task/checkbox). change.yaml = {id, title, why, created,
+      publish(advisory|release-bound, REQUIRED), seeds, targets, fork-hashes} and is ENGINE-OWNED (written only by `docspec change ...`,
+      hand-edits are check-flagged). Each target = {ref (concept.id | corpus path for create | file path | glossary term), origin
+      (auto|manual), action}. action ∈ create|revise|align|redraft|review|retire|move is BOTH the acceptance criterion AND the apply
+      mode (create/redraft → rewrite-from-blank; revise/align → patch-in-place). MODEL: staging is a draft branch — edits land in
+      changes/<id>/staging/ (mirroring workspace-relative paths, copy-on-write per section folder / forest file / external file);
+      official corpus & docs stay byte-frozen until archive; `docspec render <article> --change <id>` renders the UNION view (staging over
+      official) into changes/<id>/preview/ (seeded from the official version so only truly-changed sections surface stale). ARCHIVE is
+      the single human gate (running it = acceptance; no separate accept verb, "reject" = keep working until derivation goes green): it
+      verifies every target derives done + a fork-drift guard, lands staged files into corpus, routes each affected deliverable (all
+      revise/align/review → slot patch; any create/retire/move/redraft → whole-file replace), then freezes the dossier. ABANDON drops
+      staging with zero rollback (official never moved). notes.md holds cross-section reasoning and MUST NEVER enter the blind-render
+      aperture; it MUST NOT carry checkboxes or a status field (completeness is derived).
+    reader: [develop]   # develop opens/works a change; instructions prepends the active-change context on any enlisted section
+    writer: [develop]   # only via `docspec change new/add-target/status/archive`; the agent never hand-edits change.yaml
+    when: >
+      Open a change AT THE MOMENT thinking reveals the work touches a ruling or spans sections (`docspec change new <id> --seed <dec-id>
+      --publish advisory|release-bound`) — mid-develop, not an upfront ceremony; the enlistment line is "touches a normative ruling?",
+      not section count (a typo/prose-polish proceeds with no change, so every decision's decided-in can reference a change id).
+      Promote a roadmap entry with --from-roadmap (move, don't copy: the entry collapses to a promoted-to pointer). check validates the
+      container: id unique across states, target ref dead-reference, action/publish/kind enum, promoted-to reverse-completeness.
+    fence: >
+      Holds the modification event only. Planned-but-not-started work → roadmap; discovered flaws → audit; term identity → glossary;
+      writing doctrine → writing-guide. Tasks/progress are DERIVED (docspec change status), never authored — "tasks" names no file.
 
 # The engine recognizes only these reference arrows (closed set)
 relation-kinds: [realizes, governs, supersedes]

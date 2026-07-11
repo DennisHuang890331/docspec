@@ -7,14 +7,35 @@ from dspx.model import Leaf
 from ._cycles import _find_cycle
 
 
+def _promoted_to_errors(where: str, promoted_to, change_states: dict[str, str],
+                        roadmap_ids: set[str] | None = None) -> list[str]:
+    """promoted-to 反查（★G6，roadmap 與 audit 共用）：
+    - 指向 ACTIVE/ARCHIVED change → 健康（空清單）；
+    - 指向 ABANDONED change → 孤兒 ERROR（內容凍在 `_abandoned/`，引擎不自動復活）；
+    - roadmap_ids 給定且 promoted_to 命中其一 → 健康（finding 晉升為 roadmap entry 的路徑）；
+    - 其餘（不存在的 change id、也不是任何現行 roadmap id）→ 死指標 ERROR。"""
+    pid = str(promoted_to)
+    if roadmap_ids is not None and pid in roadmap_ids:
+        return []
+    state = change_states.get(pid)
+    if state in ("active", "archived"):
+        return []
+    if state == "abandoned":
+        return [f"{where}: promoted-to points at an abandoned change \"{pid}\" -- its content is "
+                f"frozen in changes/_abandoned/{pid}/; resurrect the change or re-point promoted-to "
+                "(the engine never auto-resurrects)"]
+    return [f"{where}: promoted-to points to a nonexistent change/roadmap id \"{pid}\""]
+
+
 def _validate_roadmap(layout, leaves: list[Leaf], id_set: set[str],
                       concept_ids: set[str]) -> list[str]:
     """roadmap.yaml 結構閘（跟 concept/decisions 同級：結構查、語義/「做不做」不查）：
-    - 欄位/enum/id 唯一（roadmap.validate_roadmap）；
+    - 欄位/enum/id 唯一/已退休欄（roadmap.validate_roadmap）；
     - depends-on 死引用（指 roadmap id）＋環（DAG，比照 governs）；
     - target 死引用（section id 要存在）＋放對檔（per-doc 檔的 target 必須落該文件樹內或其
       root；`forest` target 只能在 forest 檔）；
-    - from-audit 死引用（指現行 audit finding id）。
+    - from-audit 死引用（指現行 audit finding id）；
+    - promoted-to 反查（★G6：active/archived 健康、abandoned 孤兒 ERROR、死指標 ERROR）。
     死引用會讓 derive 的 unblocked 算錯 → 違「引擎＝可信索引」，故 check 硬擋。"""
     from dspx import roadmap as _roadmap
 
@@ -89,5 +110,13 @@ def _validate_roadmap(layout, leaves: list[Leaf], id_set: set[str],
         if fa and str(fa) not in audit_ids:
             errs.append(f"roadmap[{e.get('id', '?')}]: from-audit points to nonexistent "
                         f"audit finding id \"{fa}\"")
+
+    # ── promoted-to 反查（★G6：roadmap entry 永遠指向一個 change id）──
+    from dspx import change as _chg
+    change_states = _chg.all_change_states(layout)
+    for e in entries:
+        pt = e.get("promoted-to")
+        if pt:
+            errs.extend(_promoted_to_errors(f"roadmap[{e.get('id', '?')}]", pt, change_states))
 
     return errs

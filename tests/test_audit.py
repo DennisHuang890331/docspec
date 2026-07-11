@@ -398,3 +398,156 @@ def test_audit_summary_json_keys(make_project, write_leaf, monkeypatch, capsys):
     assert data["openBySeverity"] == {"low": 1}
     assert data["openByFace"] == {"logic": 1}
     assert data["byVerdict"]["none"] == 1
+
+
+# ── promoted-to（搬家不複製）＋錨點禁行號（change-event-layer group 4）─────
+
+def _write_change(home, cid: str, state: str) -> None:
+    """最小 change 容器（active/_archive/_abandoned），供 promoted-to 反查測試。"""
+    root = home.parent / "changes"
+    sub = {"active": root, "archived": root / "_archive", "abandoned": root / "_abandoned"}[state]
+    cdir = sub / cid
+    cdir.mkdir(parents=True, exist_ok=True)
+    cdir.joinpath("change.yaml").write_text(
+        yaml.safe_dump({"id": cid, "title": "t", "why": "w", "created": "2026-01-01",
+                        "publish": "advisory", "targets": []},
+                       allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+def test_promoted_finding_without_body_is_valid(make_project, write_leaf):
+    """搬家不複製：finding 收攏為 id/face/severity/status/promoted-to，缺 finding 全文合法。"""
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    _write_change(home, "chg-x", "active")
+    _doc_audit(home, "a").write_text(
+        yaml.safe_dump({"findings": [{"id": "F1", "face": "logic", "severity": "high",
+                                      "status": "open", "targets": ["a"],
+                                      "promoted-to": "chg-x"}]}, allow_unicode=True),
+        encoding="utf-8")
+    res = _check(home)
+    assert res.ok, res.errors
+
+
+def test_check_rejects_promoted_to_abandoned_change(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    _write_change(home, "chg-x", "abandoned")
+    _doc_audit(home, "a").write_text(
+        yaml.safe_dump({"findings": [{"id": "F1", "face": "logic", "severity": "high",
+                                      "status": "open", "targets": ["a"],
+                                      "promoted-to": "chg-x"}]}, allow_unicode=True),
+        encoding="utf-8")
+    res = _check(home)
+    assert not res.ok
+    assert any("abandoned" in e and "chg-x" in e and "F1" in e for e in res.errors)
+
+
+def test_check_rejects_promoted_to_dead_pointer(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    _doc_audit(home, "a").write_text(
+        yaml.safe_dump({"findings": [{"id": "F1", "face": "logic", "severity": "high",
+                                      "status": "open", "targets": ["a"],
+                                      "promoted-to": "ghost"}]}, allow_unicode=True),
+        encoding="utf-8")
+    res = _check(home)
+    assert not res.ok
+    assert any("nonexistent" in e and "ghost" in e for e in res.errors)
+
+
+def test_check_accepts_promoted_to_roadmap_id(make_project, write_leaf):
+    """finding 晉升為一條 roadmap entry（而非直接開 change）→ promoted-to 命中該 roadmap id 亦健康。"""
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    (home / "corpus" / "a" / "roadmap.yaml").write_text(
+        yaml.safe_dump({"entries": [{"id": "r1", "kind": "task", "title": "t",
+                                     "what": "w", "target": "a"}]},
+                       allow_unicode=True), encoding="utf-8")
+    _doc_audit(home, "a").write_text(
+        yaml.safe_dump({"findings": [{"id": "F1", "face": "logic", "severity": "high",
+                                      "status": "open", "targets": ["a"],
+                                      "promoted-to": "r1"}]}, allow_unicode=True),
+        encoding="utf-8")
+    res = _check(home)
+    assert res.ok, res.errors
+
+
+def test_check_rejects_line_number_anchor_in_targets(make_project, write_leaf):
+    """targets 用行號形錨點（`#L###`）→ check ERROR，要求改用節路徑/§slug。"""
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    _doc_audit(home, "a").write_text(
+        yaml.safe_dump({"findings": [{"id": "F1", "face": "logic", "severity": "high",
+                                      "status": "open", "finding": "x",
+                                      "targets": ["a#L307"]}]}, allow_unicode=True),
+        encoding="utf-8")
+    res = _check(home)
+    assert not res.ok
+    assert any("line-number" in e and "a#L307" in e for e in res.errors)
+
+
+def test_bare_line_number_anchor_in_targets_also_rejected(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    _doc_audit(home, "a").write_text(
+        yaml.safe_dump({"findings": [{"id": "F1", "face": "logic", "severity": "high",
+                                      "status": "open", "finding": "x",
+                                      "targets": ["L148"]}]}, allow_unicode=True),
+        encoding="utf-8")
+    res = _check(home)
+    assert not res.ok
+    assert any("line-number" in e for e in res.errors)
+
+
+def test_lint_warns_promoted_finding_with_full_body(make_project, write_leaf, monkeypatch):
+    from dspx.lint import run_lint
+    from dspx.model import load_project
+    from dspx.schema import load_schema
+
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    _write_change(home, "chg-x", "active")
+    _doc_audit(home, "a").write_text(
+        yaml.safe_dump({"findings": [{"id": "F1", "face": "logic", "severity": "high",
+                                      "status": "open", "finding": "還沒搬乾淨的全文",
+                                      "targets": ["a"], "promoted-to": "chg-x"}]},
+                       allow_unicode=True), encoding="utf-8")
+    layout = Layout(home)
+    findings = run_lint(layout, load_project(layout), load_schema())
+    assert any(f.rule == "Va1" and f.level == "WARN" for f in findings)
+
+
+def test_lint_no_warn_when_promoted_finding_body_dropped(make_project, write_leaf):
+    from dspx.lint import run_lint
+    from dspx.model import load_project
+    from dspx.schema import load_schema
+
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    _write_change(home, "chg-x", "active")
+    _doc_audit(home, "a").write_text(
+        yaml.safe_dump({"findings": [{"id": "F1", "face": "logic", "severity": "high",
+                                      "status": "open", "targets": ["a"],
+                                      "promoted-to": "chg-x"}]},
+                       allow_unicode=True), encoding="utf-8")
+    layout = Layout(home)
+    findings = run_lint(layout, load_project(layout), load_schema())
+    assert not any(f.rule == "Va1" for f in findings)
+
+
+def test_lint_warns_line_number_anchor_in_finding_prose(make_project, write_leaf):
+    from dspx.lint import run_lint
+    from dspx.model import load_project
+    from dspx.schema import load_schema
+
+    home = make_project()
+    write_leaf(home, "a", concept=_root("ca", "A"))
+    _doc_audit(home, "a").write_text(
+        yaml.safe_dump({"findings": [{"id": "F1", "face": "logic", "severity": "high",
+                                      "status": "open",
+                                      "finding": "見 L148/149 兩行矛盾之處",
+                                      "targets": ["a"]}]}, allow_unicode=True),
+        encoding="utf-8")
+    layout = Layout(home)
+    findings = run_lint(layout, load_project(layout), load_schema())
+    assert any(f.rule == "Va2" and f.level == "WARN" for f in findings)

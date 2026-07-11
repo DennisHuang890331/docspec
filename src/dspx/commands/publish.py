@@ -122,6 +122,12 @@ def run(argv: list[str]) -> int:
             sys.stderr.write(f"  ✗ [{f.rule}] {f.where}: {f.detail}\n")
         return 1
 
+    # ── active change policy 閘（★#8）：advisory→WARN 放行；release-bound→擋（TIMING 閘、
+    #    非內容洩漏——staged 內容 archive 前永不進正式 docs）──
+    rc = _change_policy_gate(layout, leaves, args.article)
+    if rc != 0:
+        return rc
+
     # ── 開啟中 audit findings：非阻塞提醒（audit 永不擋 publish）──
     open_findings = _count_open_findings(layout, leaves, args.article)
     if open_findings:
@@ -304,6 +310,37 @@ def _dry_run(layout: Layout, schema, leaves, args) -> int:
         return 0
     print("dry-run verdict: NO-GO — fix the ✗ gate(s) above before publishing")
     return 1
+
+
+def _change_policy_gate(layout, leaves, article: str) -> int:
+    """publish 命中 active change 時強制其 publish 政策（★#8）：advisory→WARN 放行；
+    release-bound→拒（列擋路 change 與其未完成 targets、exit 非 0），直到該 change 收案/棄案。"""
+    from dspx import change as chg
+    from dspx.schema import load_schema
+    hitting = chg.changes_hitting_article(layout, article, leaves)
+    if not hitting:
+        return 0
+    schema = load_schema()
+    blockers = []
+    for change in hitting:
+        if change.publish == "release-bound":
+            statuses = chg.derive_change_status(layout, change, schema)
+            undone = [s for s in statuses if not s.done]
+            blockers.append((change, undone))
+        else:
+            sys.stderr.write(
+                f"docspec: ⚠ article \"{article}\" is hit by active change \"{change.id}\" "
+                f"(publish: advisory) — publish proceeds (the gate governs timing, not content; "
+                "staged content never reaches official docs before archive).\n")
+    if blockers:
+        sys.stderr.write(
+            f"docspec: publish aborted -- article \"{article}\" is hit by release-bound active "
+            "change(s):\n")
+        for change, undone in blockers:
+            sys.stderr.write(f"  ✗ {change.id} ({change.title}) — archive or abandon it first"
+                             + (f"; {len(undone)} target(s) not yet done" if undone else "") + "\n")
+        return 1
+    return 0
 
 
 def _count_open_findings(layout, leaves, article: str) -> int:

@@ -428,13 +428,13 @@ def test_lint_scope_keeps_unattributable_findings(make_project, write_leaf,
     home = make_project()
     _two_article_project(home, write_leaf)
     (home / "roadmap.yaml").write_text(yaml.safe_dump({"entries": [
-        {"id": "r1", "kind": "task", "status": "done", "title": "森林項",
-         "what": "w", "target": "forest"}]}, allow_unicode=True), encoding="utf-8")
+        {"id": "r1", "title": "森林項", "what": "w", "target": "forest",
+         "promoted-to": "chg-x"}]}, allow_unicode=True), encoding="utf-8")
     monkeypatch.chdir(home.parent)
     assert lint_cmd.run(["a", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
-    assert any(f["rule"] == "Vr3" and f["where"] == "forest/roadmap.yaml"
-               for f in data["findings"])                  # done 缺 done-to、專案級不被藏
+    assert any(f["rule"] == "Vr2" and f["where"] == "forest/roadmap.yaml"
+               for f in data["findings"])   # promoted-to 卻仍帶 what/target、專案級不被藏
 
 
 def test_lint_scope_json_errorcount_reflects_filter(make_project, write_leaf,

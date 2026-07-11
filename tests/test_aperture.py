@@ -210,31 +210,30 @@ def _write_roadmap(path, entries):
 
 
 def _roadmap_fixture(home, write_leaf):
-    """art 文件＋forest roadmap：本文件 open/doing/done ＋ forest open。"""
+    """art 文件＋forest roadmap：本文件的待辦 entries ＋ forest entry（統無狀態模型：
+    在檔＝待辦；r-gone 從沒寫進檔＝模擬已 fallen out/完成）。"""
     write_leaf(home, "art", concept={"id": "c-art", "title": "Art", "order": 1,
                                      "concept": "x", "brief": {"audience": "a"}})
     _write_roadmap(home / "roadmap.yaml", [
-        {"id": "f1", "kind": "task", "status": "open", "title": "森林工作",
+        {"id": "f1", "kind": "task", "title": "森林工作",
          "what": "w", "target": "forest"},
     ])
     _write_roadmap(home / "corpus" / "art" / "roadmap.yaml", [
-        {"id": "r-open", "kind": "task", "status": "open", "title": "可開工",
+        {"id": "r-open", "kind": "task", "title": "可開工",
          "what": "w", "target": "art"},
-        {"id": "r-doing", "kind": "task", "status": "doing", "title": "進行中",
-         "what": "w", "target": "c-art"},
-        {"id": "r-done", "kind": "task", "status": "done", "title": "已完成",
-         "what": "w", "target": "art", "done-to": "d1"},
+        {"id": "r-blocked", "kind": "task", "title": "受阻",
+         "what": "w", "target": "c-art", "depends-on": ["r-open"]},
     ])
 
 
-def test_develop_roadmap_includes_doc_and_forest_open(make_project, write_leaf):
+def test_develop_roadmap_includes_doc_and_forest_entries(make_project, write_leaf):
     home = make_project()
     _roadmap_fixture(home, write_leaf)
     proj = _project(home, "develop", "art")
     assert proj.roadmap is not None
     ids = {e["id"] for e in proj.roadmap}
-    assert {"r-open", "r-doing", "f1"} <= ids   # 本文件 open/doing ＋ forest open
-    assert "r-done" not in ids                   # done 掉出
+    assert {"r-open", "r-blocked", "f1"} <= ids   # 本文件 entries ＋ forest entry
+    assert "r-gone" not in ids                     # 從沒寫進檔＝已完成，自然不在
 
 
 def test_develop_roadmap_carries_derive_flags(make_project, write_leaf):
@@ -243,7 +242,8 @@ def test_develop_roadmap_carries_derive_flags(make_project, write_leaf):
     proj = _project(home, "develop", "art")
     by_id = {e["id"]: e for e in proj.roadmap}
     assert by_id["r-open"]["unblocked"] is True
-    assert by_id["r-doing"]["status"] == "doing"
+    assert by_id["r-blocked"]["blocked"] is True
+    assert "status" not in by_id["r-open"]         # 無狀態模型：entry 不再帶 status 欄
 
 
 def test_non_develop_skills_have_no_roadmap(make_project, write_leaf):

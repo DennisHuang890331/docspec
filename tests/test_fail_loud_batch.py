@@ -351,8 +351,8 @@ def test_retire_warns_on_audit_and_roadmap_back_references(make_project, write_l
          "targets": ["a/x"], "finding": "指著待退節"},
     ]}, allow_unicode=True), encoding="utf-8")
     (home / "roadmap.yaml").write_text(yaml.safe_dump({"entries": [
-        {"id": "r1", "kind": "task", "status": "open", "target": "c1"},
-        {"id": "r2", "kind": "task", "status": "open", "target": "a/keep"},
+        {"id": "r1", "kind": "task", "target": "c1"},
+        {"id": "r2", "kind": "task", "target": "a/keep"},
     ]}, allow_unicode=True), encoding="utf-8")
     monkeypatch.chdir(home.parent)
     assert rs_cmd.run(["a/x"]) == 0              # 警告不擋、照常退役

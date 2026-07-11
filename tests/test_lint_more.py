@@ -1,4 +1,4 @@
-"""lint V6（material 散文滲入）、V8（骨肉漂移）、Vr1-3（roadmap 軟提醒）。"""
+"""lint V6（material 散文滲入）、V8（骨肉漂移）、Vr1-3（roadmap 軟提醒，統無狀態模型改版）。"""
 
 from __future__ import annotations
 
@@ -51,7 +51,7 @@ def test_v8_drift_missing_section(make_project, write_leaf, monkeypatch):
     assert any(f.rule == "V8" and "g/b" in f.detail for f in findings)
 
 
-# ── Vr1-3 roadmap 軟提醒（皆 WARN、非阻塞）─────────────────────────
+# ── Vr1-3 roadmap 軟提醒（皆 WARN、非阻塞；統無狀態模型：present=backlog）────
 
 def _root(home, write_leaf):
     write_leaf(home, "art", concept={"id": "c-art", "title": "Art", "order": 1,
@@ -60,11 +60,11 @@ def _root(home, write_leaf):
                                                "breadth": "b", "forbidden": ["f"]}})
 
 
-def test_vr1_too_many_open_warns(make_project, write_leaf):
+def test_vr1_too_many_entries_warns(make_project, write_leaf):
     home = make_project()
     _root(home, write_leaf)
     _write_roadmap(home / "corpus" / "art" / "roadmap.yaml", [
-        {"id": f"r{i}", "kind": "task", "status": "open", "title": "t",
+        {"id": f"r{i}", "kind": "task", "title": "t",
          "what": "w", "target": "art"} for i in range(8)   # 8 > 7
     ])
     layout = Layout(home)
@@ -75,35 +75,54 @@ def test_vr1_too_many_open_warns(make_project, write_leaf):
     assert run_check(load_project(layout), load_schema(), layout=layout).ok
 
 
-def test_vr2_doing_without_develop_warns(make_project, write_leaf):
+def test_vr2_promoted_entry_still_substantial_warns(make_project, write_leaf):
+    """含 promoted-to 卻仍帶實質內容（如 what/target）→ 搬家沒搬乾淨。"""
     home = make_project()
-    _root(home, write_leaf)            # write_leaf 不建 develop.md
+    _root(home, write_leaf)
     _write_roadmap(home / "corpus" / "art" / "roadmap.yaml", [
-        {"id": "r1", "kind": "task", "status": "doing", "title": "t",
-         "what": "w", "target": "art"}])
+        {"id": "r1", "kind": "task", "title": "t", "what": "w", "target": "art",
+         "promoted-to": "chg-x"}])
     layout = Layout(home)
     findings = run_lint(layout, load_project(layout), load_schema())
     assert any(f.rule == "Vr2" and f.level == "WARN" for f in findings)
 
 
-def test_vr2_doing_with_develop_no_warn(make_project, write_leaf):
+def test_vr2_clean_collapsed_promoted_entry_no_warn(make_project, write_leaf):
+    """乾淨收攏（只剩 id/title/promoted-to）→ 不誤報。"""
     home = make_project()
-    write_leaf(home, "art", concept={"id": "c-art", "title": "Art", "order": 1},
-               develop="## 進行中的思考")
+    _root(home, write_leaf)
     _write_roadmap(home / "corpus" / "art" / "roadmap.yaml", [
-        {"id": "r1", "kind": "task", "status": "doing", "title": "t",
-         "what": "w", "target": "art"}])
+        {"id": "r1", "title": "t", "promoted-to": "chg-x"}])
     layout = Layout(home)
     findings = run_lint(layout, load_project(layout), load_schema())
     assert not any(f.rule == "Vr2" for f in findings)
 
 
-def test_vr3_done_missing_done_to_warns(make_project, write_leaf):
+def test_vr3_roadmap_audit_mirror_warns(make_project, write_leaf, monkeypatch):
+    """entry.what 散文引用一條仍全文開放的 finding id → 雙帳鏡像 WARN。"""
+    from dspx.commands import audit as audit_cmd
     home = make_project()
     _root(home, write_leaf)
+    monkeypatch.chdir(home.parent)
+    assert audit_cmd.run(["raise", "--target", "art", "--face", "logic",
+                          "--sev", "med", "--finding", "散文問題"]) == 0
     _write_roadmap(home / "corpus" / "art" / "roadmap.yaml", [
-        {"id": "r1", "kind": "task", "status": "done", "title": "t",
-         "what": "w", "target": "art"}])    # 缺 done-to
+        {"id": "r1", "kind": "task", "title": "t", "what": "修 (audit F1)", "target": "art"}])
     layout = Layout(home)
     findings = run_lint(layout, load_project(layout), load_schema())
     assert any(f.rule == "Vr3" and f.level == "WARN" for f in findings)
+
+
+def test_vr3_no_mirror_when_finding_closed(make_project, write_leaf, monkeypatch):
+    from dspx.commands import audit as audit_cmd
+    home = make_project()
+    _root(home, write_leaf)
+    monkeypatch.chdir(home.parent)
+    assert audit_cmd.run(["raise", "--target", "art", "--face", "logic",
+                          "--sev", "med", "--finding", "散文問題"]) == 0
+    assert audit_cmd.run(["resolve", "F1", "--status", "fixed"]) == 0
+    _write_roadmap(home / "corpus" / "art" / "roadmap.yaml", [
+        {"id": "r1", "kind": "task", "title": "t", "what": "修 (audit F1)", "target": "art"}])
+    layout = Layout(home)
+    findings = run_lint(layout, load_project(layout), load_schema())
+    assert not any(f.rule == "Vr3" for f in findings)

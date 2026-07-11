@@ -144,6 +144,22 @@ def _leaf_row(layout: Layout, leaf: Leaf, schema: Schema, check_ok: bool,
     return row
 
 
+def _print_active_changes_overview(layout: Layout, schema: Schema) -> None:
+    """status 頂部顯示 active changes 概觀（task 5.2）：id｜完成數/總數｜archivable。
+    無 active change 時零輸出差異。"""
+    from dspx import change as chg
+    changes = chg.iter_active_changes(layout)
+    if not changes:
+        return
+    print("── active changes (in flight) ──")
+    for change in changes:
+        statuses = chg.derive_change_status(layout, change, schema)
+        done_n = sum(1 for s in statuses if s.done)
+        tag = " (archivable)" if chg.is_archivable(statuses) else ""
+        print(f"  {change.id}  {done_n}/{len(statuses)}{tag}  {change.title}")
+    print()
+
+
 def run(argv: list[str]) -> int:
     import sys
 
@@ -234,6 +250,8 @@ def run(argv: list[str]) -> int:
     if not rows:
         print("corpus is empty (no leaf sections yet). Use docspec new <section> to create the first one.")
         return 0
+
+    _print_active_changes_overview(layout, schema)
 
     print(f"check: {'green' if check_ok else 'red (run docspec check first)'}  "
           f"{len(rows)} leaf section(s)\n")

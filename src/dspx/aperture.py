@@ -296,7 +296,7 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
     if skill == "develop":
         proj.forest = forest_view(leaves, layout)
         # ── 待辦 backlog（derive；只投 develop——開工先看計劃了還沒做的工作）──
-        # reuse build_backlog_view（已掉 done/dropped、算 blocked/unblocked、按文件分組），
+        # reuse build_backlog_view（統無狀態模型：在檔皆待辦、算 blocked/unblocked、按文件分組），
         # 只取「本文件 target」桶 ＋ forest 桶；其餘文件的 backlog 不投（aperture 紀律）。
         from dspx.commands.roadmap import FOREST_GROUP, build_backlog_view
         groups = build_backlog_view(layout, leaves)["groups"]

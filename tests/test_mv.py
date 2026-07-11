@@ -92,7 +92,7 @@ def test_mv_rewrites_audit_and_roadmap_targets(make_project, write_leaf, monkeyp
          "finding": "x", "targets": ["sc/safety/zone#seg", "c2"], "suggestion": ""},
     ]}, allow_unicode=True, sort_keys=False), encoding="utf-8")
     doc_roadmap_path(layout, "sc").write_text(yaml.safe_dump({"entries": [
-        {"id": "R1", "kind": "gap", "status": "open", "target": "sc/safety/zone"},
+        {"id": "R1", "kind": "gap", "target": "sc/safety/zone"},
     ]}, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
     monkeypatch.chdir(home.parent)

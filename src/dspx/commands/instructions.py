@@ -65,6 +65,44 @@ def _realized_mark(r: dict) -> str:
     return f"  ⚠ {label} (no live successor in the supersede chain — repoint realizes to the live truth or drop the edge)"
 
 
+# per-action 驗收判準的一行摘要（instructions active-change 投影用）
+_ACTION_CRITERION = {
+    "create": "ready + synced (crystallized + prose written)",
+    "revise": "synced (prose rewritten against the changed source)",
+    "redraft": "synced (prose fully rewritten)",
+    "align": "stale-inherited/style cleared, or render --ack",
+    "review": "acked with a reason",
+    "retire": "retirement transaction completed in staging",
+    "move": "mv executed at archive + check green",
+}
+
+
+def _change_context(layout, leaves, section: str) -> list[dict]:
+    """本節命中的 active change context（多單全列；workflow-introspection 5.1）。"""
+    from dspx import change as chg
+    concept_id = None
+    for lf in leaves:
+        if lf.section == section and lf.concept_id:
+            concept_id = str(lf.concept_id)
+            break
+    out: list[dict] = []
+    for change, t in chg.changes_hitting_section(layout, section, concept_id, leaves):
+        out.append({"id": change.id, "why": change.why, "action": t.action,
+                    "acceptance": _ACTION_CRITERION.get(t.action, t.action)})
+    return out
+
+
+def _print_change_context(layout, leaves, section: str) -> None:
+    ctx = _change_context(layout, leaves, section)
+    if not ctx:
+        return
+    print("── Active change context (this section is enlisted; obey the action, acceptance is DERIVED) ──")
+    for c in ctx:
+        why = f"｜why: {c['why']}" if c["why"] else ""
+        print(f"  {c['id']}{why}｜action={c['action']}｜acceptance＝{c['acceptance']}")
+    print()
+
+
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec instructions", description=HELP)
     parser.add_argument("skill", help="develop / draft / edit / factcheck / publish / release")
@@ -108,6 +146,7 @@ def run(argv: list[str]) -> int:
         print(json.dumps({
             "skill": proj.skill,
             "section": proj.section,
+            "activeChanges": _change_context(layout, leaves, args.section),
             "reads": proj.reads,
             "writes": proj.writes,
             "parentBriefs": proj.parent_briefs,
@@ -126,6 +165,8 @@ def run(argv: list[str]) -> int:
         return 0
 
     print(f"aperture projection: skill={proj.skill}  section={proj.section}\n")
+
+    _print_change_context(layout, leaves, args.section)
 
     if proj.project_purpose:
         print(f"Project goal: {proj.project_purpose}\n")
@@ -160,11 +201,8 @@ def run(argv: list[str]) -> int:
             print("  (no backlog)")
         else:
             unblocked = [e for e in proj.roadmap if e.get("unblocked")]
-            doing = [e for e in proj.roadmap if e.get("status") == "doing"]
-            blocked = [e for e in proj.roadmap
-                       if e.get("blocked") and e.get("status") != "doing"]
-            accounted = ({id(e) for e in unblocked} | {id(e) for e in doing}
-                         | {id(e) for e in blocked})
+            blocked = [e for e in proj.roadmap if e.get("blocked")]
+            accounted = {id(e) for e in unblocked} | {id(e) for e in blocked}
             other = [e for e in proj.roadmap if id(e) not in accounted]
 
             def _r(e: dict, suffix: str = "") -> None:
@@ -178,14 +216,10 @@ def run(argv: list[str]) -> int:
                 print("  Blocked-by:")
                 for e in blocked:
                     _r(e, f"  ← waiting on: {', '.join(e.get('blocking-deps') or [])}")
-            if doing:
-                print("  Doing:")
-                for e in doing:
-                    _r(e)
             if other:
                 print("  Other backlog:")
                 for e in other:
-                    _r(e, f"  ({e.get('status')})")
+                    _r(e)
         print()
 
     if proj.document_map:
