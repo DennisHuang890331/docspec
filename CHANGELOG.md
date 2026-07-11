@@ -10,6 +10,33 @@ a minor bump.
 
 ## [Unreleased]
 
+### Added — prose cross-references become stable anchors with render-injected §numbers
+
+- **A prose cross-reference to another section/decision is now a stable anchor, not a hand-typed
+  chapter number.** Write `<!--@<target-concept-id>--><!--@-->` inline where the number should go;
+  `render` injects the current `§number` between the two invisible comments from the target's
+  outline position and re-derives it on every render, so it never dangles. This closes the last
+  half of the SC-renumber breakage (the real corpus lost 94–107 cross-file references across two
+  restructures, each caught only by multi-round audit) — heading numbers were already
+  render-derived (contract-slimming); in-prose references were not.
+- **The injected number is derived-not-stored (fingerprint version 3 → 4).** `prose_hash`
+  normalizes the anchor-bound number away before hashing, so refreshing it (e.g. §6.5 → §7.2 after
+  a reorder) never marks the referencing section stale/drifted — same order-out-of-hash principle
+  as contract-slimming. Existing ledgers migrate once via `docspec render <article> --rebaseline`
+  (prose preserved); may share contract-slimming's migration wave.
+- **Cross-document prose references are machine-verifiable for the first time.** `docspec check`
+  validates every prose anchor's target id in the same dead-reference class as
+  `realizes`/`governed-by`: pointing at a non-existent or retired id is an ERROR, naming the prose
+  location and the dangling id. Hand-written literal `§9.2` could never be checked.
+- **`docspec lint` V21 (WARN)** flags any un-anchored literal chapter reference left in prose
+  (`§9.2`, `第 6 章`, `見 §12`) — it drifts on reorder; bind an anchor instead. External-standard
+  clause citations (`ISO 13849-1 §4.2`) are exempt (ground-truthed against the real corpus).
+- **`publish` freezes the anchor's current number into the immutable snapshot** and strips the
+  binding comments (zero mechanical residue). Anchor resolution runs only inside prose spans —
+  code fences / inline code / URLs / image paths are byte-exact untouched. Migration of the ~100
+  台中港 literal references to anchors is agent-assisted (each old number's target is a semantic
+  judgment); lint V21 lists them, the agent binds each anchor once.
+
 ### Changed — contract slimming: concept-required, the rest on-demand (**BREAKING**)
 
 - **A missing `decisions.yaml` is now a legal empty state** ("this section owns no normative

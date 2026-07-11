@@ -176,8 +176,11 @@ workflow:
 # Universal filing rules (cross-skill; ONLY rules the engine actually enforces — so they're contract, not stance; guide projects them)
 filing-rules:
   - id: bind-by-id
-    rule: "Identity = concept.id, location = path. The section↔prose binding lives in concept.yaml via stable ids — never a section number, never injected into deliverable prose."
+    rule: "Identity = concept.id, location = path. The section↔prose OWNERSHIP binding (which section owns which prose block) lives in the outline/index via stable ids — never a section number, never injected into deliverable prose. (A prose cross-REFERENCE from one section to another is the one sanctioned inline binding — see crossref-by-anchor.)"
     enforced-by: check / lint
+  - id: crossref-by-anchor
+    rule: "A prose cross-reference to another section/decision (\"see §6.5\", \"per §9.2\") is written as a stable anchor bound to the target's concept.id (or a decision id), NEVER as a hand-typed chapter number. Form: <!--@<id>--><!--@--> inline in the prose (an empty invisible binding + closing sentinel); render injects the current §number between them from the target's outline position, re-derived on every render — reorder/restructure never leaves it dangling. The displayed number is derived-not-stored (excluded from the prose fingerprint, so refreshing it never marks the section stale); check validates the target id is live (a dead anchor = ERROR — cross-document prose references are machine-verifiable for the first time); lint WARNs on any un-anchored literal §N / 第 N 章 left in prose. External-standard clause citations (ISO 13849-1 §4.2) stay literal — the anchor is only for internal cross-references."
+    enforced-by: render / check / lint
   - id: supersede-both-sides
     rule: "To supersede decision B with A: set A.supersedes:B AND B.status:superseded + B.superseded-by:A. A half-linked supersede is rejected."
     enforced-by: check

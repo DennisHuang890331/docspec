@@ -19,7 +19,7 @@ from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema,
 from dspx.frontmatter import parse_frontmatter, render_frontmatter
 from dspx.layout import Layout, next_version, parse_semver
 from dspx.lint import ERROR, run_lint
-from dspx.render import render_article, strip_markers
+from dspx.render import render_article, strip_anchor_bindings, strip_markers
 
 NAME = "publish"
 HELP = "the only irreversible command: check+lint green -> render -> freeze a read-only, marker-stripped snapshot"
@@ -145,9 +145,9 @@ def run(argv: list[str]) -> int:
     version = args.set_version or _next_version(layout, args.article, args.level)
 
     meta, body = parse_frontmatter(latest.read_text(encoding="utf-8"))
-    # 快照＝純內容：剝隱形標記 ＋ **不寫 frontmatter**（機器簿記不進凍結交付物；
-    # 版號在檔名、紀錄在 changelog）。讀者開檔只看到散文。
-    clean_body = strip_markers(body).strip() + "\n"
+    # 快照＝純內容：剝隱形標記 ＋ 剝散文交叉引用錨綁定（留當下 §號碼、凍結進不可變快照）
+    # ＋ **不寫 frontmatter**（機器簿記不進凍結交付物；版號在檔名、紀錄在 changelog）。讀者開檔只看到散文。
+    clean_body = strip_anchor_bindings(strip_markers(body)).strip() + "\n"
 
     # ── no-op 偵測：與上一凍結快照位元相同 → 拒（不鑄幻影新版；--allow-noop 才放行）──
     if prev_versions and not args.allow_noop:
@@ -260,7 +260,7 @@ def _dry_run(layout: Layout, schema, leaves, args) -> int:
     else:
         if latest.is_file():
             _, body = parse_frontmatter(latest.read_text(encoding="utf-8"))
-            clean_body = strip_markers(body).strip() + "\n"
+            clean_body = strip_anchor_bindings(strip_markers(body)).strip() + "\n"
         else:
             clean_body = "\n"
         prev_v = ".".join(str(p) for p in max(prev_versions))

@@ -68,7 +68,8 @@ def test_ledger_migrates_from_old_frontmatter(make_project, write_leaf, monkeypa
     assert not Layout(home).docs_ledger("g").is_file()
     assert render_cmd.run(["g", "--rebaseline"]) == 0   # 顯式一次遷移
     assert Layout(home).docs_ledger("g").is_file()
-    assert read_ledger_version(Layout(home), "g") == 3   # 遷移後＝現行版本
+    from dspx.render import LEDGER_FINGERPRINT_VERSION
+    assert read_ledger_version(Layout(home), "g") == LEDGER_FINGERPRINT_VERSION   # 遷移後＝現行版本
     meta, _ = parse_frontmatter(latest.read_text("utf-8"))
     assert "sections" not in meta               # frontmatter 已遷出
     assert "舊文。" in latest.read_text("utf-8")  # 散文原樣保留

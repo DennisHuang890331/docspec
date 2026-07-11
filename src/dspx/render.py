@@ -28,9 +28,12 @@ from dspx.model import (
 
 # 指紋帳本的算法/格式版本（頂層 `fingerprint:` 鍵）。v2＝四項算法（換行正規化、deps 二跳、
 # style 三子軸、norm 新軸）；v3＝own 軸把 `order`（位置元資料）排除於 concept.yaml 貢獻之外
-# （contract-slimming：改 order/搬位不誤標 stale-own）。無此鍵＝v1。任一低於現行版本的帳本＝
-# 不可比、需一次 `--rebaseline` 遷移（見 read_ledger_version / ledger_needs_migration）。
-LEDGER_FINGERPRINT_VERSION = 3
+# （contract-slimming：改 order/搬位不誤標 stale-own）；v4＝prose 軸把散文交叉引用錨後的 render
+# 注入號碼正規化掉（prose-crossref-anchors：`<!--@id-->§6.5<!--@-->` 的 §6.5 每次 render 重算、
+# 排除於 prose 指紋——重排刷新號碼不誤標 prose drift，與 v3 order-out-of-hash 同構）。無此鍵＝v1。
+# 任一低於現行版本的帳本＝不可比、需一次 `--rebaseline` 遷移（見 read_ledger_version /
+# ledger_needs_migration）。
+LEDGER_FINGERPRINT_VERSION = 4
 
 
 def read_ledger(layout: Layout, article: str) -> dict:
@@ -216,9 +219,100 @@ GROUP_MARKER_RE = re.compile(r"^<!--\s*dspx:group\s+(.+?)\s*-->\s*$")
 CLOSING_MARKER_RE = re.compile(r"^<!--\s*/\s*dspx\b[^>]*-->\s*$")
 
 
+# ── 散文交叉引用錨（prose-crossref-anchors, P1b）───────────────────────────────
+# 散文回引不再手寫死章號（`§9.2`／`第 6 章`）——改綁一個穩定錨，號碼由 render 每次重算注入。
+# 形式（一體兩件）：`<!--@<id>-->` 綁定（隱形 html-comment，spans.py 已認得且保護）＋緊隨的
+# render 擁有的可見標籤（`§6.5`／`附錄 A`／numbering:none 目標的標題名）＋closing sentinel
+# `<!--@-->`（空 id 的 html-comment）。三者一體：markdown→PDF 兩個 comment 不渲染，讀者只見標籤。
+#   `…詳見 <!--@sec-bc9bfc7a-->§6.5<!--@--> 的狀態轉移…`
+# render 組裝時對每 body 掃此形、以目標當下 outline 號碼重寫兩 comment 之間的標籤（號碼 derive、
+# 不入源）；重排即自動刷新（open question 定案＝body 帶當下號碼、指紋正規化掉）。標籤含 `§` 由
+# render 決定（numbering:none 目標注標題名、不吐空 `§`）。id 綁定字串本身 byte 不變。
+_ANCHOR_ID = r"[A-Za-z0-9_-]+"
+# 綁定開頭（捕捉 id；空 id 的 sentinel `<!--@-->` 不命中——`+` 要求至少一字元）。
+_ANCHOR_OPEN_RE = re.compile(r"<!--@(" + _ANCHOR_ID + r")-->")
+# 完整引用：綁定 + 標籤（inline、非跨行）+ sentinel。標籤 lazy，render 重寫其內容。
+_ANCHOR_REF_RE = re.compile(r"<!--@(" + _ANCHOR_ID + r")-->(.*?)<!--@-->")
+
+
+def normalize_prose_anchors(body: str) -> str:
+    """把散文交叉引用錨後的 render 注入號碼縮回裸綁定（prose 指紋正規化用，D2）。
+
+    `<!--@id-->§6.5<!--@-->` → `<!--@id--><!--@-->`：號碼刷新（6.5→7.2＝重排）對 prose 指紋
+    透明，只有綁定本身變（改錨目標＝retarget）或其餘散文變才算 prose 變動。與 v3 的
+    order-out-of-hash 同構延伸。冪等（再跑不再縮）。"""
+    if "<!--@" not in body:
+        return body
+    return _ANCHOR_REF_RE.sub(r"<!--@\1--><!--@-->", body)
+
+
+def _protected_mask(body: str) -> list[bool]:
+    """body 中「byte-exact 不可動」的位置遮罩（code fence／inline code／image／URL）。
+
+    錨解析只在散文 span 動（spec：只在 prose span、code/URL/識別碼 byte-exact）——綁定所在的
+    html_comment 刻意**不**遮（錨就住 comment 裡），但落在 fence/inline code/image/url 內的
+    錨樣式字串一律跳過、byte 不動。"""
+    from dspx.spans import FENCE, IMAGE, INLINE_CODE, URL, classify_deliverable
+    protected = [False] * len(body)
+    byte_exact = {FENCE, INLINE_CODE, IMAGE, URL}
+    for sp in classify_deliverable(body):
+        if sp.kind in byte_exact:
+            for p in range(sp.start, sp.end):
+                protected[p] = True
+    return protected
+
+
+def resolve_prose_anchors(body: str, label_for) -> str:
+    """render 組裝時的散文錨解析注入 pass：以 `label_for(id)` 重算兩 comment 間的可見標籤。
+
+    `label_for(anchor_id) -> str | None`：回該錨目標當下的可見標籤（`§6.5`／`附錄 A`／標題名），
+    None＝無法解析（目標不存在/退役——標籤留空，check 另報死引用 ERROR）。只在散文 span 動；
+    落在 code/URL 內的錨樣式 byte 不動。確定性、冪等（未重排連跑兩次 byte 同）。"""
+    if "<!--@" not in body:
+        return body
+    protected = _protected_mask(body)
+
+    def repl(m: re.Match) -> str:
+        if any(protected[m.start():m.end()]):
+            return m.group(0)            # 落在 code/URL 內：byte-exact 不動
+        label = label_for(m.group(1))
+        return f"<!--@{m.group(1)}-->{label or ''}<!--@-->"
+
+    return _ANCHOR_REF_RE.sub(repl, body)
+
+
+def iter_prose_anchor_ids(body: str) -> list[tuple[str, int]]:
+    """抽出 body 散文 span 內每個錨綁定的 `(id, offset)`（依出現序、去重前）。
+
+    供 `check` 收死引用（跨文件散文引用第一次可驗）。只認散文 span 內的綁定；code/URL 內的
+    錨樣式不算引用。sentinel `<!--@-->`（空 id）天然不命中。"""
+    if "<!--@" not in body:
+        return []
+    protected = _protected_mask(body)
+    out: list[tuple[str, int]] = []
+    for m in _ANCHOR_OPEN_RE.finditer(body):
+        if any(protected[m.start():m.end()]):
+            continue
+        out.append((m.group(1), m.start()))
+    return out
+
+
+def strip_anchor_bindings(text: str) -> str:
+    """把散文交叉引用錨的隱形綁定剝掉、留下當下可見標籤（publish 凍結快照用）。
+
+    `<!--@id-->§6.5<!--@-->` → `§6.5`：發行快照是不可變的、號碼凍結在發行當下（正是所需——
+    published 版本永不重算）。零機械痕跡契約：綁定 comment 一併消失。落在 code fence 內的錨樣式
+    亦一併還原（快照不留任何 `<!--@…-->`）；code 內出現此精確配對的機率可忽略。"""
+    return _ANCHOR_REF_RE.sub(r"\2", text)
+
+
 def prose_hash(body: str) -> str:
-    """一段散文本身的指紋（diff 偵測手改交付物用）。"""
-    return hashlib.sha256(body.strip().encode("utf-8")).hexdigest()[:16]
+    """一段散文本身的指紋（diff 偵測手改交付物用）。
+
+    v4：hash 前把散文交叉引用錨後的 render 注入號碼正規化掉（`normalize_prose_anchors`）——
+    號碼刷新（重排）對 prose 指紋透明，只有綁定/其餘散文真變才算 prose 變（D2）。"""
+    return hashlib.sha256(
+        normalize_prose_anchors(body).strip().encode("utf-8")).hexdigest()[:16]
 
 
 def find_image_refs(body: str) -> list[str]:
@@ -530,6 +624,36 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     # 組裝時前綴進 heading（corpus title 不含章號）。None＝該節不編號（numbering: none／根節）。
     numbers = outline_numbering(layout, art_leaves, article)
 
+    # 散文交叉引用錨解析器（P1b）：跨全專案（所有 article）建 section→label 與 id→section，
+    # 使散文回引可跨文件解析當下 outline 號碼。號碼 derive（每次 render 重算）、不入源、prose 指紋
+    # 正規化掉——重排幾次都不漂。all_numbers 逐 article 併（section 路徑含 article 前綴、不相撞）。
+    all_numbers: dict[str, str | None] = {}
+    for other in sorted({lf.article for lf in leaves}):
+        other_leaves = [lf for lf in leaves if lf.article == other]
+        all_numbers.update(outline_numbering(layout, other_leaves, other))
+    id_to_section: dict[str, str] = {}
+    title_by_section: dict[str, str] = {}
+    for lf in leaves:
+        title_by_section[lf.section] = lf.title
+        if lf.concept and lf.concept.get("id"):
+            id_to_section[str(lf.concept["id"])] = lf.section
+    for did, rec in dindex.items():          # decision/history id → 其所在節（D3：綁決策解析到擁有節）
+        id_to_section.setdefault(did, rec["section"])
+
+    def _anchor_label(anchor_id: str) -> str | None:
+        """散文錨 id → 當下可見標籤：`§6.5`／`附錄 A`／numbering:none 目標的標題名；
+        目標不存在/退役＝None（標籤留空、check 報死引用）。"""
+        sec = id_to_section.get(anchor_id)
+        if sec is None:
+            return None
+        label = all_numbers.get(sec)
+        if label is None:                    # numbering:none 或根節＝無號碼可注 → 注標題名（不吐空 §）
+            return title_by_section.get(sec) or None
+        bare = label.rstrip(".")             # 去頂層尾點（`6.`→`6`）；引用讀 `§6`
+        if label.startswith(APPENDIX_HEADING_PREFIX):
+            return bare                      # 附錄 A：裸標籤、不套 §
+        return f"§{bare}"
+
     latest = layout.docs_latest(article)
     existing_bodies: dict[str, str] = {}
     discarded: list[tuple[str, str]] = []   # 〔#02〕無主散文塊 (位置, 原始內容)——寫檔時吐 WARN
@@ -583,7 +707,9 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
         label = numbers.get(lf.section)
         heading_text = f"{label} {lf.title}" if label else lf.title
         heading = "#" * min(depth + 1, MAX_HEADING_LEVEL) + " " + heading_text
-        body = existing_bodies.get(lf.section, "").strip()
+        # 散文交叉引用錨：組裝時解析注入當下 §號碼（P1b）。只在散文 span 動、確定性、冪等；
+        # 號碼 derive（不入源）、prose 指紋正規化掉——重排刷新號碼不誤標 drift。
+        body = resolve_prose_anchors(existing_bodies.get(lf.section, "").strip(), _anchor_label)
         out.append(section_marker(lf.section))
         out.append(heading)
         out.append("")

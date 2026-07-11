@@ -432,11 +432,12 @@ def _downgrade_ledger_to_v1(home, article="g"):
 
 
 def test_write_ledger_carries_version_key(make_project, write_leaf, monkeypatch):
-    """5.1：render 寫出的帳本頂層帶 `fingerprint: 3`（現行版本）；read_ledger_version 回報。"""
+    """5.1：render 寫出的帳本頂層帶現行 `fingerprint:` 版本；read_ledger_version 回報。"""
     home = _baseline(make_project, write_leaf, monkeypatch)
     data = yaml.safe_load(Layout(home).docs_ledger("g").read_text(encoding="utf-8"))
-    assert data["fingerprint"] == 3
-    assert read_ledger_version(Layout(home), "g") == 3
+    from dspx.render import LEDGER_FINGERPRINT_VERSION
+    assert data["fingerprint"] == LEDGER_FINGERPRINT_VERSION
+    assert read_ledger_version(Layout(home), "g") == LEDGER_FINGERPRINT_VERSION
 
 
 def test_leaf_order_change_is_not_stale_own(make_project, write_leaf, monkeypatch):
@@ -520,7 +521,8 @@ def test_rebaseline_migrates_v1_to_v2_in_one_shot(make_project, write_leaf, monk
     assert render_cmd.run(["g", "--rebaseline"]) == 0
     err = capsys.readouterr().err
     assert "absorbed" in err                                     # 吸收警語明講
-    assert read_ledger_version(Layout(home), "g") == 3
+    from dspx.render import LEDGER_FINGERPRINT_VERSION
+    assert read_ledger_version(Layout(home), "g") == LEDGER_FINGERPRINT_VERSION
     assert "限流保護後端。" in _latest(home).read_text("utf-8")   # 散文原樣保留
     assert _sync_of(home, "g", "g/intro") == "synced"
     rec = read_ledger(Layout(home), "g")["g/intro"]

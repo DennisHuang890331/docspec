@@ -19,6 +19,7 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   V18 散文殘留半形標點           WARN  ← 散文面 span 內 normalize 會轉的半形標點（`,`/`.`/`:`/`;`/`?`/`!`）→ 指向 `docspec normalize`（不教手改）
   V19 brief 欄逐字複述祖先        WARN  ← concept.brief 子欄 strip 後 byte 等於最近提供該欄的祖先值（沿 aperture 祖先鏈）→ 指向刪欄改繼承／`docspec tidy`
   V20 title 章號前綴             WARN  ← concept/group title 以大綱編號起頭（阿拉伯 `6.`／全形／頓號 `6、`／附錄字母 `A.`）→ 章號 render 推導、指向 `docspec tidy`
+  V21 散文未綁錨字面章號          WARN  ← 散文 `§9.2`／`第 6 章`／`見 §12` 未綁穩定錨（重排即漂）→ 改綁交叉引用錨（號碼 render 注入）；外部標準條號（`ISO … §4.2`）豁免
   Vg1/Vg2 術語一致               WARN
   Ve1 死錨點連結（export 破）     WARN  ← `](#x)` 對不上任何標題 slug → xelatex PDF 整份失敗
   Ve2 非標準 markdown（@import）  WARN  ← MPE 指令不會在 docx/PDF 渲染
@@ -251,7 +252,9 @@ def _scan_deliverable_text(body: str, where: str, all_ids: set[str]) -> list[Fin
                                 "authoring tool; express document relationships in domain language: "
                                 "cross-document, name the document (\"per 《…》\", \"see 《…》\"); "
                                 "same-document, quote the target section's human title "
-                                "(「詳見「〈章節標題〉」一節」), never § + a number or a backstage id. "
+                                "(「詳見「〈章節標題〉」一節」), or for a §number reference bind a "
+                                "cross-reference anchor (filing rule crossref-by-anchor, render-"
+                                "injected); never a hand-typed § + number or a backstage id. "
                                 "Never ship backstage terms (forest / governed-by / governance parent "
                                 "/ Tier-N / L2a / fan-in / module-section / factcheck / raise a "
                                 "finding / §back-ref)"))
@@ -341,6 +344,91 @@ def _lint_punctuation(layout: Layout, articles: list[str]) -> list[Finding]:
             findings.append(Finding("V18", WARN, where,
                 f"{n} half-width punctuation mark(s) in prose that would normalize to full-width "
                 f"-- run `docspec normalize {article}` (deterministic; do not hand-edit)"))
+    return findings
+
+
+# ── V21 散文字面章號（deliverable-cleanliness／prose-crossref-anchors，P1b）──────
+# 散文回引寫死章號（`§9.2`／`第 6 章`／`見 §12`）＝重排即漂（真語料實證：兩輪 SC 重構後
+# 94–107 處失錨）。改綁穩定錨（`<!--@id-->`，號碼 render 注入）後號碼永遠算得出。此規則 WARN
+# 指向改綁錨。**只抓未綁錨的字面**：render 注入的錨標籤（`<!--@id-->§6.5<!--@-->`）在掃描前
+# 先以 `normalize_prose_anchors` 縮回裸綁定＝§6.5 消失、不誤報引擎自產。
+# 字面章號形：§＋數字（半/全形，含小數）／`第 N 章`／`第 N 節`（N＝阿拉伯/全形/中文數字）。
+_LITERAL_CHAPTER_RE = re.compile(
+    r"§\s*[0-9０-９]+(?:[.．][0-9０-９]+)*"                       # §9 / §9.2 / § 12
+    r"|第\s*[0-9０-９一二三四五六七八九十百]+\s*[章節]"          # 第 6 章 / 第三節
+    r"|(?:Annex|Appendix)\s+[A-Z]\b"                          # Annex A / Appendix B（英文附錄交叉引用）
+    r"|附錄\s*[A-Za-z0-9０-９]"                                # 附錄 A / 附錄1（中文附錄交叉引用）
+)
+# 外部標準條號白名單（D4）：`ISO 13849-1 §4.2` 指外部標準、非內部節，不誤報。判定＝章號命中
+# 的**同一子句左窗**內出現標準代號（ISO/IEC/EN/GB…）。ground-truth 台中港語料校準零 FP。
+_STANDARD_DESIGNATOR_RE = re.compile(
+    r"(?:ISO(?:/IEC|/TS|/TR)?|IEC|IEEE|EN|DIN|ANSI|JIS|CNS|GB(?:/T)?|BS|UL|NFPA|"
+    r"ASME|ASTM|API|SAE|RFC|MIL(?:-STD)?)\b")
+# 子句硬界：句末標點＋換行（散文子句界）。表格分隔 `|` 另以「至多跨一格」的軟界處理（見下）。
+_CLAUSE_BOUNDARY_RE = re.compile(r"[。！？；\n]")
+_PIPE_RE = re.compile(r"\|")
+
+
+def _is_external_standard_ref(segment: str, hit_start: int) -> bool:
+    """章號命中是否為外部標準條號（左窗同子句內見標準代號＝是，跳過）。
+
+    左窗＝命中位置往回 40 字，先在最近硬子句界（。！？；換行）截斷。表格 `|` 分隔以「至多跨
+    一格」處理：允許條號落在標準名格的**相鄰描述格**仍豁免（`| IEC 61508-2 | …(§7.4.2.3) |`＝
+    外部標準的條款、正當豁免），但與任何標準名相距**兩格以上**的 `§N`（`| ISO 12100 | … |
+    依 §3 …`＝本表指涉他文件內部節）不豁免＝WARN。ground-truth：standards-applicability-matrix
+    的 `依 §3` 曾被過度豁免＝漏報，而 `(§7.4.2.3)`／`(§11.2)` 是真外部條號、不可誤報。"""
+    window_start = max(0, hit_start - 40)
+    left = segment[window_start:hit_start]
+    hard = None
+    for hard in _CLAUSE_BOUNDARY_RE.finditer(left):
+        pass
+    if hard is not None:
+        left = left[hard.end():]          # 散文硬子句界：只看命中所在子句
+    pipes = [pm.start() for pm in _PIPE_RE.finditer(left)]
+    if len(pipes) >= 2:
+        left = left[pipes[-2] + 1:]       # 表格：至多回看一格（保留倒數第二個 `|` 之後）
+    return _STANDARD_DESIGNATOR_RE.search(left) is not None
+
+
+def _lint_prose_chapter_refs(layout: Layout, articles: list[str]) -> list[Finding]:
+    """V21 散文字面章號（WARN、非阻塞）：散文 span 內未綁錨的字面章號 → 指向改綁穩定錨。
+
+    掃描前先 `normalize_prose_anchors` 縮掉 render 注入的錨標籤（§6.5＝引擎自產、不報）；
+    外部標準條號（`ISO … §4.2`）經左窗代號判定跳過。每章節聚一筆 WARN（帶章節定位）。"""
+    from dspx.render import normalize_prose_anchors
+    from dspx.spans import (FENCE, HEADING, HTML_COMMENT, INLINE_CODE, MARKER,
+                            classify_deliverable, mask_non_prose)
+    findings: list[Finding] = []
+    for article in articles:
+        path = layout.docs_latest(article)
+        if not path.is_file():
+            continue
+        file_where = f"docs/{article}/_latest.md"
+        # 先縮掉錨注入的號碼（引擎自產、非未綁錨字面）→ 再遮 code/comment/marker **＋ HEADING**。
+        # HEADING 入遮蔽面（有別於 V1–V17 的 `_doc_section_segments`）：render 推導的附錄標題
+        # `## 附錄 A 名稱` 是正當標題、非交叉引用——不遮會被新增的 `附錄 A` pattern 誤報。
+        normalized = normalize_prose_anchors(path.read_text(encoding="utf-8"))
+        masked = mask_non_prose(
+            normalized, kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER, HEADING})
+        segments: list[tuple[str | None, str]] = []
+        for sp in classify_deliverable(normalized):
+            if segments and segments[-1][0] == sp.section:
+                segments[-1] = (sp.section, segments[-1][1] + masked[sp.start:sp.end])
+            else:
+                segments.append((sp.section, masked[sp.start:sp.end]))
+        for section, segment in segments:
+            hits = [m for m in _LITERAL_CHAPTER_RE.finditer(segment)
+                    if not _is_external_standard_ref(segment, m.start())]
+            if not hits:
+                continue
+            where = f"{file_where} § {section}" if section else file_where
+            sample = hits[0].group(0).strip()
+            findings.append(Finding("V21", WARN, where,
+                f"{len(hits)} un-anchored literal chapter reference(s) in prose "
+                f"(e.g. \"{sample}\") -- literal section numbers drift on any reorder; bind a "
+                f"stable cross-reference anchor to the target section's id instead (the number "
+                f"is then render-injected and never dangles). External-standard clause citations "
+                f"(e.g. ISO 13849-1 §4.2) are exempt."))
     return findings
 
 
@@ -453,6 +541,7 @@ def run_lint(layout: Layout, leaves: list[Leaf], schema: Schema) -> list[Finding
     findings = _lint_docs(layout, articles, all_ids)
     findings.extend(_lint_numbers(layout, articles))
     findings.extend(_lint_punctuation(layout, articles))
+    findings.extend(_lint_prose_chapter_refs(layout, articles))
     for leaf in leaves:
         findings.extend(_lint_material(leaf))
         findings.extend(_lint_realizes(leaf, index))
