@@ -1,8 +1,11 @@
-# history.md（退場散文細節，可選）
+# history.md（退場散文細節，可選；主要服務舊 corpus）
 
-history.yaml 的**散文半**：yaml 管精瘦索引（id/狀態/連結，機器查、每次都載故保持小）；
-**md 管「為什麼」的散文細節**——讀者是 **develop（re-open 回顧）與 factcheck（判脈絡）兩個 agent**，
-draft 永不讀、publish 不投影。可有可無（沒散文就只留 yaml 摘要）。
+history.yaml 的**散文半**：yaml 管精瘦索引（id/狀態/連結）；**md 管「為什麼」的散文細節**——
+讀者是 **develop（re-open 回顧）與 factcheck（判脈絡）兩個 agent**，draft 永不讀、publish 不投影。
+可有可無（沒散文就只留 yaml 摘要）。
+注意（contract-slimming 後）：死決策**就地留在 decisions.yaml**（rationale/rejected 原欄保留、
+不再被剝離搬移），所以新流程不再生成本檔——它服務舊 corpus 既有段落與 `_archive/` 封存包內的記錄，
+`docspec show <id>` 照讀。
 
 ## 格式（乾淨 `## <id>`，純 id）
 對某筆退場「決策」開一段，標題＝**純 id**（不帶標題、不夾破折號）：

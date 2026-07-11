@@ -356,7 +356,7 @@ def test_document_map_follows_shared_outline_order_with_groups(make_project, wri
     g = by_sec["art/annex-b"]
     assert g["kind"] == "group" and g["title"] == "附錄B" and g["order"] == 99.0
     assert g["role"] is None
-    assert set(g) == {"section", "title", "order", "role", "kind"}   # structure-only、無散文欄
+    assert set(g) == {"section", "title", "order", "number", "role", "kind"}   # structure-only、無散文欄
     assert by_sec["art/intro"]["kind"] == "leaf"
 
     # documentMap 列序＝render 交付物章節順序（同一共用排序器）
@@ -364,8 +364,8 @@ def test_document_map_follows_shared_outline_order_with_groups(make_project, wri
     monkeypatch.chdir(home.parent)
     assert render_cmd.run(["art"]) == 0
     text = (home.parent / "docs" / "art" / "_latest.md").read_text(encoding="utf-8")
-    assert (text.index("## 前言") < text.index("## 簡介")
-            < text.index("## 附錄B") < text.index("### 地面"))
+    assert (text.index("## 1. 前言") < text.index("## 2. 簡介")
+            < text.index("## 3. 附錄B") < text.index("### 3.1 地面"))
 
 
 def test_document_map_groupless_project_unchanged_except_kind(make_project, write_leaf):
@@ -378,7 +378,7 @@ def test_document_map_groupless_project_unchanged_except_kind(make_project, writ
     proj = _project(home, "draft", "art/alpha")
     assert [n["section"] for n in proj.document_map] == ["art", "art/alpha", "art/beta"]
     for n in proj.document_map:
-        assert set(n) == {"section", "title", "order", "role", "kind"}
+        assert set(n) == {"section", "title", "order", "number", "role", "kind"}
         assert n["kind"] == "leaf"
 
 

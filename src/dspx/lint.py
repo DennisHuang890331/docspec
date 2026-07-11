@@ -17,6 +17,8 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   V16 規範語句逃避詞（同句 應/不得）WARN  ← 最好／儘量／酌情／如有可能／視情況／最大限度（必要時故意排除，見下）
   V17 英文 AI-ism 詞彙            WARN  ← delve/tapestry/seamless…封閉 13 組＋句首 In today's；robust 刻意排除（見下）
   V18 散文殘留半形標點           WARN  ← 散文面 span 內 normalize 會轉的半形標點（`,`/`.`/`:`/`;`/`?`/`!`）→ 指向 `docspec normalize`（不教手改）
+  V19 brief 欄逐字複述祖先        WARN  ← concept.brief 子欄 strip 後 byte 等於最近提供該欄的祖先值（沿 aperture 祖先鏈）→ 指向刪欄改繼承／`docspec tidy`
+  V20 title 章號前綴             WARN  ← concept/group title 以大綱編號起頭（阿拉伯 `6.`／全形／頓號 `6、`／附錄字母 `A.`）→ 章號 render 推導、指向 `docspec tidy`
   Vg1/Vg2 術語一致               WARN
   Ve1 死錨點連結（export 破）     WARN  ← `](#x)` 對不上任何標題 slug → xelatex PDF 整份失敗
   Ve2 非標準 markdown（@import）  WARN  ← MPE 指令不會在 docx/PDF 渲染
@@ -457,6 +459,8 @@ def run_lint(layout: Layout, leaves: list[Leaf], schema: Schema) -> list[Finding
     findings.extend(_lint_glossary(layout, articles))
     findings.extend(_lint_export_safety(layout, articles))
     findings.extend(_lint_drift(layout, leaves))
+    findings.extend(_lint_brief_dup(leaves))
+    findings.extend(_lint_title_prefix(layout, leaves))
     findings.extend(_lint_orphan_assets(layout, leaves))
     findings.extend(_lint_freeze(layout))
     findings.extend(_lint_roadmap(layout, leaves))
@@ -701,4 +705,130 @@ def _lint_realizes(leaf: Leaf, index) -> list[Finding]:
         if rec is not None and rec.kind == "history":
             findings.append(Finding("V9", WARN, f"{leaf.section}/concept.yaml",
                                     f"realizes points to retired decision \"{rid}\" ({rec.section}) -- should point to the latest decision that supersedes it"))
+    return findings
+
+
+# ── V19 brief 逐字複述祖先 / V20 title 章號前綴（contract-slimming D6）──────────
+# 兩者皆 WARN、非阻塞（絕不影響 publish 閘）。下列判定原語是 lint 與 `docspec tidy` 的
+# **單一權威**——tidy 刪欄／剝前綴時 import 同一組常數/函式，判定不漂移。
+
+# brief 差異制的可繼承子欄（concept.brief 下）。tidy 逐字複述剝除也走這份清單。
+BRIEF_FIELDS = ("audience", "depth", "breadth", "forbidden", "layout", "kind")
+
+
+def _brief_of(leaf: Leaf) -> dict:
+    """leaf.concept.brief（保證回 dict；缺/型別錯＝空 dict）。"""
+    brief = (leaf.concept or {}).get("brief") if leaf.concept else None
+    return brief if isinstance(brief, dict) else {}
+
+
+def _brief_field_present(val: object) -> bool:
+    """該 brief 欄是否「有提供值」（供 nearest-ancestor 搜尋停在第一個非空祖先）。"""
+    if isinstance(val, str):
+        return bool(val.strip())
+    if isinstance(val, list):
+        return len(val) > 0
+    return val is not None
+
+
+def _brief_field_equal(child_val: object, anc_val: object) -> bool:
+    """child 與祖先值是否 byte 等值（唯一觸發條件）：字串 strip 後逐 byte 比、list 逐元素
+    結構等值（字串元素 strip）。改寫過的特化（哪怕一字之差）永不等值＝永不誤報。"""
+    if isinstance(child_val, str) and isinstance(anc_val, str):
+        return child_val.strip() == anc_val.strip()
+    if isinstance(child_val, list) and isinstance(anc_val, list):
+        def _norm(xs: list) -> list:
+            return [x.strip() if isinstance(x, str) else x for x in xs]
+        return _norm(child_val) == _norm(anc_val)
+    return child_val == anc_val
+
+
+def brief_dup_fields(leaf: Leaf, by_section: dict, concept_by_id: dict) -> list[str]:
+    """回傳該 leaf 的 brief 中「與最近提供該欄的祖先值 byte 等值」的欄名清單。
+
+    最近祖先＝沿 aperture 同一條祖先鏈（`model.ancestor_leaves`，路徑父鏈優先、淺→深）第一個
+    對該欄有提供非空值者。lint（V19）與 `docspec tidy`（刪這些欄改繼承）共用此判定。"""
+    from dspx.model import ancestor_leaves
+    brief = _brief_of(leaf)
+    if not brief:
+        return []
+    ancestors = ancestor_leaves(leaf.section, by_section, concept_by_id)
+    dup: list[str] = []
+    for fld in BRIEF_FIELDS:
+        child_val = brief.get(fld)
+        if not _brief_field_present(child_val):
+            continue
+        for anc, _is_governed in ancestors:          # nearest-first
+            anc_val = _brief_of(anc).get(fld)
+            if not _brief_field_present(anc_val):
+                continue
+            if _brief_field_equal(child_val, anc_val):
+                dup.append(fld)
+            break                                    # 停在最近提供該欄的祖先
+    return dup
+
+
+def _lint_brief_dup(leaves: list[Leaf]) -> list[Finding]:
+    """V19：brief 子欄與最近祖先 byte 等值 → WARN（指向刪欄改繼承／`docspec tidy`）。"""
+    from dspx.model import _concept_by_id
+    by_section = {lf.section: lf for lf in leaves}
+    concept_by_id = _concept_by_id(by_section)
+    findings: list[Finding] = []
+    for leaf in leaves:
+        for fld in brief_dup_fields(leaf, by_section, concept_by_id):
+            findings.append(Finding("V19", WARN, f"{leaf.section}/concept.yaml",
+                f"brief.{fld} is byte-identical to the value inherited from the nearest ancestor "
+                f"that supplies it -- delete the field to inherit it (batch cleanup: `docspec tidy`)"))
+    return findings
+
+
+# title 大綱編號前綴（章號 render 推導、title 欄不該手寫）。tidy 只剝阿拉伯式（D7），故兩式分開。
+#   arabic / 全形數字 / CJK 頓號-句號式：`6.` `6.1` `６．` `6、` `6。`
+#   —— 數字後必接 `[.、．。]` 之一，故 `5G` 這類「數字＋字母」的名稱本體不誤觸。
+_TITLE_ARABIC_PREFIX_RE = re.compile(r"^\s*[0-9０-９]+[.、．。]")
+#   附錄字母式：`A.`（大寫字母＋點）或 `附錄 A`／`附錄A`／`附錄 1`（附錄＋編號字元）。
+_TITLE_APPENDIX_PREFIX_RE = re.compile(r"^\s*(?:[A-Z]\.|附錄\s*[A-Za-z0-9０-９])")
+
+
+def title_numbering_prefix(title: object) -> str | None:
+    """回傳 title 開頭命中的大綱編號前綴字串（無則 None）。
+
+    lint（V20）與 `docspec tidy` 剝除共用此判定——tidy 僅剝 arabic 式（`_TITLE_ARABIC_PREFIX_RE`，
+    見 D7：附錄型 v1 不動）。`5G 網路架構` 型（數字後接字母、非編號標點）刻意不觸發。"""
+    if not isinstance(title, str):
+        return None
+    m = _TITLE_ARABIC_PREFIX_RE.match(title) or _TITLE_APPENDIX_PREFIX_RE.match(title)
+    return m.group(0) if m else None
+
+
+def _lint_title_prefix(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
+    """V20：concept.yaml / group.yaml 的 title 以大綱編號起頭 → WARN（指向 `docspec tidy`）。"""
+    import yaml
+    findings: list[Finding] = []
+
+    def _flag(where: str, title: str, pref: str) -> None:
+        findings.append(Finding("V20", WARN, where,
+            f"title \"{title}\" begins with an outline-numbering prefix \"{pref.strip()}\" -- "
+            f"numbering is render-derived; drop the prefix from the title (batch cleanup: `docspec tidy`)"))
+
+    for leaf in leaves:
+        title = (leaf.concept or {}).get("title")
+        pref = title_numbering_prefix(title)
+        if pref:
+            _flag(f"{leaf.section}/concept.yaml", title, pref)
+
+    if layout.corpus_dir.is_dir():
+        for gy in sorted(layout.corpus_dir.rglob("group.yaml")):
+            if layout.is_archived_path(gy.parent):
+                continue
+            try:
+                data = yaml.safe_load(gy.read_text(encoding="utf-8"))
+            except yaml.YAMLError:
+                continue                      # 壞檔由 check ⑩ fail-loud；lint 不重複吵
+            if not isinstance(data, dict):
+                continue
+            title = data.get("title")
+            pref = title_numbering_prefix(title)
+            if pref:
+                _flag(f"{layout.section_id(gy.parent)}/group.yaml", title, pref)
     return findings

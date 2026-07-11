@@ -64,9 +64,10 @@ def test_render_preserves_prose_in_spaced_sections(make_project, write_leaf, mon
     assert section_marker("g/附錄 A") in text
     assert group_marker("g/附 錄") in text          # 帶空格的分組標記也寫得出
     # 模擬 draft：三節都寫散文
-    text = text.replace("## 概覽\n", "## 概覽\n\n前節散文。\n")
-    text = text.replace("## 附錄 A\n", "## 附錄 A\n\n附錄散文。\n")
-    text = text.replace("### 子節\n", "### 子節\n\n子節散文。\n")
+    # 章號：無 order 的分組 g/附 錄 以 0.0 排最前＝1.（子節 1.1），概覽=2.、附錄 A=3.
+    text = text.replace("## 2. 概覽\n", "## 2. 概覽\n\n前節散文。\n")
+    text = text.replace("## 3. 附錄 A\n", "## 3. 附錄 A\n\n附錄散文。\n")
+    text = text.replace("### 1.1 子節\n", "### 1.1 子節\n\n子節散文。\n")
     latest.write_text(text, encoding="utf-8")
     assert render_cmd.run(["g"]) == 0
     ledger1 = read_ledger(Layout(home), "g")

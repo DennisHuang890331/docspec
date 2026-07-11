@@ -125,5 +125,8 @@ def test_yaml_skeleton_entries_container_and_enum_comments():
     assert "kind: normative" in dec and "normative | rationale" in dec  # enum 註解
     con = yaml_skeleton(s.by_id("concept"))
     assert "status: draft" in con and "draft | stable | deprecated" in con
-    assert "brief:" in con                    # 有必填子欄的 object 信封納入
+    # differential-brief contract (contract-slimming): brief is now a fully-optional object, so the
+    # required-only skeleton no longer emits it (an agent writes brief only for the diff-from-ancestor;
+    # brief's shape is still discoverable via the field contract / `docspec guide`).
+    assert "brief:" not in con
     assert "status: develop" not in con       # develop/status 撞詞：skeleton 絕不出現非法值

@@ -2,13 +2,15 @@
 
 決策記憶是**留史型**：append / supersede，不就地砍。判準＝**歷史重不重要**——重要走這裡，還在 churn 的留 develop.md。
 
+**本檔＝按需**：只有當這一節**擁有自己的規範裁決**才建 decisions.yaml。沒有裁決＝不建這個檔（合法空——別為了「湊齊檔案」造一個空殼 `entries: []`）。一個純綜述、只用 `realizes` 指向別節裁決的 leaf，正當地只有 concept.yaml 一個檔。
+
 每條決策：
 - `kind`：`normative`（會投影成散文裡的規範句，用 必須/MUST 等關鍵字）或 `rationale`（背景判斷/理據）。
-- `status`：`proposed` / `accepted`（兩者為 active，draft 會讀其 statement）/ `superseded` / `deprecated`（退場態，等 `docspec retire` 搬去 history）。
+- `status`：`proposed` / `accepted`（兩者為 active，draft 會讀其 statement）/ `superseded` / `deprecated`（退場態——**就地留在本檔**標記，供 supersede 鏈解析、deps 指紋二跳、check 的 repoint 導引定址；**不再搬去 live 樹 history.yaml**。history.yaml 只在整節退場時由 `docspec retire-section` 生成於 `_archive/` 封存包）。
 - `statement`：決策本身（what）。draft **只讀這句**。
 - `rationale`：why（給 factcheck/audit agent 讀，draft 不讀）。
 - `rejected`：考慮過但否決的選項（留給 audit 當禁區，draft 不讀）。
-- `supersedes`：本決策取代了哪條（填對方 id；對方標 superseded 後 retire 搬走）。
+- `supersedes`：本決策取代了哪條（填對方 id；對方標 `status: superseded` + `superseded-by` 指回本條，**就地留在原檔**，不搬走）。
 
 別重用 id；id 是 supersede 鏈與 realizes 引用的靶點。
 

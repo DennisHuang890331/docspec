@@ -42,7 +42,7 @@ def _baseline_with_prose(make_project, write_leaf, monkeypatch, guide=GUIDE_A):
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
     latest = _latest(home)
-    latest.write_text(latest.read_text("utf-8").replace("## 概覽\n", "## 概覽\n\n限流保護後端。\n"), "utf-8")
+    latest.write_text(latest.read_text("utf-8").replace("## 1. 概覽\n", "## 1. 概覽\n\n限流保護後端。\n"), "utf-8")
     render_cmd.run(["g"])
     assert _sync_of(home, "g", "g/intro") == "synced"
     # 基準帳本已記 style 欄

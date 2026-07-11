@@ -171,6 +171,16 @@ this is a **restyle pass, not a rewrite**.
    - **prose already conforms to the new doctrine** (no change needed) → `docspec render <article>
      --ack <section>` (refused if the section is actually `stale-own`/`stale-upstream`).
 
+**Batch-clear the doctrine sweep in one command.** A doctrine change re-stales EVERY written
+section at once, and after review most legitimately need no change — don't fire one `render --ack`
+per section. Pull the worklist deterministically (`docspec status <article> --json`, filter the
+`stale-style` sections), review each against the moved doctrine, then clear the ones that need no
+change in a SINGLE call: `docspec render <article> --ack <sec-a> --ack <sec-b> …` (each `--ack`
+takes one section; stack them). Any section whose prose you actually re-tuned is re-stamped by a
+plain `docspec render <article>` instead — so the batch `--ack` carries only the reviewed-no-change
+sections. This is the same mechanical-discipline principle as `normalize`/`tidy`: one deterministic
+pass, not a hand loop.
+
 This is the only time `edit` consults the brief. Everything else below is plain copy-prep.
 
 ---

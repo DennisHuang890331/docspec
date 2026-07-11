@@ -294,6 +294,21 @@ def _group_order(layout: Layout, group_section: str) -> float | None:
     return None
 
 
+# 章號政策（D7）：concept.yaml／group.yaml 的可選 `numbering` 欄，決定 render 推導的標題編號形態。
+# arabic＝正常層級編號（6./6.1）；appendix＝字母序（附錄 A／A.1）；none＝不編號（如修訂歷史）。
+# 沿樹向下繼承（子節無顯式值＝跟最近祖先政策；根默認 arabic）。規則住 schema、被 guide 投影。
+NUMBERING_POLICIES = ("arabic", "appendix", "none")
+# 頂層附錄的標題前綴（附錄 A）；其子節退回阿拉伯前綴（A.1）。export #09 的 `^附錄\s?[A-Z]`
+# 去編號後處理即以此形態為輸入假設（相容測試釘死）。
+APPENDIX_HEADING_PREFIX = "附錄 "
+
+
+def _group_numbering(layout: Layout, group_section: str) -> str | None:
+    """分組節點的可選章號政策：`group.yaml` 的 `numbering`；缺/非法值 → None（沿用繼承/默認）。"""
+    val = _group_meta(layout, group_section).get("numbering")
+    return val if val in NUMBERING_POLICIES else None
+
+
 def _depth(article: str, section: str) -> int:
     """文章內深度（article 之後的路徑段數）。根節(section==article)＝0。"""
     return len([p for p in section.split("/") if p]) - 1
@@ -348,6 +363,81 @@ def outline_group_nodes(leaves: list[Leaf]) -> list[str]:
             seen.add(gs)
             out.append(gs)
     return out
+
+
+def outline_numbering(layout: Layout, art_leaves: list[Leaf],
+                      article: str) -> dict[str, str | None]:
+    """為一篇文章的每個節點（leaf＋分組節點）推導層級章號標籤（D4/D7）。
+
+    回傳 section → 顯示標籤：str（如 `6.`／`6.1`／`附錄 A`／`A.1`）或 None（`numbering: none`＝不
+    編號）；不在表內的 section（如文章根節＝文件標題）＝無編號。章號 derive 自 outline 排序拓樸
+    （與 render／aperture document-map／`docspec list` 同一套 `outline_order_by_section`＋
+    `outline_sort_key`）＋各節 `numbering` 政策——corpus title 永不含章號，單一真相＝order＋樹位
+    置＋政策，重排即自動重編號（散文不動、指紋照 F2 沿用）。
+
+    編號規則：逐層以「有效政策」（顯式 numbering，否則繼承最近祖先，否則 arabic）分派兄弟序號——
+    arabic 兄弟走獨立整數計數（1,2,3…）、appendix 兄弟走獨立字母計數（A,B,C…）、none 兄弟不編號且
+    兩計數皆跳過（不佔號、不使後續兄弟錯位）。子節標籤＝`<父前綴><.><自身序>`。頂層阿拉伯尾綴一點
+    （`6.`）以符 export #09 去編號輸入形態；附錄字母只用在進入附錄子樹的第一層，更深層退阿拉伯（A.1）。
+    """
+    leaf_by_section = {lf.section: lf for lf in art_leaves}
+    group_sections = set(outline_group_nodes(art_leaves))
+    order_by_section = outline_order_by_section(layout, art_leaves)
+
+    # children：parent section → 直屬子節點（含 leaf 與分組節點）。頂層節點 parent＝article；
+    # 根節（section==article）＝文件標題，不入編號、無 parent。
+    children: dict[str, list[str]] = {}
+    for section in list(leaf_by_section) + list(group_sections):
+        if section == article:
+            continue
+        parent = section.rsplit("/", 1)[0]
+        children.setdefault(parent, []).append(section)
+
+    def own_policy(section: str) -> str | None:
+        if section in leaf_by_section:
+            lf = leaf_by_section[section]
+            val = lf.concept.get("numbering") if lf.concept else None
+            return val if val in NUMBERING_POLICIES else None
+        return _group_numbering(layout, section)
+
+    labels: dict[str, str | None] = {}
+
+    def assign(parent: str, parent_prefix: str, parent_policy: str) -> None:
+        kids = sorted(children.get(parent, []),
+                      key=lambda s: outline_sort_key(s, order_by_section))
+        arabic_n = 0
+        appendix_i = 0
+        for kid in kids:
+            eff = own_policy(kid) or parent_policy    # 繼承：最近祖先政策；根默認 arabic
+            if eff == "none":
+                labels[kid] = None
+                assign(kid, parent_prefix, "none")    # none 子樹整體不編號
+                continue
+            # 附錄字母只在「進入附錄子樹的第一層」；父已是 appendix（更深層）＝退回阿拉伯（A.1）。
+            letter_mode = eff == "appendix" and parent_policy != "appendix"
+            if letter_mode:
+                appendix_i += 1
+                token = chr(ord("A") + appendix_i - 1)
+                if parent_prefix:
+                    disp = child_prefix = f"{parent_prefix}.{token}"
+                else:
+                    disp = f"{APPENDIX_HEADING_PREFIX}{token}"
+                    child_prefix = token
+            else:
+                arabic_n += 1
+                token = str(arabic_n)
+                if parent_prefix:
+                    disp = child_prefix = f"{parent_prefix}.{token}"
+                else:
+                    # 頂層裸整數尾綴一點（6.）＝符 export #09 `^\d+\.\s` 去編號輸入形態；
+                    # 傳給子節的前綴不含尾點（子節＝6.1，非 6..1）。
+                    disp = f"{token}."
+                    child_prefix = token
+            labels[kid] = disp
+            assign(kid, child_prefix, eff)
+
+    assign(article, "", "arabic")
+    return labels
 
 
 def parse_section_bodies(text: str, on_discard=None) -> dict[str, str]:
@@ -434,6 +524,9 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     art_leaves = [lf for lf in leaves if lf.article == article]
     order_by_section = outline_order_by_section(layout, art_leaves)
     art_leaves.sort(key=lambda lf: outline_sort_key(lf.section, order_by_section))
+    # 章號 derive（D4/D7）：leaf 與分組節點標題編號一律推導自 outline 拓樸＋numbering 政策，
+    # 組裝時前綴進 heading（corpus title 不含章號）。None＝該節不編號（numbering: none／根節）。
+    numbers = outline_numbering(layout, art_leaves, article)
 
     latest = layout.docs_latest(article)
     existing_bodies: dict[str, str] = {}
@@ -476,11 +569,18 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
                 continue  # 已產過，或本身是末節（將以自己的標題出現）→ 不另產分組標題
             emitted_groups.add(group_section)
             out.append(group_marker(group_section))
-            # 分組標題：group.yaml title 優先（在地化）、缺則 humanize；層級 clamp 至上限（防 #######）
-            out.append("#" * min(i, MAX_HEADING_LEVEL) + " " + _group_title(layout, group_section, parts[i - 1]))
+            # 分組標題：group.yaml title 優先（在地化）、缺則 humanize；章號前綴 derive（None＝不編號）；
+            # 層級 clamp 至上限（防 #######）——章號深度與 `#` clamp 獨立（clamp 後仍帶完整點分編號）。
+            gtitle = _group_title(layout, group_section, parts[i - 1])
+            glabel = numbers.get(group_section)
+            gtext = f"{glabel} {gtitle}" if glabel else gtitle
+            out.append("#" * min(i, MAX_HEADING_LEVEL) + " " + gtext)
             out.append("")
-        # 末節標題：層級＝depth+1，clamp 至上限（過深由 check fail-loud 擋；clamp 只防靜默破版）
-        heading = "#" * min(depth + 1, MAX_HEADING_LEVEL) + " " + lf.title
+        # 末節標題：層級＝depth+1，clamp 至上限（過深由 check fail-loud 擋；clamp 只防靜默破版）。
+        # 章號前綴 derive（None＝根節/numbering:none＝不編號）；章號深度與 `#` clamp 獨立。
+        label = numbers.get(lf.section)
+        heading_text = f"{label} {lf.title}" if label else lf.title
+        heading = "#" * min(depth + 1, MAX_HEADING_LEVEL) + " " + heading_text
         body = existing_bodies.get(lf.section, "").strip()
         out.append(section_marker(lf.section))
         out.append(heading)

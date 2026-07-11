@@ -57,7 +57,7 @@ class Projection:
     roadmap: list | None = None                   # 待辦 backlog（derive；只投 develop）：本文件＋forest 的 open/doing entry
     project_purpose: str | None = None            # config.purpose（森林整體目標；只投 develop 開工脈絡）
     image_assets: list = field(default_factory=list)  # 本節可用圖片（draft 放圖只能用這些；ref 形如 assets/<file>）
-    document_map: list = field(default_factory=list)  # 本文件章節骨架（draft 看整篇架構：每節 section/title/order/role；只結構、不含 sibling 散文）
+    document_map: list = field(default_factory=list)  # 本文件章節骨架（draft 看整篇架構：每節 section/title/order/number/role；number＝render 同源推導章號；只結構、不含 sibling 散文）
     coverage_contract: dict | None = None             # factcheck 完整性契約前景化：{must_cover:[...], layout, kind}（W3；餵非阻塞 audit）
     coherence_contract: dict | None = None            # factcheck 語義一致性探針：列出該核對「該一致的對」（title/framing/own-brief/decision/figure ↔ prose/祖先 brief）；純 projection、餵非阻塞 audit、零 gate（revision-coherence-probes）
 
@@ -184,17 +184,23 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
     # 只含結構，絕不含 sibling 的散文/decisions/material——draft 用它寫「角色開場」、不指名鄰節。
     if skill in _DOCUMENT_MAP_SKILLS:
         from dspx.render import (_group_order, _group_title, outline_group_nodes,
-                                 outline_order_by_section, outline_sort_key)
+                                 outline_numbering, outline_order_by_section,
+                                 outline_sort_key)
         article = leaf.article
         art_leaves = [lf for lf in leaves if lf.article == article]
         order_by_section = outline_order_by_section(layout, art_leaves)
+        # 章號同源：與 render 交付物、`docspec list` 走同一 outline_numbering（單一真相＝order＋
+        # 樹位置＋numbering 政策）；draft 看得到每節推導章號（None＝根節/numbering:none＝不編號）。
+        numbers = outline_numbering(layout, art_leaves, article)
         rows = [
             {"section": lf.section, "title": lf.title, "order": lf.order,
+             "number": numbers.get(lf.section),
              "role": (lf.concept.get("concept") or ""), "kind": "leaf"}
             for lf in art_leaves if lf.concept is not None
         ] + [
             {"section": gs, "title": _group_title(layout, gs, gs.rsplit("/", 1)[-1]),
-             "order": _group_order(layout, gs), "role": None, "kind": "group"}
+             "order": _group_order(layout, gs),
+             "number": numbers.get(gs), "role": None, "kind": "group"}
             for gs in outline_group_nodes(art_leaves)
         ]
         rows.sort(key=lambda r: outline_sort_key(r["section"], order_by_section))

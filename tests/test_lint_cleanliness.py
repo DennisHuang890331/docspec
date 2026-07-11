@@ -490,3 +490,124 @@ def test_v18_is_non_blocking_warn(make_project, write_leaf, monkeypatch):
     v18 = [f for f in findings if f.rule == "V18"]
     assert v18 and all(f.level == WARN for f in v18)
     assert not any(f.rule == "V18" and f.level == ERROR for f in findings)
+
+
+# ── V19 brief 逐字複述祖先（WARN、非阻塞；contract-slimming D6）──────────────
+
+def _corpus_lint(home):
+    """不經 render、直接對 corpus 跑 lint（V19/V20 讀 corpus，不看 docs）。"""
+    return run_lint(Layout(home), load_project(Layout(home)), load_schema())
+
+
+def test_v19_brief_field_byte_identical_to_ancestor_caught(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a", concept={"id": "p", "title": "父", "order": 1,
+                                   "brief": {"audience": "現場維運工程師"}})
+    write_leaf(home, "a/x", concept={"id": "c", "title": "子", "order": 1,
+                                     "brief": {"audience": "現場維運工程師"}})
+    v19 = [f for f in _corpus_lint(home) if f.rule == "V19"]
+    assert v19 and all(f.level == WARN for f in v19)
+    assert any(f.where == "a/x/concept.yaml" and "audience" in f.detail for f in v19)
+
+
+def test_v19_reworded_specialization_not_flagged(make_project, write_leaf):
+    """一字之差＝特化，永不誤報（語義相似歸 audit）。"""
+    home = make_project()
+    write_leaf(home, "a", concept={"id": "p", "title": "父", "order": 1,
+                                   "brief": {"audience": "現場維運工程師"}})
+    write_leaf(home, "a/x", concept={"id": "c", "title": "子", "order": 1,
+                                     "brief": {"audience": "現場維運工程師（夜班）"}})
+    assert not any(f.rule == "V19" for f in _corpus_lint(home))
+
+
+def test_v19_whitespace_only_diff_still_fires(make_project, write_leaf):
+    """strip 後 byte 等值：僅前後空白差異仍算逐字複述。"""
+    home = make_project()
+    write_leaf(home, "a", concept={"id": "p", "title": "父", "order": 1,
+                                   "brief": {"depth": "概述層級"}})
+    write_leaf(home, "a/x", concept={"id": "c", "title": "子", "order": 1,
+                                     "brief": {"depth": "  概述層級  "}})
+    assert any(f.rule == "V19" and "depth" in f.detail for f in _corpus_lint(home))
+
+
+def test_v19_forbidden_list_structural_equality(make_project, write_leaf):
+    """list 欄（forbidden）逐元素結構等值也觸發；元素有差則不報。"""
+    home = make_project()
+    write_leaf(home, "a", concept={"id": "p", "title": "父", "order": 1,
+                                   "brief": {"forbidden": ["行銷腔", "臆測數字"]}})
+    write_leaf(home, "a/dup", concept={"id": "c1", "title": "同", "order": 1,
+                                       "brief": {"forbidden": ["行銷腔", "臆測數字"]}})
+    write_leaf(home, "a/diff", concept={"id": "c2", "title": "異", "order": 2,
+                                        "brief": {"forbidden": ["行銷腔"]}})
+    v19 = [f for f in _corpus_lint(home) if f.rule == "V19"]
+    wheres = {f.where for f in v19}
+    assert "a/dup/concept.yaml" in wheres
+    assert "a/diff/concept.yaml" not in wheres
+
+
+def test_v19_no_ancestor_supplying_field_silent(make_project, write_leaf):
+    """祖先未提供該欄＝無可繼承對象、不報（頂層節本就得自帶 brief）。"""
+    home = make_project()
+    write_leaf(home, "a", concept={"id": "p", "title": "父", "order": 1,
+                                   "brief": {"depth": "父自己的深度"}})
+    write_leaf(home, "a/x", concept={"id": "c", "title": "子", "order": 1,
+                                     "brief": {"audience": "子自訂受眾"}})
+    assert not any(f.rule == "V19" for f in _corpus_lint(home))
+
+
+def test_v19_is_non_blocking_warn(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a", concept={"id": "p", "title": "父", "order": 1,
+                                   "brief": {"audience": "同一句"}})
+    write_leaf(home, "a/x", concept={"id": "c", "title": "子", "order": 1,
+                                     "brief": {"audience": "同一句"}})
+    findings = _corpus_lint(home)
+    assert any(f.rule == "V19" for f in findings)
+    assert not any(f.rule == "V19" and f.level == ERROR for f in findings)
+
+
+# ── V20 title 章號前綴（WARN、非阻塞；contract-slimming D6）──────────────────
+
+def test_v20_title_numbering_prefix_caught(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c", "title": "11. 防撞防護區域安全機能", "order": 1})
+    v20 = [f for f in _corpus_lint(home) if f.rule == "V20"]
+    assert v20 and all(f.level == WARN for f in v20)
+    assert any(f.where == "a/x/concept.yaml" for f in v20)
+
+
+def test_v20_name_with_leading_digit_not_flagged(make_project, write_leaf):
+    """`5G 網路架構`＝數字屬名稱本體（數字後接字母、非編號標點）→ 沉默。"""
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c", "title": "5G 網路架構", "order": 1})
+    assert not any(f.rule == "V20" for f in _corpus_lint(home))
+
+
+def test_v20_variant_prefixes_caught(make_project, write_leaf):
+    """全形數字／CJK 頓號-句號／附錄字母各式編號前綴皆抓。"""
+    home = make_project()
+    write_leaf(home, "a/w", concept={"id": "c1", "title": "６．全形章號", "order": 1})
+    write_leaf(home, "a/x", concept={"id": "c2", "title": "6、頓號章號", "order": 2})
+    write_leaf(home, "a/y", concept={"id": "c3", "title": "A. 附錄甲", "order": 3})
+    write_leaf(home, "a/z", concept={"id": "c4", "title": "附錄 B 詞彙表", "order": 4})
+    hit = {f.where for f in _corpus_lint(home) if f.rule == "V20"}
+    assert {"a/w/concept.yaml", "a/x/concept.yaml",
+            "a/y/concept.yaml", "a/z/concept.yaml"} <= hit
+
+
+def test_v20_group_title_numbering_prefix_caught(make_project, write_leaf):
+    home = make_project()
+    write_leaf(home, "g/howto/s3", concept={"id": "c", "title": "S3 後端", "order": 1})
+    (home / "corpus" / "g" / "howto" / "group.yaml").write_text(
+        "title: 6. 操作指南\n", encoding="utf-8")
+    v20 = [f for f in _corpus_lint(home) if f.rule == "V20"]
+    assert any(f.where == "g/howto/group.yaml" for f in v20)
+
+
+def test_v20_clean_titles_silent(make_project, write_leaf):
+    """無編號前綴的正常標題（含分組）→ 零 V20。"""
+    home = make_project()
+    write_leaf(home, "g/howto/s3", concept={"id": "c", "title": "S3 後端設定", "order": 1})
+    (home / "corpus" / "g" / "howto" / "group.yaml").write_text(
+        "title: 操作指南\n", encoding="utf-8")
+    assert not any(f.rule == "V20" for f in _corpus_lint(home))

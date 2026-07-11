@@ -1,5 +1,5 @@
 """cli-discoverability-and-authoring-seams（batch 1）：
-- ready：missing-decisions 提示 `entries: []`＋批次畢業（per-section 獨立交易、不回滾）。
+- ready：缺 decisions.yaml＝合法空、正常畢業（contract-slimming D2）＋批次畢業（per-section 獨立交易、不回滾）。
 - show：concept payload 帶 governedBy＋section-path 第二地址形狀＋both-shapes not-found。
 - list：group 節點（在地化標題）＋全列 kind＋article scoping。
 - status/check/lint：article scoping（check 閘不受 scope 影響；lint 歸屬走 ` § ` 前綴契約）。
@@ -25,16 +25,19 @@ def _dec(the_id: str) -> list[dict]:
 
 # ── 2. ready ─────────────────────────────────────────────────────────────────
 
-def test_ready_missing_decisions_hint_mentions_entries(make_project, write_leaf,
-                                                       monkeypatch, capsys):
-    """2.1：缺 decisions.yaml 的拒絕訊息要提示空容器 `entries: []` 合法。"""
+def test_ready_missing_decisions_is_legal_and_graduates(make_project, write_leaf,
+                                                        monkeypatch, capsys):
+    """contract-slimming D2：缺 decisions.yaml＝合法空（本節無自有裁決），ready 不再拒絕、正常畢業；
+    舊的「缺檔＝拒絕＋提示空容器 entries: []」路徑已撤除（那是空殼反模式的制度化來源）。"""
     home = make_project()
-    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "real"})
+    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1,
+                                     "status": "draft", "concept": "real"})
     monkeypatch.chdir(home.parent)
-    assert ready_cmd.run(["g/x"]) == 1
-    err = capsys.readouterr().err
-    assert "entries: []" in err
-    assert "missing decisions.yaml" in err
+    assert ready_cmd.run(["g/x"]) == 0
+    out, err = capsys.readouterr()
+    # 缺 decisions.yaml 絕不再成為拒絕理由，也不再提示建立空容器
+    assert "entries: []" not in (out + err)
+    assert "missing decisions.yaml" not in (out + err)
 
 
 def test_ready_batch_all_green_graduates_whole_article(make_project, write_leaf, monkeypatch):

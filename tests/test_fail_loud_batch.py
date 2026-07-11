@@ -32,7 +32,7 @@ def _rendered_article(make_project, write_leaf, monkeypatch):
     assert render_cmd.run(["a"]) == 0
     layout = Layout(home)
     latest = layout.docs_latest("a")
-    _write_prose(latest, "## X", "已寫散文。")
+    _write_prose(latest, "## 1. X", "已寫散文。")
     assert render_cmd.run(["a"]) == 0
     ledger = layout.docs_ledger("a")
     assert "a/x" in yaml.safe_load(ledger.read_text(encoding="utf-8"))["sections"]
@@ -147,7 +147,7 @@ def test_group_yaml_malformed_warns_not_silent(make_project, write_leaf, monkeyp
     err = capsys.readouterr().err
     assert "group.yaml" in err and "malformed" in err            # 指名該檔
     text = Layout(home).docs_latest("guide").read_text(encoding="utf-8")
-    assert "## Part" in text                     # 標題 fallback＝humanize slug 維持
+    assert "## 1. Part" in text                  # 標題 fallback＝humanize slug 維持（含章號）
 
 
 # ── 2.2 check 的 group.yaml 輕量驗證 ────────────────────────────────

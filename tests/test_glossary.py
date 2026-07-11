@@ -64,8 +64,8 @@ def test_lint_vg1_forbidden_alias(make_project, write_leaf, monkeypatch):
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
     latest = home.parent / "docs" / "g" / "_latest.md"
-    latest.write_text(latest.read_text("utf-8").replace("## X\n",
-                      "## X\n\n本節由安全監控系統負責，縮寫 RMM。\n"), encoding="utf-8")
+    latest.write_text(latest.read_text("utf-8").replace("## 1. X\n",
+                      "## 1. X\n\n本節由安全監控系統負責，縮寫 RMM。\n"), encoding="utf-8")
     layout = Layout(home)
     findings = run_lint(layout, load_project(layout), load_schema())
     rules = {f.rule for f in findings}
@@ -85,7 +85,7 @@ def _render_with_insert(make_project, write_leaf, monkeypatch, terms, insert):
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
     latest = home.parent / "docs" / "g" / "_latest.md"
-    latest.write_text(latest.read_text("utf-8").replace("## X\n", "## X\n\n" + insert + "\n"),
+    latest.write_text(latest.read_text("utf-8").replace("## 1. X\n", "## 1. X\n\n" + insert + "\n"),
                       encoding="utf-8")
     layout = Layout(home)
     return run_lint(layout, load_project(layout), load_schema())

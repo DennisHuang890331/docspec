@@ -47,7 +47,7 @@ def test_change_shared_truth_makes_consumer_stale_upstream(make_project, write_l
     render_cmd.run(["occ"])
     latest = home.parent / "docs" / "occ" / "_latest.md"
     latest.write_text(
-        latest.read_text(encoding="utf-8").replace("## 鏡像\n", "## 鏡像\n\nOCC 鏡像四態。\n"),
+        latest.read_text(encoding="utf-8").replace("## 1. 鏡像\n", "## 1. 鏡像\n\nOCC 鏡像四態。\n"),
         encoding="utf-8")
     render_cmd.run(["occ"])   # 定基準（含 deps 指紋）
 
@@ -78,7 +78,7 @@ def test_deps_only_tracks_statement_not_rationale(make_project, write_leaf, monk
     monkeypatch.chdir(home.parent)
     render_cmd.run(["occ"])
     latest = home.parent / "docs" / "occ" / "_latest.md"
-    latest.write_text(latest.read_text(encoding="utf-8").replace("## 鏡像\n", "## 鏡像\n\n內文。\n"),
+    latest.write_text(latest.read_text(encoding="utf-8").replace("## 1. 鏡像\n", "## 1. 鏡像\n\n內文。\n"),
                       encoding="utf-8")
     render_cmd.run(["occ"])
 

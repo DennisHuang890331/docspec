@@ -52,13 +52,10 @@ def _graduate(layout: Layout, schema: Schema, section: str) -> tuple[bool, list[
     leaf = load_leaf(layout, section_dir)
     reasons: list[str] = []
 
-    # ① 目的地存在（結晶過）
+    # ① 目的地存在（結晶過）。concept 無合法空形狀＝必備；decisions.yaml 缺席＝合法空
+    # （該節無自有裁決），不再是拒絕理由（contract-slimming D2；空殼反模式已撤）。
     if not (section_dir / "concept.yaml").is_file():
         reasons.append("not crystallized yet: missing concept.yaml")
-    if not (section_dir / "decisions.yaml").is_file():
-        reasons.append(
-            "not crystallized yet: missing decisions.yaml (a pure-overview section with no "
-            "rulings of its own still needs the file — an empty container `entries: []` is legal)")
 
     # ② 完整性（per-section 欄位級）
     reasons.extend(run_file_check(leaf, schema))

@@ -1,15 +1,15 @@
-# history.yaml（退場精瘦索引）
+# history.yaml（退場記錄——僅存在於 _archive/ 封存包）
 
-退場記錄的**精瘦索引**（機器查、每次都載故保持小）。由 `docspec retire` / `docspec retire-section`
-機械寫入，**不手寫**。一種 `entries`、**id 為鍵**；散文細節不放這裡——決策的「為什麼」放成對的
-**history.md**（同 id），整節退場的細節＝它被封存的資料夾。
+**不屬於活樹 leaf 契約**：live 樹的節**不建**這個檔（實證：真語料 0 檔）。它只在
+`docspec retire-section` 的退場交易中生成、隨整節封存包住進 `corpus/_archive/`。由指令機械寫入，
+**不手寫**。一種 `entries`、**id 為鍵**；散文細節不放這裡。
 
-每筆 entry 兩種：
-- **死決策**（`docspec retire` 把 decisions.yaml 標 `superseded`/`deprecated`/`rejected` 的搬入）：
-  `id`（不變、穩定身份；指向 history 不算死引用）、`kind`(`normative`/`rationale`)、
-  `status`(`superseded`/`deprecated`/`rejected`)、`statement`(一句 WHAT)、`retired-in`、`superseded-by`、`decided-in`。
-- **整節退場**（`docspec retire-section` 寫）：`id` ＝**該節的 `concept.id`（不是路徑！）**、
+- **死決策不住這裡**：被推翻/否決的決策**就地留在原 `decisions.yaml`** 標 `status: superseded`/
+  `deprecated`（supersede 鏈解析、deps 指紋二跳、check 的 repoint 指引都要求它在原檔可定址）。
+  舊的「`docspec retire` 搬進 live 樹 history.yaml」流程已撤除（retire 現為純報告）。
+- **整節退場**（`docspec retire-section` 寫、住封存包內）：`id` ＝**該節的 `concept.id`（不是路徑！）**、
   `kind: section`、`status: retired`、`statement`(一句)、`archive`(→封存資料夾的 link)、`retired-in`。
+- 舊專案若仍有 live 樹 history.yaml：引擎照讀不炸（向後相容）；`docspec tidy` 會報告它為可遷移項。
 
 對應與查詢：
 - 決策的散文 rationale 在 history.md 的**乾淨 `## <id>` 段**（純 id，不帶標題、不夾破折號）；`docspec show <id>` 撈。

@@ -10,6 +10,56 @@ a minor bump.
 
 ## [Unreleased]
 
+### Changed — contract slimming: concept-required, the rest on-demand (**BREAKING**)
+
+- **A missing `decisions.yaml` is now a legal empty state** ("this section owns no normative
+  rulings"): `status` no longer reports `waiting(missing:decisions)` and `ready` no longer refuses
+  (nor hints at creating an empty `entries: []` container — the empty-shell anti-pattern is
+  withdrawn; 70.3% of real-corpus decisions files were one-line shells). A decisions.yaml that
+  exists but is structurally broken still fails loud — absence is legal, presence carries
+  responsibility.
+- **`concept.brief` sub-fields are all schema-optional (differential brief)**: write a field only
+  when it differs from what the ancestor chain provides; absent = inherit. The root section still
+  must fill audience/depth/breadth (hierarchy check, unchanged).
+- **Live-tree `history.yaml` is removed from the leaf contract**: dead decisions stay in their
+  owning `decisions.yaml` marked `status: superseded`/`deprecated` (addressable for the supersede
+  chain, deps two-hop, and repoint guidance); `history.yaml` exists only inside `corpus/_archive/`
+  retirement packages. `docspec retire` is now a non-mutating report; `retire-section` is
+  unchanged. Old projects with a live-tree history.yaml still load; `docspec tidy` reports them.
+- **Outline numbering is render-derived** (BREAKING for corpora with hand-numbered titles):
+  `concept.title`/`group.yaml title` carry the bare name; `render` derives `6` / `6.1` from
+  `order` + tree position and injects the prefix into `_latest.md` headings. Renumbering after a
+  reorder is a skeleton re-render — prose and fingerprints are reused (F2), no false staleness.
+  New optional `numbering: arabic|appendix|none` field (inherits down the tree): appendix gives
+  `附錄 A` / `A.1` letter series, none renders unnumbered without consuming a number.
+
+### Added — engine primitives `docspec mv` / `docspec rename-term` / `docspec tidy`
+
+- **`docspec mv <old> <new>`**: atomic rename/move of a leaf/group folder that also rewrites every
+  path-keyed reference in the same transaction — `_latest.md` section/group markers (prose is
+  never orphaned/discarded), audit/roadmap path targets — then self-runs `check`; any failure
+  rolls back with zero partial effect. Asset mode (`docspec mv docs/assets/a.png b.png`) renames
+  an image and rewrites its `![](…)` references. v1 scope: same-article leaf/group (article-root
+  moves are a later extension).
+- **`docspec rename-term <old> <new> [--article] [--dry-run]`**: deterministic project-wide term
+  substitution inside prose spans only (code fences, inline code, URLs, image paths, and bare
+  identifiers like `OCC_LIMIT_*` stay byte-exact), with a full-hit dry-run preview and in-place
+  prose-fingerprint maintenance (no false drift).
+- **`docspec tidy [--dry-run]`**: deterministic, idempotent corpus migration — deletes `entries: []`
+  shells, strips brief fields byte-identical to the nearest ancestor, strips hand-written arabic
+  numbering prefixes from titles, and renames leaf/group folders to delivery-language title slugs
+  (each rename via the `mv` primitive; sibling slug collisions refused); reports live-tree
+  history.yaml files with migration guidance; closes with the per-article `render --rebaseline`
+  reminder.
+
+### Added — lint rules V19 / V20 (both WARN, corpus hygiene)
+
+- **V19**: a `concept.brief` sub-field byte-identical (after strip) to the value supplied by the
+  nearest ancestor — copy-paste inflation; delete the field to inherit (batch: `docspec tidy`).
+- **V20**: a `concept.yaml`/`group.yaml` title beginning with an outline-numbering prefix
+  (`6.`, `６．`, `6、`, `A.`, `附錄 A`) — numbering is render-derived; a hand prefix is a second,
+  drifting source. Ground-truthed on the real 台中港 corpus: 239 + 145 hits, zero false positives.
+
 ### Added — bundled writing-style reference + language-seeded writing guide
 
 - **`docspec reference writing-zh` / `writing-en`**: docspec now ships a writing-style reference
@@ -37,8 +87,9 @@ a minor bump.
 
 ### Added — CLI discoverability & authoring seams
 
-- `docspec ready <article>` (batch graduation, per-section independent transactions); `ready`'s
-  missing-`decisions.yaml` error now hints that an empty `entries: []` is legal.
+- `docspec ready <article>` (batch graduation, per-section independent transactions). (The
+  missing-`decisions.yaml` refusal + `entries: []` hint this batch originally added was later
+  withdrawn by contract slimming — a missing decisions.yaml is now a legal empty state.)
 - `docspec show <section-path>` (look up a section's ids by path, not just by id); `show` now prints
   `governed-by`.
 - `docspec new` seeds the generated id / title / order into the scaffolded `develop.md` header.

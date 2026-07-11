@@ -113,8 +113,20 @@ the deterministic "this reasoning has no home yet" reminder — no new artifact,
   <article>/<chapter name>`) is the chapter name a human sees browsing `corpus/`; a Chinese
   document gets `適用範圍/`, not an English slug. Never prefix a chapter number
   (`1-適用範圍/`) — the rule and its why are projected by `docspec guide` (order's single
-  source of truth is the `order` field; renames are currently unsafe). NEW sections only:
-  an existing slug-named tree stays legal — do not rename it retroactively.
+  source of truth is the `order` field, and the outline NUMBER is derived by `render` from
+  order + tree position, so `concept.title` carries the bare name, never a `6.`/`11、` prefix).
+  Renames/moves are now SAFE — they go through `docspec mv` (atomic; it rewrites the path-keyed
+  prose markers and audit/roadmap targets, self-checks, and rolls back on failure) — but a
+  numbered folder name would still force a rename on every reorder, so don't make one. An
+  existing slug-named tree stays legal; migrate it to delivery-language folder names with
+  `docspec tidy` (which renames folders via `mv`) when you want to.
+- **Insert a section without renumbering the batch — use a fractional `order`.** To slot a new
+  section between `order: 2` and `order: 3`, give it `order: 2.5` (order is a number, not an
+  integer) — the outline number is derived by `render`, so 2.5 renders as the correct sequential
+  chapter number and NO sibling needs its `order` touched. Renumbering a whole run of siblings by
+  hand just to insert one is exactly the mechanical churn the derived-numbering model exists to
+  kill; reserve integer re-spacing for a genuine large restructure (and even then, `docspec mv`
+  handles any folder renames atomically).
 - **Open with an orienting overview** — give the document a root/scope section whose brief is "frame
   the whole": what this document defines, its boundary, its audience, anchored on the subject's core
   framing idea. Set its `concept`/`brief` like any section so `draft` renders an orientation, not a

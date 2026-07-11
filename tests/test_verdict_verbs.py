@@ -66,7 +66,7 @@ def test_ack_own_equals_perturb_revert_dance(tmp_path, write_leaf, monkeypatch):
         home = _project(tmp_path, name, write_leaf)
         monkeypatch.chdir(home.parent)
         render_cmd.run(["g"])
-        _write_prose(home, "g", "## 概覽", "限流保護後端。")
+        _write_prose(home, "g", "## 1. 概覽", "限流保護後端。")
         render_cmd.run(["g"])
         assert _sync_of(home, "g", "g/intro") == "synced"
         # 結構接線類源變更（散文合法不需改）
@@ -94,7 +94,7 @@ def test_ack_own_without_reason_refused(tmp_path, write_leaf, monkeypatch, capsy
     home = _project(tmp_path, "p1", write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
-    _write_prose(home, "g", "## 概覽", "內文。")
+    _write_prose(home, "g", "## 1. 概覽", "內文。")
     render_cmd.run(["g"])
     before = read_ledger(Layout(home), "g")
     capsys.readouterr()
@@ -135,7 +135,7 @@ def test_masked_stale_inherited_surfaces_after_ack_own(tmp_path, write_leaf, mon
     home = _parent_child(tmp_path, write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["doc"])
-    _write_prose(home, "doc", "### A", "子散文。")
+    _write_prose(home, "doc", "### 1.1 A", "子散文。")
     render_cmd.run(["doc"])
     assert _sync_of(home, "doc", "doc/sec/a") == "synced"
     # 父 brief（anc 軸）＋子自身 concept（own 軸）同時變 → own precedence 遮蔽 anc
@@ -157,7 +157,7 @@ def test_ack_and_ack_own_compose_in_one_render(tmp_path, write_leaf, monkeypatch
     home = _parent_child(tmp_path, write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["doc"])
-    _write_prose(home, "doc", "### A", "子散文。")
+    _write_prose(home, "doc", "### 1.1 A", "子散文。")
     render_cmd.run(["doc"])
     sec = home / "corpus" / "doc" / "sec" / "concept.yaml"
     sec.write_text(sec.read_text("utf-8").replace("受眾: X", "受眾: Y"), "utf-8")
@@ -174,7 +174,7 @@ def test_ack_alone_still_refused_on_stale_own(tmp_path, write_leaf, monkeypatch,
     home = _project(tmp_path, "p1", write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
-    _write_prose(home, "g", "## 概覽", "內文。")
+    _write_prose(home, "g", "## 1. 概覽", "內文。")
     render_cmd.run(["g"])
     cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
     cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（改）"), "utf-8")
@@ -191,7 +191,7 @@ def test_ack_own_stdout_carries_heavier_accountability_note(tmp_path, write_leaf
     home = _project(tmp_path, "p1", write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
-    _write_prose(home, "g", "## 概覽", "內文。")
+    _write_prose(home, "g", "## 1. 概覽", "內文。")
     render_cmd.run(["g"])
     cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
     cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（改）"), "utf-8")
@@ -209,7 +209,7 @@ def test_stale_marks_and_fingerprints_untouched(tmp_path, write_leaf, monkeypatc
     home = _project(tmp_path, "p1", write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
-    _write_prose(home, "g", "## 概覽", "內文。")
+    _write_prose(home, "g", "## 1. 概覽", "內文。")
     render_cmd.run(["g"])
     before = dict(read_ledger(Layout(home), "g")["g/intro"])
     assert _sync_of(home, "g", "g/intro") == "synced"
@@ -226,7 +226,7 @@ def test_redraft_flag_survives_skeleton_render_clears_on_rewrite(tmp_path, write
     home = _project(tmp_path, "p1", write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
-    _write_prose(home, "g", "## 概覽", "舊散文。")
+    _write_prose(home, "g", "## 1. 概覽", "舊散文。")
     render_cmd.run(["g"])
     assert stale_cmd.run(["g/intro", "--reason", "r"]) == 0
     render_cmd.run(["g"])                                            # 純骨架 render
@@ -245,7 +245,7 @@ def test_ack_own_clears_redraft_flag(tmp_path, write_leaf, monkeypatch):
     home = _project(tmp_path, "p1", write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
-    _write_prose(home, "g", "## 概覽", "內文。")
+    _write_prose(home, "g", "## 1. 概覽", "內文。")
     render_cmd.run(["g"])
     assert stale_cmd.run(["g/intro", "--reason", "r"]) == 0
     assert _sync_of(home, "g", "g/intro") == "stale-own"
@@ -259,7 +259,7 @@ def test_stale_refusals(tmp_path, write_leaf, monkeypatch, capsys):
     home = _project(tmp_path, "p1", write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
-    _write_prose(home, "g", "## 概覽", "內文。")
+    _write_prose(home, "g", "## 1. 概覽", "內文。")
     render_cmd.run(["g"])
     capsys.readouterr()
     assert stale_cmd.run(["g/intro"]) != 0                           # 無 reason
@@ -280,8 +280,8 @@ def test_journal_appends_per_verdict_with_full_schema(tmp_path, write_leaf, monk
     home = _parent_child(tmp_path, write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["doc"])
-    _write_prose(home, "doc", "## Sec", "父散文。")
-    _write_prose(home, "doc", "### A", "子散文。")
+    _write_prose(home, "doc", "## 1. Sec", "父散文。")
+    _write_prose(home, "doc", "### 1.1 A", "子散文。")
     render_cmd.run(["doc"])
     # 父 brief 變 → sec 自己 stale-own、sec/a stale-inherited
     sec = home / "corpus" / "doc" / "sec" / "concept.yaml"
@@ -307,7 +307,7 @@ def test_journal_untouched_by_plain_renders(tmp_path, write_leaf, monkeypatch):
     home = _project(tmp_path, "p1", write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
-    _write_prose(home, "g", "## 概覽", "內文。")
+    _write_prose(home, "g", "## 1. 概覽", "內文。")
     render_cmd.run(["g"])
     assert stale_cmd.run(["g/intro", "--reason", "r"]) == 0          # 先留一筆
     path = verdicts_path(Layout(home), "g")
@@ -324,7 +324,7 @@ def test_journal_ack_reason_optional(tmp_path, write_leaf, monkeypatch):
     home = _parent_child(tmp_path, write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["doc"])
-    _write_prose(home, "doc", "### A", "子散文。")
+    _write_prose(home, "doc", "### 1.1 A", "子散文。")
     render_cmd.run(["doc"])
     sec = home / "corpus" / "doc" / "sec" / "concept.yaml"
     sec.write_text(sec.read_text("utf-8").replace("受眾: X", "受眾: Y"), "utf-8")
@@ -342,8 +342,8 @@ def test_redraft_backs_up_latest_and_marks_all_written(tmp_path, write_leaf, mon
     home = _project(tmp_path, "p1", write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
-    _write_prose(home, "g", "## 概覽", "甲。")
-    _write_prose(home, "g", "## 用法", "乙。")
+    _write_prose(home, "g", "## 1. 概覽", "甲。")
+    _write_prose(home, "g", "## 2. 用法", "乙。")
     render_cmd.run(["g"])
     docs_before = sorted(p.as_posix() for p in (home.parent / "docs").rglob("*"))
     pre = _latest(home).read_text("utf-8")
@@ -394,7 +394,7 @@ def test_unowned_prose_under_group_heading_warns(tmp_path, write_leaf, monkeypat
     latest = _latest(home)
     clean = latest.read_text("utf-8")
     # 在分組標題行下塞手寫散文（分組無散文槽＝無主）
-    latest.write_text(clean.replace("## Methods\n", "## Methods\n\n手寫的無主散文。\n"), "utf-8")
+    latest.write_text(clean.replace("## 1. Methods\n", "## 1. Methods\n\n手寫的無主散文。\n"), "utf-8")
     capsys.readouterr()
     assert render_cmd.run(["g"]) == 0                                # WARN 不改 exit code
     err = capsys.readouterr().err
@@ -421,7 +421,7 @@ def test_render_generated_skeleton_never_warns(tmp_path, write_leaf, monkeypatch
     home = _group_project(tmp_path, write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
-    _write_prose(home, "g", "### 方法A", "節內散文。")
+    _write_prose(home, "g", "### 1.1 方法A", "節內散文。")
     capsys.readouterr()
     assert render_cmd.run(["g"]) == 0
     assert render_cmd.run(["g"]) == 0

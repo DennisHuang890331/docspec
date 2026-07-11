@@ -136,7 +136,8 @@ def test_retired_lists_active_decision_retirements(make_project, write_leaf, mon
     assert any(d["id"] == "d-old" and d["section"] == "g/x" for d in data["retiredDecisions"])
 
 
-def test_show_retired_decision_reads_history_md(make_project, write_leaf, monkeypatch, capsys):
+def test_show_addresses_dead_decision_in_place(make_project, write_leaf, monkeypatch, capsys):
+    """contract-slimming D3：死決策留原 decisions.yaml、就地可 show（不搬 history.yaml）。"""
     import json
     from dspx.commands import retire as retire_cmd
     from dspx.commands import show
@@ -145,11 +146,13 @@ def test_show_retired_decision_reads_history_md(make_project, write_leaf, monkey
                decisions=[{"id": "d-old", "kind": "normative", "status": "deprecated",
                            "statement": "old", "rationale": "because reasons"}])
     monkeypatch.chdir(home.parent)
-    retire_cmd.run(["a/x"])          # d-old → history.yaml；rationale → history.md ## d-old
+    assert retire_cmd.run(["a/x"]) == 0        # 純報告、零寫入
+    assert not (home / "corpus" / "a" / "x" / "history.yaml").exists()
     capsys.readouterr()
+    # 死決策留原檔＝show 就地定址（kind:decision，rationale 直接在條目上）
     assert show.run(["d-old", "--json"]) == 0
     p = json.loads(capsys.readouterr().out)
-    assert p["kind"] == "history" and "because reasons" in (p.get("rationale") or "")
+    assert p["kind"] == "decision" and "because reasons" in (p.get("rationale") or "")
 
 
 def test_show_unknown_id(make_project, monkeypatch):
@@ -288,7 +291,14 @@ def test_guide_projects_workflow_and_artifacts(make_project, monkeypatch, capsys
     ids = {a["id"] for a in data["artifacts"]}
     assert {"concept", "decisions", "develop"} <= ids         # 涵蓋每個 schema artifact
     concept = next(a for a in data["artifacts"] if a["id"] == "concept")
-    assert "brief.audience" in concept["requiredFields"] and "develop" in concept["reader"]
+    # differential-brief contract (contract-slimming): brief and its sub-fields are OPTIONAL
+    # (write only the diff from the ancestor chain; root completeness enforced by the hierarchy
+    # check, not schema-required). Top-level concept identity fields stay required; brief is still
+    # discoverable in the field contract as an optional (closed) object.
+    assert "concept" in concept["requiredFields"] and "develop" in concept["reader"]
+    assert "brief.audience" not in concept["requiredFields"]
+    brief_field = next(f for f in concept["fieldContract"] if f["name"] == "brief")
+    assert brief_field.get("required") is False
 
 
 def test_instructions_emits_required_fields(make_project, monkeypatch, capsys):
@@ -302,7 +312,9 @@ def test_instructions_emits_required_fields(make_project, monkeypatch, capsys):
     data = json.loads(capsys.readouterr().out)
     concept_w = next(w for w in data["writes"] if w["id"] == "concept")
     rf = concept_w["requiredFields"]
-    assert "concept" in rf and "brief.audience" in rf and "brief.depth" in rf and "brief.breadth" in rf
+    # differential-brief contract (contract-slimming): brief sub-fields are optional now.
+    assert "concept" in rf
+    assert "brief.audience" not in rf and "brief.depth" not in rf and "brief.breadth" not in rf
 
 
 def test_factcheck_gets_ancestor_normative(make_project, write_leaf, monkeypatch, capsys):
@@ -388,7 +400,8 @@ def test_hook_postcheck_never_disturbs(tmp_path):
     assert hook._postcheck({}) == 0
 
 
-def test_retire_moves_superseded(make_project, write_leaf, monkeypatch):
+def test_retire_is_non_mutating(make_project, write_leaf, monkeypatch, capsys):
+    """contract-slimming D3：retire 純報告、零寫入——死決策留原 decisions.yaml、不生 history.yaml。"""
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1},
                decisions=[
@@ -396,13 +409,15 @@ def test_retire_moves_superseded(make_project, write_leaf, monkeypatch):
                    {"id": "d-new", "kind": "normative", "status": "accepted", "statement": "新"},
                ])
     monkeypatch.chdir(home.parent)
-    assert retire_cmd.run(["g/x", "--in", "t1"]) == 0
     leaf = home / "corpus" / "g" / "x"
-    dec_ids = [e["id"] for e in _entries(leaf / "decisions.yaml")]
-    his = _entries(leaf / "history.yaml")
-    assert dec_ids == ["d-new"]
-    assert his[0]["id"] == "d-old" and his[0]["retired-in"] == "t1"
-    # 搬後 check 仍綠
+    before = (leaf / "decisions.yaml").read_bytes()
+    assert retire_cmd.run(["g/x", "--in", "t1"]) == 0
+    # 死決策留原檔（一個 byte 不動）、無 history.yaml、報告點名死決策
+    assert (leaf / "decisions.yaml").read_bytes() == before
+    assert [e["id"] for e in _entries(leaf / "decisions.yaml")] == ["d-old", "d-new"]
+    assert not (leaf / "history.yaml").exists()
+    assert "d-old" in capsys.readouterr().out
+    # 報告後 check 仍綠
     assert check_cmd.run([]) == 0
 
 
@@ -460,7 +475,7 @@ def test_publish_gate_and_staleness(make_project, write_leaf, monkeypatch):
     render_cmd.run(["g"])                      # 建骨架
     latest = docs / "_latest.md"
     latest.write_text(
-        latest.read_text(encoding="utf-8").replace("## X\n", "## X\n\n內文。\n"),
+        latest.read_text(encoding="utf-8").replace("## 1. X\n", "## 1. X\n\n內文。\n"),
         encoding="utf-8")                       # 模擬 draft 寫散文
     assert publish_cmd.run(["g"]) == 0
     assert (docs / "archive" / "v1.0.0.md").is_file()
@@ -481,7 +496,7 @@ def test_publish_aborts_on_dirty_docs(make_project, write_leaf, monkeypatch):
     render_cmd.run(["g"])
     latest = docs / "_latest.md"
     latest.write_text(                          # 散文洩漏內部 id → lint ERROR
-        latest.read_text(encoding="utf-8").replace("## X\n", "## X\n\n洩漏 sec-leak。\n"),
+        latest.read_text(encoding="utf-8").replace("## 1. X\n", "## 1. X\n\n洩漏 sec-leak。\n"),
         encoding="utf-8")
     assert publish_cmd.run(["g"]) == 1
 
@@ -495,7 +510,7 @@ def _render_and_draft(home, monkeypatch, write_leaf, prose):
     docs = home.parent / "docs" / "g"
     render_cmd.run(["g"])
     latest = docs / "_latest.md"
-    latest.write_text(latest.read_text("utf-8").replace("## X\n", f"## X\n\n{prose}\n"),
+    latest.write_text(latest.read_text("utf-8").replace("## 1. X\n", f"## 1. X\n\n{prose}\n"),
                       encoding="utf-8")
     return docs
 
@@ -595,7 +610,7 @@ def test_publish_dry_run_red_lint_prints_consolidated_report(make_project, write
     docs = home.parent / "docs" / "g"
     latest = docs / "_latest.md"
     latest.write_text(                                 # 散文洩漏內部 id → lint ERROR
-        latest.read_text(encoding="utf-8").replace("## X\n", "## X\n\n洩漏 sec-leak。\n"),
+        latest.read_text(encoding="utf-8").replace("## 1. X\n", "## 1. X\n\n洩漏 sec-leak。\n"),
         encoding="utf-8")
     before = latest.read_bytes()
     capsys.readouterr()

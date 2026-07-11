@@ -65,7 +65,10 @@ def test_retire_section_prefix_filter(make_project, write_leaf, monkeypatch, cap
     assert "a/x" in out and "b/y" not in out
 
 
-def test_retire_decision_splits_prose_to_history_md(make_project, write_leaf, monkeypatch):
+def test_retire_decision_reports_in_place_non_mutating(make_project, write_leaf, monkeypatch,
+                                                       capsys):
+    """contract-slimming D3：retire＝純報告——死決策**留在原 decisions.yaml**，
+    不搬 history.yaml、不寫 history.md、零檔案異動。"""
     home = make_project()
     write_leaf(home, "a/x",
                concept={"id": "c1", "title": "X", "order": 1},
@@ -77,21 +80,19 @@ def test_retire_decision_splits_prose_to_history_md(make_project, write_leaf, mo
                     "statement": "雙語"},
                ])
     monkeypatch.chdir(home.parent)
-    assert retire_cmd.run(["a/x", "--in", "v2"]) == 0
     leaf = home / "corpus" / "a" / "x"
-    # history.yaml 只剩結構（散文 why 已移出）
-    hist = yaml.safe_load((leaf / "history.yaml").read_text(encoding="utf-8"))
-    e = hist["entries"][0]
-    assert e["id"] == "d-old" and e["retired-in"] == "v2"
-    assert "rationale" not in e and "rejected" not in e
-    assert "narrative" not in e                         # 不再存手寫 link 字串
-    # 散文進 history.md，標題＝乾淨 ## <id>（純 id，不帶標題、不解析）
-    md = (leaf / "history.md").read_text(encoding="utf-8")
-    assert "## d-old" in md and "## d-old —" not in md   # 乾淨 id，無破折號標題
-    assert "當時只有 Linux wheel" in md and "MQTT" in md
-    # 活著的決策只剩 d-new
+    dec_before = (leaf / "decisions.yaml").read_bytes()
+    assert retire_cmd.run(["a/x", "--in", "v2"]) == 0            # --in＝deprecated no-op
+    out = capsys.readouterr().out
+    assert "d-old" in out and "deprecated" in out                # 逐條點名死決策
+    assert "STAY IN PLACE" in out                                # 就地即終態、無物可搬
+    # 零寫入：decisions.yaml 位元不變（d-old 連 rationale/rejected 都原樣留著）
+    assert (leaf / "decisions.yaml").read_bytes() == dec_before
     dec = yaml.safe_load((leaf / "decisions.yaml").read_text(encoding="utf-8"))
-    assert [d["id"] for d in dec["entries"]] == ["d-new"]
+    assert [d["id"] for d in dec["entries"]] == ["d-old", "d-new"]
+    # 不再生 live 樹 history.yaml / history.md
+    assert not (leaf / "history.yaml").exists()
+    assert not (leaf / "history.md").exists()
 
 
 def test_retire_section_rejects_unknown(make_project, write_leaf, monkeypatch):

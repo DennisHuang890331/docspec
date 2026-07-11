@@ -24,15 +24,14 @@ HELP = "section structure overview: per section files present / writable / synce
 
 def section_state(leaf: Leaf, schema: Schema, check_ok: bool) -> str:
     """每節狀態（status 與 list 共用）。
-    ready 需「concept+decisions 齊、欄位完整（per-section run_file_check）、全專案 check 綠」；
-    develop.md 還在 or 必填未齊 → developing（不擋寫、draft 不選）。"""
+    ready 需「concept 齊、欄位完整（per-section run_file_check）、全專案 check 綠」；
+    develop.md 還在 or 必填未齊 → developing（不擋寫、draft 不選）。
+    decisions.yaml 缺席＝合法空（該節無自有裁決）＝不降級（contract-slimming D2）。"""
     has_concept = (leaf.dir / "concept.yaml").is_file()
-    has_decisions = (leaf.dir / "decisions.yaml").is_file()
     if leaf.has_develop:
         return "developing"
-    if not has_concept or not has_decisions:
-        missing = [n for n, ok in (("concept", has_concept), ("decisions", has_decisions)) if not ok]
-        return "waiting(missing:" + ",".join(missing) + ")"
+    if not has_concept:
+        return "waiting(missing:concept)"
     if run_file_check(leaf, schema):
         return "developing"          # 必填未齊（空/佔位/型別）→ 仍 developing（1.3）
     if not check_ok:

@@ -50,17 +50,20 @@ workflow:
     New = drill into an empty tree; revise = re-drill the affected subtree; same flow. docs/<article>/_latest is the projected deliverable.
   skills:
     - id: develop
-      summary: Developmental editor. Think freely in develop.md, then crystallize into concept/decisions/material; retire rejected work into history.
+      summary: Developmental editor. Think freely in develop.md, then crystallize into concept/decisions/material; a superseded decision stays marked in its decisions.yaml, a whole obsolete section retires via docspec retire-section.
       steps:
         - Read the forest map + roadmap first (docspec instructions develop <section>).
         - >-
           Name section folders (docspec new) with the chapter name in the DELIVERABLE language — the
           folder name is what a human sees browsing corpus/ (a Chinese document gets 適用範圍/, not an
-          English slug). NEVER prefix a chapter number (1-適用範圍/): ordering's only source of truth
-          is the order field (concept.yaml / group.yaml); a numbered folder name is a second source of
-          truth and every reorder would force a rename — and renames are currently unsafe (prose
-          markers and the ledger key on paths). Applies to NEW sections only; existing slug-named
-          trees stay legal as-is.
+          English slug). NEVER prefix a chapter number (1-適用範圍/): ordering's only source of truth is
+          the order field (concept.yaml / group.yaml) and the outline NUMBER is derived by render from
+          order + tree position (concept.title carries the BARE name — no 6./11、 prefix). A numbered
+          folder name is a second, drifting source that every reorder would force a rename to fix.
+          Renames/moves are now safe — they go through `docspec mv` (atomic: rewrites the path-keyed
+          prose markers + audit/roadmap targets, self-checks, rolls back on failure) — but don't create
+          a numbered name that needs one. Applies to NEW sections; existing slug-named trees stay legal
+          (migrate them with `docspec tidy`, which renames folders to the delivery-language title via mv).
         - Think in develop.md ONLY; the other four files do not exist yet.
         - >-
           Reasoning lands AS IT HAPPENS — a long discussion or a reversal is written into develop.md
@@ -73,7 +76,15 @@ workflow:
           distributes each part to the section it belongs in; register the restructuring as a roadmap
           `doing` entry, and the existing roadmap lint (doing without a develop.md) becomes the
           deterministic "this reasoning has no home yet" reminder — no new rule.
-        - Crystallize via four-question triage → scope→concept / rulings→decisions / facts→material / rejected→history.
+        - >-
+          Crystallize via four-question triage → scope→concept / rulings→decisions / facts→material /
+          rejected→recorded. The leaf contract is CONCEPT-REQUIRED, the rest ON-DEMAND: build decisions.yaml
+          ONLY when this section owns a normative ruling of its own — no ruling ⇒ no decisions.yaml (never a
+          fabricated empty `entries: []`; a pure-overview leaf that only realizes rulings owned elsewhere is a
+          legal one-file section). material.md only when it has digested facts. Rejected/superseded reasoning is
+          recorded as a status: superseded decision that STAYS in decisions.yaml (addressable), not moved into a
+          live-tree history.yaml; genuine throwaway is deleted. Write each brief field ONLY where it differs from
+          the ancestor chain (an absent field = inherit; restating an ancestor value verbatim is lint-flagged).
         - Graduate with docspec ready <section> (a checked transaction; it drains then deletes develop.md).
       transaction: ready
     - id: draft
@@ -131,6 +142,7 @@ workflow:
     - release touches the format layer only (template-pack params), never content — content's one source is the frozen snapshot md (export byte-lock guards it); a layout problem fixable only by changing content → raise an audit finding upstream, the human re-edits → re-publishes → re-releases; the agent never self-fixes content.
     - Completeness gates sit at advancement (docspec ready / publish), not at write time — half-formed work is free inside the loop, it just stays "developing".
     - Semantic judgment → audit (factcheck), never an engine gate (audit itself can hallucinate).
+    - Mechanical text edits are ENGINE transactions, never hand-typed occurrence-by-occurrence — a rename/move goes through `docspec mv` (atomic; rewrites the path-keyed prose markers + audit/roadmap targets, self-checks, rolls back on failure), punctuation width through `docspec normalize`, corpus hygiene / empty-shell + verbatim-brief + title-number cleanup through `docspec tidy`, a project-wide term substitution through `docspec rename-term` (prose-span only; identifiers/code/URLs byte-exact). Hand-editing these — or an ad-hoc find-replace script — is the drift/corruption class the real corpus died on (a 22-script replace run that poisoned `OCC_LIMIT_*` identifier codes); use the command or a script that calls it, never a blind sweep.
     - Pin line endings at the repo level — a .gitattributes with `*.md` / `*.yaml` / `*.yml` as `text eol=lf` (docspec init scaffolds it for new projects; EXISTING projects should add it themselves). The engine normalizes CRLF when fingerprinting and writes LF, but the repo pin is the third defense layer against git autocrlf rewriting checkouts.
     - corpus/_archive/ = retired sections (decision history): engine-invisible in active work (status/check/draft never see it); query with docspec retired, drill with docspec show <id>. It is history — never touch it in current work (unlocked, by convention, like OpenSpec's changes/archive).
   # Migration onboarding: how an EXISTING project (pre-docspec published versions + an existing
@@ -173,11 +185,11 @@ filing-rules:
     rule: "concept.governed-by must point only at a live concept.id of a real parent document — never a decision/history id, never a parallel sibling."
     enforced-by: check
   - id: crystallize-four-way
-    rule: "develop.md content distributes into exactly scope→concept / rulings→decisions / facts→material / rejected→history; genuine throwaway is deleted."
+    rule: "develop.md content distributes into exactly scope→concept / rulings→decisions / facts→material; rejected/superseded reasoning is recorded as a status:superseded decision that stays in decisions.yaml (never moved to a live-tree history.yaml); genuine throwaway is deleted. concept is required; decisions/material are on-demand (build only when the section owns rulings / has facts — never a fabricated empty container)."
     enforced-by: ready
   - id: retire-via-transaction
-    rule: "Retire a decision with docspec retire, a whole section with docspec retire-section — never hand-move/delete a section folder; published archive/ is immutable (hash-netted by lint)."
-    enforced-by: retire / lint
+    rule: "Retire a decision by marking it status: superseded/deprecated IN PLACE in its decisions.yaml (it stays addressable; docspec retire reports these, moves nothing); retire a whole section with docspec retire-section; rename/move a section folder ONLY via docspec mv — never hand-move/delete; published archive/ is immutable (hash-netted by lint)."
+    enforced-by: retire-section / mv / lint
   - id: sibling-dependency-via-realizes
     rule: "A dependency on ANOTHER section's decision — sibling or cross-document — is declared as a structural edge: concept.realizes (list of decision ids). Never park an internal decision id in sources: (external provenance only) and never rely on a bare id mention in prose — staleness (stale-upstream) and impact only see structural edges."
     enforced-by: check
@@ -315,18 +327,24 @@ artifacts:
     closed: true                 # concept top-level keys are fully enumerated; unknown keys fail loud (check)
     schema:
       id:         { type: string,    required: true }
-      title:      { type: string,    required: true }
+      title:      { type: string,    required: true }   # bare NAME only — never a numbering prefix (6. / 11、 / A.); render derives the outline number from order + tree position and injects it into the heading
       order:      { type: number,    required: true }
+      numbering:  { type: enum,      required: false, values: [arabic, appendix, none] }   # outline-numbering policy for the derived heading: arabic (default — 6, 6.1) / appendix (letter series — 附錄 A, A.1) / none (unnumbered, e.g. revision-history). Inherits down the tree.
       status:     { type: enum,      required: true, values: [draft, stable, deprecated] }
       concept:    { type: string,    required: true }
       brief:
         type: object
-        required: false          # the whole block may be omitted = inherited; required at root is enforced by the hierarchy check
+        required: false          # the whole block may be omitted = inherited; root completeness is enforced by the hierarchy check (a root MUST fill audience/depth/breadth)
         closed: true             # brief sub-keys are fully enumerated; an invented key (e.g. brief.diagram) fails loud
         fields:                  # nested sub-schema → _check_fieldmap recurses over a "non-empty brief"
-          audience: { type: string, required: true }   # if you wrote a brief, fill the whole envelope (checked only when non-empty)
-          depth:    { type: string, required: true }
-          breadth:  { type: string, required: true }
+          # DIFFERENTIAL BRIEF: every sub-field is OPTIONAL. Write a field ONLY when it differs from
+          # what the ancestor chain already provides (aperture merges ancestor briefs downward); an
+          # absent field means "inherit". Restating an ancestor's value verbatim is copy-paste inflation
+          # (lint WARN). A root section is the exception — the hierarchy check requires it to fill the
+          # whole envelope (audience/depth/breadth) so children have something to inherit.
+          audience: { type: string, required: false }
+          depth:    { type: string, required: false }
+          breadth:  { type: string, required: false }
           forbidden: { type: list }
           layout:   { type: enum, values: [prose, table, list, diagram] }
           kind:     { type: enum, values: [explain, how-to, reference, tutorial] }   # Diátaxis topic type — optional audit/draft hint, NOT a render gate; inherits down the tree
@@ -338,7 +356,13 @@ artifacts:
   - id: decisions
     generates: decisions.yaml
     kind: yaml
-    description: This section's "live" decisions (normative + rationale); the criterion = whether the history matters → if it matters, it goes here.
+    description: >
+      This section's "live" decisions (normative + rationale). ON-DEMAND: the file exists ONLY when the section owns
+      normative rulings of its own — absence = zero rulings = a legal state ("this section carries no rulings; it may
+      still realize rulings owned elsewhere"). Do NOT fabricate an empty `entries: []` container to "complete the file
+      set". A decisions.yaml that EXISTS but is structurally broken still fails loud (absence is legal, presence carries
+      responsibility). Dead decisions stay HERE marked status: superseded/deprecated (addressable for the supersede chain
+      / deps two-hop) — they are never relocated to a live-tree history.yaml.
     template: templates/decisions.yaml
     instruction: instructions/decisions.md
     requires: []
@@ -363,7 +387,7 @@ artifacts:
   - id: material
     generates: material.md
     kind: md
-    description: Note-style chunked writing material (source excerpts / facts / framing / examples / layout hints); optional.
+    description: Note-style chunked writing material (source excerpts / facts / framing / examples / layout hints). ON-DEMAND (optional) — digested objective facts that fuel blind drafting; absent when the section needs none.
     template: templates/material.md
     instruction: instructions/material.md
     requires: []
@@ -378,7 +402,7 @@ artifacts:
   - id: develop
     generates: develop.md
     kind: md
-    description: Thinking draft / workbench. develop thinks here, then crystallizes into concept/decisions/material.
+    description: Thinking draft / workbench (TRANSIENT — a meeting-minutes-style thinking pad, drained and hard-deleted at `docspec ready`). develop thinks here, then crystallizes into concept/decisions/material.
     template: templates/develop.md
     instruction: instructions/develop.md
     requires: []
@@ -393,11 +417,15 @@ artifacts:
     generates: history.yaml
     kind: yaml
     description: >
-      A "lean index" of retirement records (loaded every time, so kept small; written by command, queryable by id). One kind of
-      entries, keyed by id: dead decisions (kind normative/rationale) + whole-section retirements (kind section, id = that section's
-      concept.id, with an archive link). The summary lives here (a one-line statement); the prose detail of "why it was abandoned"
-      lives in the paired history.md (same id), and the detail of a whole-section retirement = the archive folder itself. The agent
-      queries via `docspec retired` (summary) / `docspec show <id>` (detail), and **never reads the raw files directly**.
+      A "lean index" of retirement records — NOT part of the live-tree leaf contract. It appears ONLY inside a
+      `corpus/_archive/<…>/` retirement package produced by the `docspec retire-section` transaction; a live leaf
+      directory never carries a history.yaml. (Dead DECISIONS are NOT relocated here — they stay in their owning
+      decisions.yaml marked status: superseded/deprecated.) A retired SECTION's archived package holds one kind:section
+      entry (id = that section's concept.id, with an archive link); the summary lives here (a one-line statement), the
+      prose detail of "why it was abandoned" lives in the paired history.md (same id), and the detail of a whole-section
+      retirement = the archive folder itself. The agent queries via `docspec retired` (summary) / `docspec show <id>`
+      (detail), and **never reads the raw files directly**. Loading an OLD project that still has a live-tree history.yaml
+      stays backward-compatible (the engine reads it); `docspec tidy` reports it as migratable.
     template: templates/history.yaml
     instruction: instructions/history.md
     requires: []

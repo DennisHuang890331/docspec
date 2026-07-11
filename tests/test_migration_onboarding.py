@@ -19,7 +19,7 @@ def _render_and_draft(home, monkeypatch, write_leaf, prose="內文。"):
     docs = home.parent / "docs" / "g"
     render_cmd.run(["g"])
     latest = docs / "_latest.md"
-    latest.write_text(latest.read_text("utf-8").replace("## X\n", f"## X\n\n{prose}\n"),
+    latest.write_text(latest.read_text("utf-8").replace("## 1. X\n", f"## 1. X\n\n{prose}\n"),
                       encoding="utf-8")
     return docs
 
