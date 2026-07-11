@@ -222,6 +222,58 @@ def _cmd_add_target(argv: list[str]) -> int:
     chg.save_change(change)
     print(f"added target to \"{args.id}\": [{t.action}] {t.ref}"
           + (f" -> {t.dest}" if t.dest else ""))
+    if t.kind == "file":
+        print(f"  staged a copy of {t.ref} (baseline hash recorded; official file untouched).")
+    elif args.action == "create":
+        print(f"  staged an empty section folder for {t.ref} (crystallize it in staging).")
+    else:
+        print("  staged the section's own files into staging + enlist-staled "
+              "(status derives it not-done until the prose is rewritten in the preview).")
+    return 0
+
+
+# ── change remove-target ──────────────────────────────────────────────
+
+def _cmd_remove_target(argv: list[str]) -> int:
+    p = argparse.ArgumentParser(prog="docspec change remove-target")
+    p.add_argument("id", help="change id")
+    p.add_argument("ref", help="the target ref to drop (concept.id / section path / file path)")
+    args = p.parse_args(argv)
+
+    try:
+        layout, config = bootstrap()
+        load_engine_schema(config)
+        leaves = load_model(layout)
+    except BootstrapError as exc:
+        return exc.exit_code
+
+    if chg.change_state(layout, args.id) != chg.STATE_ACTIVE:
+        sys.stderr.write(f"docspec: no active change \"{args.id}\".\n")
+        return 1
+    change = chg.load_change_at(chg.change_dir(layout, args.id, chg.STATE_ACTIVE),
+                                chg.STATE_ACTIVE)
+    t = change.target_by_ref(args.ref)
+    if t is None:
+        sys.stderr.write(f"docspec: change \"{args.id}\" has no target \"{args.ref}\".\n")
+        return 1
+
+    # 丟棄該 target 的 staging（檔案粒度、不誤刪子節暫存），再自 change 移除。
+    if t.kind == "file":
+        official = layout.project_root / t.ref
+        staged = chg.staging_target(change.dir, layout, official)
+        if staged.is_file():
+            staged.unlink()
+        change.fork_hashes.pop(chg.workspace_rel(layout, official), None)
+    else:
+        section = chg.section_of_ref(t.ref, leaves)
+        if section is None and t.kind == "create":
+            section = t.ref
+        if section is not None:
+            chg.unstage_section(change, layout, section)
+    change.targets = [x for x in change.targets if x.ref != t.ref]
+    chg.save_change(change)
+    print(f"removed target \"{t.ref}\" from change \"{args.id}\" (staging dropped; it no longer "
+          "blocks the derived completeness).")
     return 0
 
 
@@ -243,10 +295,24 @@ def _cmd_status(argv: list[str]) -> int:
     if args.id is None:
         return _list_active(layout, schema, args.as_json)
 
-    if chg.change_state(layout, args.id) is None:
+    state = chg.change_state(layout, args.id)
+    if state is None:
         sys.stderr.write(f"docspec: no change \"{args.id}\".\n")
         return 1
     change = chg.load_change(layout, args.id)
+    # ★8.5：已收案/已棄案的 change 顯示終態，而非對已消失的 staging 導出 0/N not archivable。
+    if state != chg.STATE_ACTIVE:
+        label = "ACCEPTED (archived)" if state == chg.STATE_ARCHIVED else "ABANDONED"
+        if args.as_json:
+            import json
+            print(json.dumps({"id": change.id, "state": state, "terminal": label,
+                              "targets": len(change.targets)}, ensure_ascii=False, indent=2))
+            return 0
+        print(f"change \"{change.id}\" [{state}] — {label}; {len(change.targets)} target(s). "
+              "The dossier is frozen (acceptance/abandon already happened); no live derivation.")
+        if change.abandoned:
+            print(f"  reason: {change.abandoned.get('reason')}")
+        return 0
     statuses = chg.derive_change_status(layout, change, schema)
     archivable = chg.is_archivable(statuses)
     done_n = sum(1 for s in statuses if s.done)
@@ -356,6 +422,7 @@ def _abandon(layout, change, reason) -> int:
 _SUB = {
     "new": _cmd_new,
     "add-target": _cmd_add_target,
+    "remove-target": _cmd_remove_target,
     "status": _cmd_status,
     "archive": _cmd_archive,
 }
@@ -364,9 +431,10 @@ _SUB = {
 def run(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help"):
         print("docspec change — modification event container\n")
-        print("Subcommands:")
+        print("Subcommands (each takes --help for its flags):")
         print("  new <id> --publish <p> [--seed REF ...]   open a change container")
-        print("  add-target <id> <ref> --action <a>        enlist a target")
+        print("  add-target <id> <ref> --action <a>        enlist a target (stages it + enlist-stales)")
+        print("  remove-target <id> <ref>                  drop a target (discards its staging)")
         print("  status [<id>]                             derived per-target acceptance")
         print("  archive <id> [--abandon --reason R]       accept (land) or abandon")
         return 0

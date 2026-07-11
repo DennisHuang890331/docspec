@@ -310,7 +310,21 @@ def auto_targets_for_seed(layout: Layout, leaves: list[Leaf], seed: str) -> list
     if seed.startswith("term:"):
         return out   # 術語 seed 的候選解析交由呼叫端（rename-term dry-run），此處不自動入單
 
-    # decision/concept id：反向 realizes
+    def _ref_of(lf) -> str:
+        return (str(lf.concept.get("id")) if lf.concept and lf.concept.get("id")
+                else lf.section)
+
+    # ★8.2 seed 決策擁有節：擁有此決策的節也自動入單（改決策就得改它的家；否則 canonical
+    #     case 逼人手動 stage 父節、踩 8.1）。掃 decisions/history 找 id == seed 的擁有節。
+    for lf in leaves:
+        for e in (lf.decisions + lf.history):
+            if str(e.get("id")) == seed:
+                ref = _ref_of(lf)
+                if ref not in seen:
+                    seen.add(ref)
+                    out.append(Target(ref=ref, action="revise", origin="auto"))
+
+    # decision/concept id：反向 realizes（下游實現節）＋ 節本身即 seed（concept id seed）
     for lf in leaves:
         if lf.concept is None:
             continue
@@ -379,35 +393,54 @@ def staging_target(cdir: Path, layout: Layout, official: Path) -> Path:
     return staging_dir(cdir).joinpath(*rel.split("/"))
 
 
+# 一個節「自己的來源檔」白名單（★P0 檔案粒度：staging 一節只複製這些＋assets/，
+# **絕不遞迴子章節資料夾**——父/根節的 staging 永不代表其子樹，子節是各自獨立的鏡像路徑）。
+_SECTION_OWN_FILES = ("concept.yaml", "decisions.yaml", "material.md", "develop.md",
+                      "history.yaml", "history.md", "group.yaml")
+_SECTION_ASSET_DIR = "assets"
+
+
+def _has_own_files(d: Path) -> bool:
+    """d（staging 或正式節夾）直接含任一「自己的來源檔」＝真正被 stage 的節（非順帶建出的父路徑）。"""
+    return d.is_dir() and (any((d / n).is_file() for n in _SECTION_OWN_FILES)
+                           or (d / _SECTION_ASSET_DIR).is_dir())
+
+
 def is_section_official_dir(layout: Layout, section: str) -> bool:
     return (layout.section_dir(section) / "concept.yaml").is_file()
 
 
 def record_fork(change: Change, layout: Layout, official: Path) -> None:
-    """記錄 official 檔 fork 當下的 hash（★#9 漂移守門）。夾 target 記其內每檔？——v1 記
-    corpus 節的 concept/decisions/material 各檔 hash（節資料夾整包搬移，逐檔比對最精確）。"""
-    if official.is_dir():
-        for f in sorted(official.rglob("*")):
-            if f.is_file():
-                change.fork_hashes[workspace_rel(layout, f)] = content_hash(f) or ""
-    elif official.is_file():
+    """記錄單一 official 檔 fork 當下的 hash（★#9 漂移守門）。node 級的 fork 記錄由
+    stage_section 逐「自己的來源檔」呼叫（不遞迴子章節，見 _SECTION_OWN_FILES）。"""
+    if official.is_file():
         change.fork_hashes[workspace_rel(layout, official)] = content_hash(official) or ""
 
 
 def stage_section(change: Change, layout: Layout, section: str) -> Path:
-    """corpus 節 copy-on-write：首次改該節時複製**整個節資料夾**進 staging（design D1）。
-    回傳 staging 內該節資料夾路徑。已在 staging＝直接回（不覆蓋既有暫存編輯）。"""
+    """corpus 節 copy-on-write（★P0 檔案粒度）：首次改該節時只複製它**自己的來源檔**
+    （concept/decisions/material/develop/history/group ＋ assets/）進 staging——**不遞迴子章節
+    資料夾**。回傳 staging 內該節路徑。已 stage（含自己的檔）＝直接回、不覆蓋既有暫存編輯。"""
     official = layout.section_dir(section)
     staged = staging_target(change.dir, layout, official)
-    if staged.exists():
+    if _has_own_files(staged):
         return staged
-    staged.parent.mkdir(parents=True, exist_ok=True)
+    staged.mkdir(parents=True, exist_ok=True)
     if official.is_dir():
-        shutil.copytree(official, staged)
-        record_fork(change, layout, official)
-    else:
-        # create action：正式面尚無此節，staging 內建空節資料夾（agent 之後填）。
-        staged.mkdir(parents=True, exist_ok=True)
+        for name in _SECTION_OWN_FILES:
+            src = official / name
+            if src.is_file():
+                shutil.copy2(src, staged / name)
+                record_fork(change, layout, src)
+        adir = official / _SECTION_ASSET_DIR
+        if adir.is_dir():
+            dst = staged / _SECTION_ASSET_DIR
+            if not dst.exists():
+                shutil.copytree(adir, dst)
+            for f in sorted(adir.rglob("*")):
+                if f.is_file():
+                    record_fork(change, layout, f)
+    # create action：正式面尚無此節（staged 為空夾，agent 之後填 concept/…）。
     return staged
 
 
@@ -422,6 +455,34 @@ def stage_file(change: Change, layout: Layout, official: Path) -> Path:
         shutil.copy2(official, staged)
         record_fork(change, layout, official)
     return staged
+
+
+def unstage_section(change: Change, layout: Layout, section: str) -> None:
+    """丟棄某節的 staging（★8.4 remove-target 用）：只刪它**自己的來源檔**＋assets/、清 fork_hashes
+    對應項——**不 rmtree staging 節夾**（該夾可能巢狀著子章節的 staging，rmtree 會誤刪子節暫存）。"""
+    official = layout.section_dir(section)
+    staged = staging_target(change.dir, layout, official)
+    for name in _SECTION_OWN_FILES:
+        f = staged / name
+        if f.is_file():
+            f.unlink()
+        change.fork_hashes.pop(workspace_rel(layout, official / name), None)
+    adir = staged / _SECTION_ASSET_DIR
+    if adir.is_dir():
+        for f in sorted(adir.rglob("*")):
+            if f.is_file():
+                change.fork_hashes.pop(
+                    workspace_rel(layout, official / _SECTION_ASSET_DIR / f.relative_to(adir)),
+                    None)
+        shutil.rmtree(adir)
+    # 清 preview 側的入單標髒（該 target 已不在單，不再需要 stale 信號）
+    article = section.split("/", 1)[0]
+    ledger = _read_preview_ledger(change, article)
+    rec = ledger.get(section)
+    if isinstance(rec, dict) and rec.get("redraft"):
+        rec.pop("redraft", None)
+        ledger[section] = rec
+        _write_preview_ledger(change, article, ledger)
 
 
 def staged_sections(change: Change, layout: Layout) -> list[str]:
@@ -445,12 +506,12 @@ def staging_target_corpus(cdir: Path, layout: Layout) -> Path:
 # ── union view 載入 ──────────────────────────────────────────────────
 
 def _resolved_section_dir(change: Change, layout: Layout, section: str) -> Path:
-    """某節的 union 解析：staging 內**真正被複製的節資料夾**（直接含 concept.yaml）＝優先，
-    否則正式 corpus。注意：暫存某子節會**順帶建出**其父路徑資料夾（如 staging/.../guide/），
-    但那不是「被 stage 的節」——它沒有自己的 concept.yaml，不得遮蔽正式的同名祖先節。"""
+    """某節的 union 解析：staging 內**真正被複製的節**（直接含自己的來源檔）＝優先，否則正式
+    corpus。注意：暫存某子節會**順帶建出**其父路徑資料夾（如 staging/.../guide/），但那不是
+    「被 stage 的節」——它沒有自己的來源檔，不得遮蔽正式的同名祖先節（★P0 檔案粒度）。"""
     official = layout.section_dir(section)
     staged = staging_target(change.dir, layout, official)
-    if (staged / "concept.yaml").is_file():
+    if _has_own_files(staged):
         return staged
     return official
 
@@ -864,15 +925,27 @@ def fork_drift(layout: Layout, change: Change) -> list[dict]:
 # ── 收案落地 primitives（whole-file/dir 替換、無文字合併；D3/G4/G5）────
 
 def land_corpus_section(layout: Layout, change: Change, section: str) -> None:
-    """把 staging 的節資料夾整包搬進正式 corpus（結構化真相、整檔替換）。"""
-    staged = staging_target(change.dir, layout, layout.section_dir(section))
-    if not staged.is_dir():
-        return
+    """把 staging 的節「自己的來源檔」整檔搬回正式 corpus（★P0：**只**動這個 target 節、逐檔
+    覆蓋——永不 rmtree 官方節夾、永不觸及子章節資料夾或非 target 檔）。暫存中被刪除的來源檔
+    （fork 時有、現在無）在正式面對應刪除（反映意圖）；子章節/旁節對 landing 完全隱形。"""
     official = layout.section_dir(section)
-    if official.exists():
-        shutil.rmtree(official)
-    official.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(staged, official)
+    staged = staging_target(change.dir, layout, official)
+    if not _has_own_files(staged):
+        return
+    official.mkdir(parents=True, exist_ok=True)
+    for name in _SECTION_OWN_FILES:
+        sf = staged / name
+        of = official / name
+        if sf.is_file():
+            shutil.copy2(sf, of)
+        elif of.is_file() and workspace_rel(layout, of) in change.fork_hashes:
+            of.unlink()   # 暫存中被作者刪除的來源檔 → 正式面同步刪（僅限本節自己的檔）
+    sassets = staged / _SECTION_ASSET_DIR
+    if sassets.is_dir():
+        oassets = official / _SECTION_ASSET_DIR
+        if oassets.exists():
+            shutil.rmtree(oassets)
+        shutil.copytree(sassets, oassets)
 
 
 def land_file(layout: Layout, change: Change, official: Path) -> bool:

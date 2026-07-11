@@ -251,6 +251,114 @@ def test_contrast_staled_then_rewritten_is_done(make_project, write_leaf, monkey
     assert "rewritten" in st.detail
 
 
+# ── ★8.1 P0 靜默資料遺失回歸：旁節逐 byte 存活、leaf 計數不減 ──────
+
+def _leaf_count(home):
+    from dspx.model import load_project
+    return len(load_project(Layout(home, "per-article")))
+
+
+def test_p0_bystander_survives_when_parent_root_staged(make_project, write_leaf, monkeypatch):
+    """★P0（8.1）：change enlist 根節 g（owner）＋子節 g/intro，旁節 g/usage **未 enlist**。
+    收案後 g/usage 在 corpus＋交付物逐 byte 存活、leaf 計數不減。舊 bug（父子樹刪除語義）會
+    在 land 根節時 rmtree 整個 g/ 資料夾、連 g/usage 一起刪掉（4→3 或 3→2）。"""
+    home = _project(make_project, write_leaf)
+    _render_baseline(home, monkeypatch)
+    layout = Layout(home, "per-article")
+
+    # 旁節 g/usage 的收案前狀態（corpus 源 + 交付物散文）
+    usage_concept_before = (home / "corpus" / "g" / "usage" / "concept.yaml").read_bytes()
+    latest_before = _latest(home).read_text(encoding="utf-8")
+    assert "Usage details here." in latest_before
+    leaves_before = _leaf_count(home)
+
+    # seed dec-1 → 8.2 auto-enlist owner(g) + realizes(g/intro)；g/usage 是旁節
+    change_cmd.run(["new", "chg-x", "--seed", "dec-1", "--publish", "advisory"])
+    change, _ = _load_change(home, "chg-x")
+    refs = {t.ref for t in change.targets}
+    assert "sec-root" in refs and "sec-intro" in refs   # 8.2: root owner enlisted
+    assert "sec-usage" not in refs                       # bystander NOT enlisted
+
+    render_cmd.run(["g", "--change", "chg-x"])
+    _rewrite_preview_prose(home, "chg-x", "g", "Root prose rewritten.")
+    _rewrite_preview_prose(home, "chg-x", "g/intro", "Intro prose rewritten.")
+    render_cmd.run(["g", "--change", "chg-x"])
+    st = _status_map(home, "chg-x")
+    assert st["sec-root"].done and st["sec-intro"].done
+
+    assert change_cmd.run(["archive", "chg-x"]) == 0
+
+    # ★旁節 g/usage 逐 byte 存活（corpus）＋交付物散文仍在＋leaf 計數不減
+    assert (home / "corpus" / "g" / "usage" / "concept.yaml").read_bytes() == usage_concept_before
+    final = _latest(home).read_text(encoding="utf-8")
+    assert "Usage details here." in final
+    assert _leaf_count(home) == leaves_before
+    # 兩個 target 的新散文有落地
+    assert "Root prose rewritten." in final and "Intro prose rewritten." in final
+
+
+def test_p0_bystander_survives_when_only_leaf_staged(make_project, write_leaf, monkeypatch):
+    """★P0（8.1）A/B 對照：只 enlist 一個子葉 g/intro（父/根不進暫存），旁節 g/usage 仍存活。"""
+    home = _project(make_project, write_leaf)
+    _render_baseline(home, monkeypatch)
+    usage_before = (home / "corpus" / "g" / "usage" / "concept.yaml").read_bytes()
+    leaves_before = _leaf_count(home)
+
+    change_cmd.run(["new", "chg-x", "--publish", "advisory"])
+    change_cmd.run(["add-target", "chg-x", "sec-intro", "--action", "revise"])
+    render_cmd.run(["g", "--change", "chg-x"])
+    _rewrite_preview_prose(home, "chg-x", "g/intro", "Only intro changed.")
+    render_cmd.run(["g", "--change", "chg-x"])
+    assert change_cmd.run(["archive", "chg-x"]) == 0
+
+    assert (home / "corpus" / "g" / "usage" / "concept.yaml").read_bytes() == usage_before
+    assert "Usage details here." in _latest(home).read_text(encoding="utf-8")
+    assert _leaf_count(home) == leaves_before
+
+
+def test_82_seed_enlists_decision_owner(make_project, write_leaf, monkeypatch):
+    """★8.2：seed 一條由根節擁有的頂層決策 → 根節（owner）在 auto targets 內、無需手動 add。"""
+    home = _project(make_project, write_leaf)
+    monkeypatch.chdir(home.parent)
+    change_cmd.run(["new", "chg-x", "--seed", "dec-1", "--publish", "advisory"])
+    change, _ = _load_change(home, "chg-x")
+    owner = change.target_by_ref("sec-root")
+    assert owner is not None and owner.origin == "auto"
+
+
+def test_84_remove_target_unblocks(make_project, write_leaf, monkeypatch):
+    """★8.4：remove-target 丟棄該 target staging＋自 change 移除、不再卡導出完成度。"""
+    home = _project(make_project, write_leaf)
+    _render_baseline(home, monkeypatch)
+    layout = Layout(home, "per-article")
+    change_cmd.run(["new", "chg-x", "--publish", "advisory"])
+    change_cmd.run(["add-target", "chg-x", "sec-intro", "--action", "revise"])
+    change_cmd.run(["add-target", "chg-x", "sec-usage", "--action", "revise"])
+    render_cmd.run(["g", "--change", "chg-x"])
+    _rewrite_preview_prose(home, "chg-x", "g/intro", "Intro rewritten.")
+    render_cmd.run(["g", "--change", "chg-x"])
+    # sec-usage 未做工 → 卡 archivable
+    assert change_cmd.run(["archive", "chg-x"]) == 1
+    # 移除誤納的 sec-usage → 只剩 sec-intro（已 done）→ archivable
+    assert change_cmd.run(["remove-target", "chg-x", "sec-usage"]) == 0
+    change = chg.load_change(layout, "chg-x")
+    assert change.target_by_ref("sec-usage") is None
+    assert change.target_by_ref("sec-intro") is not None
+    assert change_cmd.run(["archive", "chg-x"]) == 0
+    assert chg.change_state(layout, "chg-x") == "archived"
+
+
+def test_85_archived_status_shows_terminal(make_project, write_leaf, monkeypatch, capsys):
+    home = _project(make_project, write_leaf)
+    _render_baseline(home, monkeypatch)
+    change_cmd.run(["new", "chg-x", "--publish", "advisory"])
+    change_cmd.run(["archive", "chg-x", "--abandon", "--reason", "nope"])
+    capsys.readouterr()
+    change_cmd.run(["status", "chg-x"])
+    out = capsys.readouterr().out
+    assert "ABANDONED" in out and "not archivable" not in out
+
+
 # ── 收案 / 棄案 / fork 漂移 ────────────────────────────────────────
 
 def test_archive_lands_and_prunes(make_project, write_leaf, monkeypatch):

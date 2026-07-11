@@ -354,17 +354,34 @@ def run(argv: list[str]) -> int:
 
 
 def _github_head_sha(timeout: float = 2.0) -> str | None:
-    """GitHub 上 docspec repo 的 HEAD commit sha（≤2s 硬超時）。任何失敗由呼叫端吞掉。"""
-    import json
-    import urllib.request
-    from dspx import _install_source
-    api = f"https://api.github.com/repos/{_install_source.GIT_REPO}/commits/HEAD"
-    req = urllib.request.Request(
-        api, headers={"Accept": "application/vnd.github+json", "User-Agent": "docspec-init"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        data = json.load(resp)
-    sha = data.get("sha")
-    return sha if isinstance(sha, str) and sha else None
+    """GitHub 上 docspec repo 的 HEAD commit sha。任何失敗由呼叫端吞掉。
+
+    ★8.6 硬牆時鐘：socket `timeout` 不涵蓋 DNS 解析（getaddrinfo 可 hang 數十秒——dogfood
+    實測 init 卡 2 分鐘的根因）。故整個抓取跑在 daemon thread、以 `join(deadline)` 硬上限收斂；
+    逾時＝放棄該執行緒（daemon、不阻塞 init）、回 None。"""
+    import threading
+    result: dict = {}
+
+    def _fetch() -> None:
+        try:
+            import json
+            import urllib.request
+            from dspx import _install_source
+            api = f"https://api.github.com/repos/{_install_source.GIT_REPO}/commits/HEAD"
+            req = urllib.request.Request(
+                api, headers={"Accept": "application/vnd.github+json", "User-Agent": "docspec-init"})
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                data = json.load(resp)
+            sha = data.get("sha")
+            if isinstance(sha, str) and sha:
+                result["sha"] = sha
+        except Exception:  # noqa: BLE001 — 任何失敗＝靜默、無更新資訊
+            pass
+
+    th = threading.Thread(target=_fetch, daemon=True)
+    th.start()
+    th.join(timeout + 1.5)   # 硬牆：socket 逾時 + DNS/解析餘裕；逾此即放棄（daemon 續跑不阻塞）
+    return result.get("sha")
 
 
 def _print_update_check() -> None:
