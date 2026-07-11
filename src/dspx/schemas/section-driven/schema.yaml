@@ -328,7 +328,7 @@ artifacts:
     schema:
       id:         { type: string,    required: true }
       title:      { type: string,    required: true }   # bare NAME only — never a numbering prefix (6. / 11、 / A.); render derives the outline number from order + tree position and injects it into the heading
-      order:      { type: number,    required: true }
+      order:      { type: number,    required: true }   # POSITIONAL METADATA (the render-derived outline number, not prose content) — EXCLUDED from the own-source staleness fingerprint: source_hash hashes the parsed concept structure minus `order`, so reordering/swapping siblings never falsely marks a section stale-own. Every OTHER concept field (incl. title) stays in the fingerprint.
       numbering:  { type: enum,      required: false, values: [arabic, appendix, none] }   # outline-numbering policy for the derived heading: arabic (default — 6, 6.1) / appendix (letter series — 附錄 A, A.1) / none (unnumbered, e.g. revision-history). Inherits down the tree.
       status:     { type: enum,      required: true, values: [draft, stable, deprecated] }
       concept:    { type: string,    required: true }

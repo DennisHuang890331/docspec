@@ -258,10 +258,10 @@ def run(argv: list[str]) -> int:
               "records — restore it from git/Drive history, or run "
               "`docspec render <article> --rebaseline` to rebuild explicitly")
     for art in needs_migration_articles:
-        print(f"\n  ⚠ needs-migration: the fingerprint ledger of \"{art}\" is fingerprint v1 "
-              "(pre-v2 algorithms; its values are not comparable, so no per-axis staleness is "
-              f"shown) — migrate once with `docspec render {art} --rebaseline` (prose is "
-              "preserved; pending stale signals are absorbed into the new baseline)")
+        print(f"\n  ⚠ needs-migration: the fingerprint ledger of \"{art}\" is an older fingerprint "
+              "version (its values are not comparable with the current algorithms, so no per-axis "
+              f"staleness is shown) — migrate once with `docspec render {art} --rebaseline` (prose "
+              "is preserved; pending stale signals are absorbed into the new baseline)")
     print("\n  flags: c=concept d=decisions m=material v=develop h=history")
     print("  sync → who picks it up: stale-own / stale-upstream → draft (re-render the section) · "
           "stale-norm → edit (an ancestor's active normative ruling changed — re-check the prose "

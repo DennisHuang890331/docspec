@@ -432,11 +432,51 @@ def _downgrade_ledger_to_v1(home, article="g"):
 
 
 def test_write_ledger_carries_version_key(make_project, write_leaf, monkeypatch):
-    """5.1：render 寫出的帳本頂層帶 `fingerprint: 2`；read_ledger_version 回報。"""
+    """5.1：render 寫出的帳本頂層帶 `fingerprint: 3`（現行版本）；read_ledger_version 回報。"""
     home = _baseline(make_project, write_leaf, monkeypatch)
     data = yaml.safe_load(Layout(home).docs_ledger("g").read_text(encoding="utf-8"))
-    assert data["fingerprint"] == 2
-    assert read_ledger_version(Layout(home), "g") == 2
+    assert data["fingerprint"] == 3
+    assert read_ledger_version(Layout(home), "g") == 3
+
+
+def test_leaf_order_change_is_not_stale_own(make_project, write_leaf, monkeypatch):
+    """v3（contract-slimming）：`order` 是位置元資料、排除於 own 指紋——顯式改一節的 order
+    值（對調兄弟/搬位）**不**誤標 stale-own（位置變、內容沒變；章號由 render 從 order 推導、
+    散文不重寫）。D4 的殘缺半邊：小數插入本就不觸發，此處釘死「明確改 order 值」也不觸發。"""
+    home = make_project()
+    write_leaf(home, "g/a", concept={"id": "ca", "title": "甲", "order": 1})
+    write_leaf(home, "g/b", concept={"id": "cb", "title": "乙", "order": 2})
+    monkeypatch.chdir(home.parent)
+    assert render_cmd.run(["g"]) == 0
+    _write_prose(home, "g", "甲", "甲的散文。")
+    _write_prose(home, "g", "乙", "乙的散文。")
+    assert _sync_of(home, "g", "g/a") == "synced"
+    assert _sync_of(home, "g", "g/b") == "synced"
+    # 對調兩節 order 值（甲←→乙）：只動位置元資料，內容欄一字不改
+    ca = home / "corpus" / "g" / "a" / "concept.yaml"
+    cb = home / "corpus" / "g" / "b" / "concept.yaml"
+    ca.write_text(ca.read_text("utf-8").replace("order: 1", "order: 2"), "utf-8")
+    cb.write_text(cb.read_text("utf-8").replace("order: 2", "order: 1"), "utf-8")
+    # 兩節皆維持 synced——order 不在 own 指紋（不誤標 stale-own）
+    assert _sync_of(home, "g", "g/a") == "synced"
+    assert _sync_of(home, "g", "g/b") == "synced"
+    # 重 render：章號自動對調（乙=1./甲=2.），散文原樣保留、仍 synced
+    assert render_cmd.run(["g"]) == 0
+    text = _latest(home).read_text("utf-8")
+    assert "## 1. 乙" in text and "## 2. 甲" in text
+    assert "甲的散文。" in text and "乙的散文。" in text
+    assert _sync_of(home, "g", "g/a") == "synced"
+    assert _sync_of(home, "g", "g/b") == "synced"
+
+
+def test_concept_content_change_still_stale_own(make_project, write_leaf, monkeypatch):
+    """反面守門：排除 order 沒把該髒的內容欄一起吞掉——改 concept 內容欄仍 stale-own。
+    title（渲進標題＝內容）與 concept 一句話（aperture 錨）都保留在 own 指紋內。"""
+    home = _baseline(make_project, write_leaf, monkeypatch)   # g/intro synced（有散文）
+    cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
+    # 改 title＝內容欄（保留在 own 指紋）→ stale-own
+    cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（修訂）"), "utf-8")
+    assert _sync_of(home, "g", "g/intro") == "stale-own"
 
 
 def test_v1_ledger_shows_needs_migration_not_stale_storm(
@@ -465,13 +505,13 @@ def test_regular_render_refuses_v1_ledger(make_project, write_leaf, monkeypatch,
     latest_bytes = _latest(home).read_bytes()
     capsys.readouterr()
     assert render_cmd.run(["g"]) != 0
-    assert "fingerprint v1" in capsys.readouterr().err
+    assert "older fingerprint version" in capsys.readouterr().err
     assert Layout(home).docs_ledger("g").read_bytes() == ledger_bytes
     assert _latest(home).read_bytes() == latest_bytes
 
 
 def test_rebaseline_migrates_v1_to_v2_in_one_shot(make_project, write_leaf, monkeypatch, capsys):
-    """5.4：v1 → --rebaseline 一次過（散文保留、吸收警語）→ synced；之後 v2 語義各一發。"""
+    """5.4：v1 → --rebaseline 一次過（散文保留、吸收警語）→ synced；之後現行語義各一發。"""
     home = _baseline(make_project, write_leaf, monkeypatch)
     _glossary_write(home, [dict(_TERM)])
     assert render_cmd.run(["g", "--ack", "g/intro"]) == 0        # 先把 gloss 基準清乾淨
@@ -480,7 +520,7 @@ def test_rebaseline_migrates_v1_to_v2_in_one_shot(make_project, write_leaf, monk
     assert render_cmd.run(["g", "--rebaseline"]) == 0
     err = capsys.readouterr().err
     assert "absorbed" in err                                     # 吸收警語明講
-    assert read_ledger_version(Layout(home), "g") == 2
+    assert read_ledger_version(Layout(home), "g") == 3
     assert "限流保護後端。" in _latest(home).read_text("utf-8")   # 散文原樣保留
     assert _sync_of(home, "g", "g/intro") == "synced"
     rec = read_ledger(Layout(home), "g")["g/intro"]
@@ -504,7 +544,7 @@ def test_stale_verb_refuses_v1_ledger(make_project, write_leaf, monkeypatch, cap
     _downgrade_ledger_to_v1(home)
     capsys.readouterr()
     assert stale_cmd.run(["g/intro", "--reason", "test"]) == 1
-    assert "fingerprint v1" in capsys.readouterr().err
+    assert "older fingerprint version" in capsys.readouterr().err
 
 
 # ── 7.2 與 ledger-verdict-verbs 介面對齊（雙 change 交界）─────────────────────
@@ -515,14 +555,17 @@ def test_ack_own_keeps_norm_so_masked_stale_norm_surfaces(
     """--ack-own 蓋 own/deps、沿用 norm/anc/style → 被 stale-own 遮蔽的 stale-norm 浮出；
     再以 --ack 清（守門：own 已被 ack-own 蓋至現值 → 通過）。"""
     home = _norm_project(make_project, write_leaf, monkeypatch)
-    # 祖先 ruling 與子節自身 metadata 同時變：precedence 顯 stale-own（遮蔽 stale-norm）
+    # 祖先 ruling 與子節自身 metadata 同時變：precedence 顯 stale-own（遮蔽 stale-norm）。
+    # own 變更用 `sources`（外部出處指標＝結構/元資料，散文未必需改 → ack-own 正當）；
+    # **不用 order**——order 已排除於 own 指紋（v3），改 order 不再 stale-own
+    # （見 test_leaf_order_change_is_not_stale_own）。
     _set_root_decisions(home, [{"id": "N1", "statement": "全文禁用被動語態與展望語",
                                 "status": "accepted", "kind": "normative"}])
     cpt = home / "corpus" / "g" / "sub" / "concept.yaml"
-    cpt.write_text(cpt.read_text("utf-8").replace("order: 1", "order: 2"), "utf-8")
+    cpt.write_text(cpt.read_text("utf-8") + 'sources: ["Author\'s design"]\n', "utf-8")
     assert _sync_of(home, "g", "g/sub") == "stale-own"
     # ack-own（結構接線類變更）：own/deps 蓋現值、norm 沿用舊值 → stale-norm 浮出
-    assert render_cmd.run(["g", "--ack-own", "g/sub", "--reason", "order renumbering only"]) == 0
+    assert render_cmd.run(["g", "--ack-own", "g/sub", "--reason", "sources provenance note only"]) == 0
     assert _sync_of(home, "g", "g/sub") == "stale-norm"
     # 核對散文合法 → --ack 清 norm（own 已符現值、守門通過）
     assert render_cmd.run(["g", "--ack", "g/sub"]) == 0

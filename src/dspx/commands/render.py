@@ -72,10 +72,10 @@ def run(argv: list[str]) -> int:
     parser.add_argument(
         "--rebaseline", action="store_true",
         help="explicit rebuild: I know the deliverable file is gone, the ledger is corrupt, or "
-             "the ledger is fingerprint v1 (pre-v2 algorithms) — regenerate the skeleton, "
-             "recompute every fingerprint axis with the current algorithms (prose is preserved) "
-             "and reset the baseline. Absorbs any pending stale signals. Without this flag, "
-             "render refuses to touch the ledger in those states.")
+             "the ledger is an older fingerprint version (pre-current algorithms) — regenerate "
+             "the skeleton, recompute every fingerprint axis with the current algorithms (prose "
+             "is preserved) and reset the baseline. Absorbs any pending stale signals. Without "
+             "this flag, render refuses to touch the ledger in those states.")
     args = parser.parse_args(argv)
 
     # --ack-own 強制 --reason（裁決入 journal；改變 own/deps 裁決＝事後最需考古的一類）。
@@ -101,17 +101,16 @@ def run(argv: list[str]) -> int:
     if rc is not None:
         return rc
 
-    # 帳本版本閘（fingerprint v2 D7）：v1 舊值與 v2 算法現值不可比（四項算法全變）——逐軸
-    # 比對必然全紅＝假 stale 風暴；靜默以新算法重蓋＝吸收待處理信號。故常規 render 拒跑
-    # （非零退出、帳本與交付物零改動）、指示顯式一次遷移。
+    # 帳本版本閘：舊版本值與現行算法不可比——逐軸比對必然全紅＝假 stale 風暴；靜默以新算法
+    # 重蓋＝吸收待處理信號。故常規 render 拒跑（非零退出、帳本與交付物零改動）、指示顯式一次遷移。
     if ledger_needs_migration(layout, args.article) and not args.rebaseline:
         sys.stderr.write(
-            f"docspec: the fingerprint ledger of \"{args.article}\" is fingerprint v1 "
-            "(written by pre-v2 algorithms) — its values are not comparable with the current "
-            "algorithms, so per-axis staleness would be a false-stale storm.\n"
+            f"docspec: the fingerprint ledger of \"{args.article}\" is an older fingerprint "
+            "version — its values are not comparable with the current algorithms, so per-axis "
+            "staleness would be a false-stale storm.\n"
             "  refusing to render (nothing was changed). Migrate once with "
             f"`docspec render {args.article} --rebaseline`: every axis is recomputed with the "
-            "v2 algorithms and the prose is preserved. NOTE: any stale signals pending at "
+            "current algorithms and the prose is preserved. NOTE: any stale signals pending at "
             "migration time are absorbed into the new baseline — review `docspec status` "
             "concerns first if that matters.\n")
         return 1

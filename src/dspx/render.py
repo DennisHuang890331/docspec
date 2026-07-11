@@ -26,9 +26,11 @@ from dspx.model import (
     style_fingerprint,
 )
 
-# 指紋帳本的算法/格式版本（頂層 `fingerprint:` 鍵）。v2＝本版四項算法（換行正規化、deps 二跳、
-# style 三子軸、norm 新軸）；無此鍵＝v1（不可比、需一次 `--rebaseline` 遷移，見 read_ledger_version）。
-LEDGER_FINGERPRINT_VERSION = 2
+# 指紋帳本的算法/格式版本（頂層 `fingerprint:` 鍵）。v2＝四項算法（換行正規化、deps 二跳、
+# style 三子軸、norm 新軸）；v3＝own 軸把 `order`（位置元資料）排除於 concept.yaml 貢獻之外
+# （contract-slimming：改 order/搬位不誤標 stale-own）。無此鍵＝v1。任一低於現行版本的帳本＝
+# 不可比、需一次 `--rebaseline` 遷移（見 read_ledger_version / ledger_needs_migration）。
+LEDGER_FINGERPRINT_VERSION = 3
 
 
 def read_ledger(layout: Layout, article: str) -> dict:

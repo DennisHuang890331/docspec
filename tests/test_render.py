@@ -63,12 +63,12 @@ def test_ledger_migrates_from_old_frontmatter(make_project, write_leaf, monkeypa
     assert read_ledger(Layout(home), "g").get("g/intro", {}).get("prose") == "deadbeef"  # fallback
     assert read_ledger_version(Layout(home), "g") == 1
     capsys.readouterr()
-    assert render_cmd.run(["g"]) != 0           # v1 帳本：常規 render 拒跑、零改動
-    assert "fingerprint v1" in capsys.readouterr().err
+    assert render_cmd.run(["g"]) != 0           # 舊版本帳本：常規 render 拒跑、零改動
+    assert "older fingerprint version" in capsys.readouterr().err
     assert not Layout(home).docs_ledger("g").is_file()
     assert render_cmd.run(["g", "--rebaseline"]) == 0   # 顯式一次遷移
     assert Layout(home).docs_ledger("g").is_file()
-    assert read_ledger_version(Layout(home), "g") == 2
+    assert read_ledger_version(Layout(home), "g") == 3   # 遷移後＝現行版本
     meta, _ = parse_frontmatter(latest.read_text("utf-8"))
     assert "sections" not in meta               # frontmatter 已遷出
     assert "舊文。" in latest.read_text("utf-8")  # 散文原樣保留
@@ -316,15 +316,16 @@ def test_render_output_locked_byte_for_byte(make_project, write_leaf, monkeypatc
         "<!-- dspx:section g/annex-b -->\n## 4. 附錄B\n\n"
     )
     assert latest.read_text(encoding="utf-8") == golden          # 全文逐 byte
-    # 指紋 golden＝fingerprint v2 算法（換行正規化＋deps 二跳＋norm 軸＋style 三子軸）實跑值——
-    # own 經 CRLF 正規化後**跨 OS 位元一致**（同 fixture 在 Windows/Linux 得同值）；
-    # prose 算法未變（與 v1 同值）。v1 golden 已隨算法版本跳點汰換（fingerprint-v2 change）。
+    # 指紋 golden＝fingerprint v3 算法實跑值。v3＝own 軸把 concept.yaml 的 `order`（位置元資料）
+    # 排除於 hash 外（改 order/搬位不誤標 stale-own）——故 own 值自 v2 一次性跳點；anc/deps/norm/
+    # style/prose 算法未變（與 v2 同值）。own 經 CRLF 正規化後**跨 OS 位元一致**（同 fixture 在
+    # Windows/Linux 得同值）。
     _style = {"guide": "e3b0c44298fc1c14", "gloss": "4f53cda18c2baa0c",
               "purpose": "e3b0c44298fc1c14"}
     golden_ledger = {
-        "g/foreword": {"own": "9221a22f795c420d", "anc": "e3b0c44298fc1c14", "deps": "",
+        "g/foreword": {"own": "f2fdde6b035bcbe9", "anc": "e3b0c44298fc1c14", "deps": "",
                        "norm": "", "style": _style, "prose": "70bd4b9c2c6996e3"},
-        "g/methods/survey": {"own": "5315339037ab6523", "anc": "e3b0c44298fc1c14", "deps": "",
+        "g/methods/survey": {"own": "b767e1456cfe2672", "anc": "e3b0c44298fc1c14", "deps": "",
                              "norm": "", "style": _style, "prose": "3caa63c3965f8115"},
     }
     assert read_ledger(Layout(home), "g") == golden_ledger       # 各節指紋逐 byte

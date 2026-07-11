@@ -57,11 +57,11 @@ def run(argv: list[str]) -> int:
         sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n")
         return 1
 
-    # v1 帳本閘：write_ledger 會蓋上現行版本鍵——對 v1 帳本標髒＝把未遷移的舊值謊稱 v2。
+    # 舊版本帳本閘：write_ledger 會蓋上現行版本鍵——對舊版本帳本標髒＝把未遷移的舊值謊稱現行版。
     if ledger_needs_migration(layout, args.article):
         sys.stderr.write(
-            f"docspec: the ledger of \"{args.article}\" is fingerprint v1 — migrate first with "
-            f"`docspec render {args.article} --rebaseline`, then mark sections.\n")
+            f"docspec: the ledger of \"{args.article}\" is an older fingerprint version — migrate "
+            f"first with `docspec render {args.article} --rebaseline`, then mark sections.\n")
         return 1
 
     ledger = read_ledger(layout, args.article)

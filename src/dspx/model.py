@@ -450,12 +450,25 @@ class Leaf:
         return files
 
     def source_hash(self) -> str:
-        """投影輸入的彙總內容指紋（staleness 用）。換行正規化後 hash（CRLF 免疫，見 D1）。"""
+        """投影輸入的彙總內容指紋（staleness／own 軸；fingerprint v3）。
+
+        concept.yaml 的貢獻＝**解析後結構、去掉 `order` 鍵**的 canonical JSON——`order` 是
+        位置元資料（章號由 render 從 order＋樹位置推導、散文不重寫），顯式改 order／對調兄弟
+        不該誤標 stale-own（位置變、內容沒變）。這與 anc/deps/gloss 軸「hash 解析後結構、非整檔
+        位元」的既有做法一致。`title` 保留在 hash 內（它渲進標題＝內容）。decisions.yaml／
+        material.md 維持整檔位元 hash（換行正規化、CRLF 免疫；無位置元資料）。此為 own 軸的
+        v3 演算法——全 corpus own 值一次性改變，帳本版本閘（v3）＋`--rebaseline` 遷移吸收。"""
         h = hashlib.sha256()
         for f in self.source_files():
             h.update(f.relative_to(self.dir).as_posix().encode("utf-8"))
             h.update(b"\0")
-            h.update(_normalize_newlines(f.read_bytes()))
+            if f.name == "concept.yaml":
+                # 結構化、排除位置元資料 order（其餘欄含 title 皆算內容）
+                concept = self.concept if isinstance(self.concept, dict) else {}
+                content = {k: v for k, v in concept.items() if k != "order"}
+                h.update(json.dumps(content, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+            else:
+                h.update(_normalize_newlines(f.read_bytes()))
             h.update(b"\0")
         return h.hexdigest()[:16]
 
