@@ -80,12 +80,18 @@ def test_build_writing_guide_seeds_en_naturalness():
     assert "動詞當家" not in guide
 
 
-def test_backbone_rule8_carries_same_document_crossref_form():
-    """規則 8 給同文件的核准寫法（引章節人讀標題）＋表格情境 doctrine 提示，不只跨文件《…》。"""
+def test_backbone_rule8_crossref_by_anchor_not_handtyped_number():
+    """skill-redesign: 規則 8 修錨矛盾——同文件/內部跨文件的節交叉引用一律用穩定錨
+    `<!--@id--><!--@-->`（render 注入活 §N）；核准寫法是 anchor-injected §N、被禁的是**手寫**
+    章號/字面 §N（會漂）。不再教「引章節人讀標題、禁用 §」的舊矛盾寫法。"""
     guide = init_cmd.build_writing_guide("zh-TW")
-    assert "SAME-document cross-reference" in guide
-    assert "詳見「〈章節標題〉」一節" in guide
-    assert "Inside tables" in guide and "over `§` notation" in guide
+    assert "<!--@" in guide                                   # 錨形式（穩定綁 concept.id）
+    assert "hand-typed" in guide                              # 手寫章號被禁
+    assert "anchor-injected `§N` IS the sanctioned form" in guide   # 核准寫法＝錨注入 §N
+    assert "（詳見<錨>）" in guide                              # 寫「（詳見<錨>）」
+    # 舊矛盾文案（引人讀標題、禁 §）已移除
+    assert "詳見「〈章節標題〉」一節" not in guide
+    assert "over `§` notation" not in guide
 
 
 def test_build_writing_guide_unknown_lang_keeps_placeholder():

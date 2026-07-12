@@ -10,6 +10,84 @@ a minor bump.
 
 ## [Unreleased]
 
+### Changed — all six agent skills rewritten as engine-anchored drive-through loops
+
+- **Every SKILL.md was scrapped and rewritten** (develop / apply / factcheck / publish / release /
+  diagram) in one uniform format: frontmatter (with a `compatibility` field carrying the CLI
+  environment note, and a uniform `license` field) → one-line purpose → **Input** → **Steps**
+  (numbered, each anchored to a `docspec` command, with explicit pause conditions) → **Output**
+  (literal report template) → **Guardrails**. Body size dropped from ~1,230 lines to ~230 across
+  the six skills; every retained lesson (blind-write discipline, honest verdict verbs,
+  zero-inference, measure-don't-eyeball, PNG-not-SVG …) was carried over into Steps/Guardrails,
+  checked item by item.
+- **Rules moved out of the skills into the engine projection** (single source, can't drift):
+  `docspec instructions apply <section>` now prints the writing principles (payload-first,
+  inverted-pyramid, structure-into-tables, the scaffolding/cross-ref/metaphor bans, zero-inference),
+  a `── Verdict verbs ──` block (ack/ack-own whitelist plus which brief fields mean ack-or-rewrite
+  vs rewrite), and a `── Dispatch exclusions ──` block. The blocks live in the schema (`authoring`)
+  and are projected live; skills only anchor to them.
+- **Environment troubleshooting is out of the skill bodies** — the "docspec not on PATH in a fresh
+  shell" recovery hint lives in one `compatibility` frontmatter line per skill (previously a
+  five-line callout duplicated at the top of all six bodies). `skills.py` now preserves frontmatter
+  on install so the field actually survives (it was silently stripped before).
+- The writing guide's rule 8 no longer contradicts the anchor mechanism: hand-typed chapter numbers
+  stay banned (they drift), the render-injected `<!--@id-->§N<!--@-->` anchor is the sanctioned
+  cross-reference form, written as `（詳見<anchor>）`.
+- `dspx-diagram` keeps its draw.io mechanics (XML skeleton, shape tables, export flags,
+  troubleshooting) in a sibling `reference.md`; the SKILL.md itself is the thin loop.
+
+### Added — reverse relation views: `show --impact` / `--realized-by` / `--referenced-by`
+
+- **The engine already resolves the cross-document truth graph FORWARD** (staleness: "why am I
+  stale — who changed that I depend on"). `docspec show` now also exposes the REVERSE of those same
+  edges (impact: "who do I break if I change this"), computed by `dspx.crossref.build_reverse_indices`
+  from the SAME forward-resolution functions (`decision_index`, `ancestor_leaves`, the shared prose-
+  anchor scan) so the reverse view cannot drift from the staleness the engine acts on. Pure addition,
+  zero storage change, runs on the current scattered files.
+  - **`docspec show <section> --impact`** previews, BEFORE you change a section, every section across
+    ALL documents a change would make stale, grouped by staleness type: sections realizing its active
+    decisions → **stale-upstream**; its descendants (path children ∪ transitive `governed-by`) →
+    **stale-inherited** (and **stale-norm** when the section owns active normative rulings); sections
+    whose prose anchors point at it → **cross-reference affected**. An empty result reports "no
+    cross-section impact" (honest, not an error); the output notes that a global style carrier change
+    (writing-guide / glossary / purpose) is not listed per-section. The stale-upstream set is
+    guaranteed to agree with what `section_state` would actually mark stale (same-source).
+  - **`docspec show <decision-id> --realized-by`** lists every section, across all articles, whose
+    `realizes` includes that decision.
+  - **`docspec show <section> --referenced-by`** lists every section whose prose cross-reference
+    anchor points at this section. Because anchors live in rendered prose, an article whose
+    deliverable is not yet rendered is reported explicitly ("not yet rendered") rather than returned
+    as an empty set that reads as "no references".
+
+### Removed — standalone `docspec impact` command + `retire --in` no-op flag
+
+- **`docspec impact <id>` is removed** — its reverse-view function is absorbed into the cohesive
+  `show` reverse views above. The functionality does not disappear, only its entry point changes:
+  "which sections realize this decision" → `docspec show <decision-id> --realized-by`; "what does
+  changing this blast" (governed-by / transitive inheritance) → `docspec show <section> --impact`
+  (descendants). The dead-decision inspection hint printed by `docspec retire` now points at
+  `docspec show <id> --realized-by` instead of `docspec impact <id>`.
+- **`docspec retire --in <tag>` is removed** — it had been a documented deprecated no-op since
+  contract slimming made `retire` non-mutating (it wrote nothing, so the change/session tag had no
+  effect). No replacement is needed; the flag did nothing.
+
+### Added — engine write gate: `docspec get` / `docspec put`
+
+- **`docspec put <section> <concept|decisions|material> <FILE|->` is the single validated write gate
+  for corpus truth**, replacing the pattern where an agent hand-writes `concept.yaml` and the engine
+  only flags structural mistakes after the fact. `put` parses the submitted content (bad YAML /
+  duplicate mapping key → rejected), runs the existing `run_file_check` plus structural validation
+  (duplicate id, malformed `entries` shape, bad enum, dangling relation target), and only on success
+  writes atomically (temp file + `os.replace`); a validation failure rejects with a message and
+  leaves the original file byte-for-byte unchanged (no partial write). On the first write of a
+  section's concept (no `concept.yaml` yet) it stamps `id`/`order`. Completeness (a missing required
+  field) is deliberately NOT a write-time gate — that gate lives at advancement (`ready`/`publish`),
+  so a half-formed section still writes and stays `developing`.
+- **`docspec get <section> <concept|decisions|material> [--out FILE]`** emits the current content to
+  stdout or a file for the agent to edit; a section with no such file yet returns an empty schema
+  skeleton. `get`/`put` are agent-facing (not in the human command surface). Backend still writes the
+  current scattered files — this change establishes the write GATE, not a new storage topology.
+
 ### Changed — draft and edit merge into a single `apply` skill
 
 - **The draft and edit workflow skills merge into one skill, `apply`**, with two engine-routed

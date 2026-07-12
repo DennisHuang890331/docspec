@@ -68,13 +68,17 @@ _WRITING_GUIDE_BACKBONE = """\
 8. **Clean**: the deliverable carries no id / internal code / anchors (`{#…}`) / draft markers,
    **and no authoring-tool / governance vocabulary** — it is for domain readers, not for operators
    of this tool. Never surface backstage words (forest / governed-by / governance parent /
-   Tier-1·2·3 / L2a / diamond fan-in / module-section / factcheck / raise a finding / §back-ref).
+   Tier-1·2·3 / L2a / diamond fan-in / module-section / factcheck / raise a finding).
    Express document relationships in domain language instead: name the document (《…》), write "per
    the principles in 《…》" or "see 《…》", and "the sections of this spec" — not "module-sections".
-   For a SAME-document cross-reference, quote the target section's human title —
-   「詳見「〈章節標題〉」一節」 / "see the section titled …" — never `§` plus a number or a
-   backstage id. Inside tables, where a citation sentence doesn't fit, still prefer the section's
-   human title (quoted, shortened if needed) over `§` notation.
+   For a cross-reference to another SECTION (same document or internal cross-document), write the
+   stable cross-reference **anchor** where the number belongs — `<!--@<target-concept-id>--><!--@-->`
+   — and let `render` inject the live `§N` between the two invisible comments (re-derived every
+   render, so it never dangles). The **anchor-injected `§N` IS the sanctioned form**; what is banned
+   is a **hand-typed** chapter number / literal `§N` / 第 N 章 (a hand-typed number drifts on any
+   reorder — the real corpus lost 94–107 cross-refs to exactly this). So write 「（詳見<錨>）」/
+   "see §N (via the anchor)", never a number you typed yourself. External-standard clause citations
+   (ISO 13849-1 §4.2) stay literal — the anchor is for internal references only.
 9. **Density**: one idea per paragraph, 4–5 sentences max.
 10. **No metaphors / nicknames** → state responsibilities plainly.
 11. **No first-person colloquialism** → formal sentences with explicit subjects.

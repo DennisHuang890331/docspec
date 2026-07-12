@@ -137,6 +137,58 @@ def _apply_mode(layout, schema, leaves, section: str) -> dict | None:
     return {"mode": mv[0], "verb": mv[1], "reason": sync}
 
 
+def _load_authoring(schema) -> dict:
+    """讀 schema.yaml 的 authoring 權威塊（頂層鍵、非 artifact 契約，故不進 Schema dataclass；
+    apply 投影它＝規則住 schema、被投影，skill 只錨不重抄）。讀不到＝回空 dict（不炸）。"""
+    import yaml
+    try:
+        data = yaml.safe_load((schema.root / "schema.yaml").read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001 — 投影永不因權威塊缺損而爆
+        return {}
+    auth = data.get("authoring") if isinstance(data, dict) else None
+    return auth if isinstance(auth, dict) else {}
+
+
+def _print_authoring(auth: dict) -> None:
+    """apply 投影三區塊：寫作原則（含 zero-inference 雙載）／── Verdict verbs ──／── Dispatch
+    exclusions ──。skill body 不再重抄這些長文；照這裡逐字，別憑記憶重推。"""
+    principles = auth.get("principles") or []
+    zero = auth.get("zero_inference")
+    if principles or zero:
+        print("── Writing principles ── (fold into every leaf; TECHNICAL/EXPOSITORY defaults — the "
+              "active writing-guide profile OVERRIDES per genre, follow it, never apply these blindly)")
+        for p in principles:
+            print(f"  • {p}")
+        if zero:
+            print(f"  IMPORTANT — zero-inference: {str(zero).strip()}")
+        print()
+
+    vv = auth.get("verdict_verbs") or {}
+    if vv:
+        print("── Verdict verbs ── (clear a staleness verdict with the MATCHING verb; give a real "
+              "--reason — never fabricate an edit or a perturb-render-revert dance)")
+        if vv.get("intro"):
+            print("  " + str(vv["intro"]).strip().replace("\n", "\n  "))
+        for w in vv.get("whitelist") or []:
+            print(f"  • {w}")
+        env = vv.get("brief_envelope") or []
+        if env:
+            print("  Brief-envelope handling (which brief field moved decides ack-or-rewrite):")
+            for e in env:
+                print(f"    • {e}")
+        print()
+
+    de = auth.get("dispatch_exclusions") or {}
+    if de:
+        print("── Dispatch exclusions ── (copy VERBATIM into every semantic subagent brief; never "
+              "re-derive which work is mechanical from memory)")
+        if de.get("intro"):
+            print("  " + str(de["intro"]).strip().replace("\n", "\n  "))
+        for item in de.get("items") or []:
+            print(f"  • {item}")
+        print()
+
+
 def _change_context(layout, leaves, section: str) -> list[dict]:
     """本節命中的 active change context（多單全列；workflow-introspection 5.1）。"""
     from dspx import change as chg
@@ -204,12 +256,14 @@ def run(argv: list[str]) -> int:
 
     apply_mode = (_apply_mode(layout, schema, leaves, args.section)
                   if args.skill == "apply" else None)
+    apply_authoring = _load_authoring(schema) if args.skill == "apply" else None
 
     if args.as_json:
         print(json.dumps({
             "skill": proj.skill,
             "section": proj.section,
             "applyMode": apply_mode,
+            "authoring": apply_authoring,
             "activeChanges": _change_context(layout, leaves, args.section),
             "reads": proj.reads,
             "writes": proj.writes,
@@ -235,6 +289,9 @@ def run(argv: list[str]) -> int:
         if apply_mode["verb"]:
             print(f"   clear-with: {apply_mode['verb']}")
         print()
+
+    if apply_authoring:
+        _print_authoring(apply_authoring)
 
     _print_change_context(layout, leaves, args.section)
 

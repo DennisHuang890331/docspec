@@ -64,6 +64,10 @@ workflow:
           prose markers + audit/roadmap targets, self-checks, rolls back on failure) — but don't create
           a numbered name that needs one. Applies to NEW sections; existing slug-named trees stay legal
           (migrate them with `docspec tidy`, which renames folders to the delivery-language title via mv).
+          To INSERT a section between order: 2 and order: 3, give it order: 2.5 (order is a number, not
+          an integer) — render derives the outline number, so no sibling's order is touched; reserve
+          integer re-spacing for a genuine large restructure. Renumbering a run of siblings by hand just
+          to slot one in is exactly the mechanical churn the derived-numbering model exists to kill.
         - Think in develop.md ONLY; the other four files do not exist yet.
         - >-
           Reasoning lands AS IT HAPPENS — a long discussion or a reversal is written into develop.md
@@ -78,7 +82,8 @@ workflow:
           deterministic "this reasoning has no home yet" reminder — no new rule.
         - >-
           Crystallize via four-question triage → scope→concept / rulings→decisions / facts→material /
-          rejected→recorded. The leaf contract is CONCEPT-REQUIRED, the rest ON-DEMAND: build decisions.yaml
+          rejected→recorded; write each part with docspec put <section> <artifact> (engine-write). The
+          leaf contract is CONCEPT-REQUIRED, the rest ON-DEMAND: build decisions.yaml
           ONLY when this section owns a normative ruling of its own — no ruling ⇒ no decisions.yaml (never a
           fabricated empty `entries: []`; a pure-overview leaf that only realizes rulings owned elsewhere is a
           legal one-file section). material.md only when it has digested facts. Rejected/superseded reasoning is
@@ -100,15 +105,19 @@ workflow:
           Pick the mode first (docspec status / docspec change status): inside a change the target
           action decides (create/revise/redraft → rewrite, align/review → align); outside a change the
           staleness type decides (stale-own/stale-upstream/unwritten/redraft → rewrite, stale-inherited/
-          stale-style/stale-norm/drifted → align). The engine routes; you do not read a who-picks-it-up table.
+          stale-style/stale-norm/drifted → align). The engine routes; you do not read a who-picks-it-up
+          table. docspec instructions apply <section> projects the current mode + clear-with verb, the
+          writing principles, the verdict-verb whitelist, and the dispatch-exclusion list — anchor to it.
         - >-
           rewrite mode — render only stale-own / stale-upstream / not-yet-written sections (a
           redraft-flagged section surfaces as ordinary stale-own; your rewrite clears the flag on
           render); write from the committed layer, blind to siblings; never read develop.md or history;
-          honor the brief as a hard contract and lead with the payload.
+          honor the brief as a hard contract, lead with the payload, and mark any missing fact/rationale
+          [TBD] rather than fabricate it.
         - >-
           align mode — route each check (deterministic → engine lint/check; judgment → a clean-context
-          subagent); touch only docs/_latest, never the outline or decisions.
+          subagent); touch only docs/_latest, never the outline or decisions. Before an align edit,
+          docspec show <section> --impact previews which other documents the change ripples to.
         - >-
           Clear a staleness verdict with the matching verb — NEVER fabricate an edit (nor a
           perturb-render-revert dance) to force a re-stamp. Prose changed → plain docspec render.
@@ -182,6 +191,63 @@ workflow:
         <one step after the highest pre-docspec version> (e.g. history ended at 2.5.1 →
         --set-version 2.5.2). First publish only — once any version exists the flag is refused
         (it cannot rewrite history); later releases bump normally with --level.
+
+# Authoring authority — the writing rules `docspec instructions apply <section>` projects so the
+# redesigned apply skill can ANCHOR to them instead of restating them (iron law 2: rules live in the
+# schema and get projected, never duplicated in drifting skill prose). These are TECHNICAL / EXPOSITORY
+# defaults; the active writing-guide profile OVERRIDES them per genre (fiction relaxes zero-inference,
+# academic builds claim→evidence, …) — follow the projected writing-guide, never apply these blindly.
+# (Kept a top-level key, read straight from schema.yaml by instructions.py — it is doctrine, not an
+# artifact contract, so it stays out of the artifact/guide projections.)
+authoring:
+  principles:
+    - "Lead with the payload — every paragraph opens on the fact or decision; no preamble, no runway."
+    - "Inverted pyramid — the section's first sentence is its conclusion; detail descends from there."
+    - "Density over length — one idea per paragraph, 4–5 sentences max; active voice; no recaps of earlier sections, no previews of later ones."
+    - "Structure over prose — any data that is ≥3 items across ≥2 dimensions, and ALL rules / logic / state, goes in a table or list, never prose (obey the section's brief.layout). Structure suppresses flowery filler."
+    - "Honor the section's kind — reference = a lookup terminal (tables/definitions, no narrative arc), how-to = ordered task steps, tutorial = a learning walkthrough, explain = discursive prose; kind shapes form only, never adds content."
+    - "No scaffolding metadiscourse — never narrate this section's own brief (its scope / exclusions / verifiability / downstream-governance) nor, at document level, the document's own layout (a prose table of contents, 「先以…再以…最後…」, 各章環環相扣, 本規範把…整合成一份…). State the substance directly; the role shows THROUGH the content, it is never declared."
+    - "No cross-section references — you are blind to siblings, so ban 'as above' / 'the next section' / 'in summary' / 如前一節所述; you will hallucinate a neighbour you cannot see. Invoke a ruling owned elsewhere by the MECHANISM or RESPONSIBILITY it governs ('the safety board's veto'), NEVER a section number or id."
+    - "No metaphors / nicknames ('the brain', 'the gatekeeper', 'the front line') and no first-person colloquialism ('we', 'let's') — state responsibilities plainly."
+    - "Images: embed only the assets in your aperture, with plain ![caption](assets/<file>); never invent an asset path, never hand-write a figure number ('Figure 3' — the backend numbers figures), never reference a figure in another section. A diagram is a drawio PNG authored by a delegated dspx-diagram subagent — never inline TikZ / {=latex} / mermaid."
+    - "Cross-reference by anchor — write <!--@<target-concept-id>--><!--@--> inline where the §number belongs; render injects the live §N between the two invisible comments and re-derives it every render. NEVER hand-type a chapter number (it drifts on any reorder — the real corpus lost 94–107 cross-refs to exactly this). External-standard clause citations (ISO 13849-1 §4.2) stay literal — the anchor is for internal references only."
+    - "Punctuation width → docspec normalize (deterministic: half→full only where prose is CJK on both sides; code / identifiers / protocol tokens / URLs stay byte-exact). Write punctuation correctly as you compose, but NEVER run a hand-rolled full-text width sweep or a blind regex; lint V18 flags any residual and points back at normalize."
+  zero_inference: >-
+    A fact OR rationale absent from material / outline / decisions is written `[TBD]` and you move on —
+    never fabricate it. Fabricating a number, a name, or a causal claim is the one unforgivable failure:
+    lint blocks a leftover `[TBD]`, but nothing catches a plausible fabrication. Faithfully expanding
+    relational / shorthand material (a cumulative `+`, ranges, inheritance in material.md, into explicit
+    per-row values) IS rendering, not inference. If a draft would contradict a decision, do NOT write
+    around it — emit a `[!WARNING]` naming the decision and stop on that section (lint blocks a leftover
+    `[!WARNING]` too, so neither can ship to the reader silently).
+  verdict_verbs:
+    intro: >-
+      Clear a staleness verdict with the MATCHING verb, and give a REAL --reason (every verdict is
+      journaled in the article's append-only verdicts log). NEVER fabricate an edit, nor run the
+      perturb-render-revert dance (change a character, render, revert, render): its end state is
+      byte-identical to an honest ack but leaves zero trace and launders the verdict.
+    whitelist:
+      - "prose changed → docspec render <article> (plain re-stamp)."
+      - "stale-inherited / stale-style / stale-norm, prose reviewed against the moved brief / ruling / doctrine and legitimately unchanged → docspec render <article> --ack <section> (refused if the section is actually stale-own / stale-upstream — that means its own source changed and the prose genuinely needs rewriting)."
+      - "stale-own / stale-upstream whose source change is STRUCTURAL WIRING / METADATA ONLY — a realizes / governed-by edge re-wired, an order change, a sources: path move, a decided-in correction, a title renumbering → docspec render <article> --ack-own <section> --reason <text>. This whitelist is EXHAUSTIVE; if the change is not on it, it is not an ack-own case. An ack-own attests the prose still implements CHANGED source, so a factcheck follow-up over the acked sections is expected (non-blocking)."
+      - "a content-bearing change (must_cover, breadth, or a decision statement moved) → the prose DOES need rewriting: escalate to rewrite mode via docspec stale <section> --reason / docspec redraft <article> --reason. NEVER ack-own a content change."
+    brief_envelope:
+      - "brief audience / depth / layout / kind changed → review the existing prose, then ack-or-rewrite: --ack it if it still reads right under the new envelope, rewrite it if the new envelope demands different prose."
+      - "brief breadth / must_cover / forbidden changed → rewrite (the coverage contract moved; re-render the leaf from its aperture) — this is never an ack case."
+  dispatch_exclusions:
+    intro: >-
+      When you dispatch a clean-context subagent for judgment work (line edit, a whole-document read),
+      open its brief with the line "You do SEMANTIC work only" and then copy this exclusion list
+      VERBATIM. The failure is re-deriving which work is mechanical from memory and, in a hurry, letting
+      a deterministic sweep slip into a semantic brief (the 台中港 bug: "normalize all punctuation to
+      full-width" landed in a semantic subagent's brief). Only items the engine truly enforces say
+      "→ the engine"; items it does not validate say "→ you, by hand".
+    items:
+      - "Punctuation width (full / half-width) → NOT dispatched. Run docspec normalize (lint V18 flags any residual and points back at it). No subagent, no blind regex, no per-sentence hand-fixing, no audit finding."
+      - "Leaked scaffolding / placeholder leftovers ({#…} ids, [TBD] / [待補], a stray [!WARNING]) → docspec lint (blocking ERROR). Act on the findings; don't send a subagent hunting them."
+      - "Term identity / number drift → docspec lint (advisory WARN). The engine flags, it does not fix — YOU reconcile each by hand against the source; not a subagent's call."
+      - "Anchors / reference structure → docspec check. Deterministic resolution, engine-owned."
+      - "Banned openers / cross-section references (as above, 如前一節所述) → the engine does NOT validate these; YOU grep for them by hand. Still NOT dispatched — a one-line grep is your own job, and spawning a subagent for it is both waste and a mis-signal that it needs taste."
 
 # Universal filing rules (cross-skill; ONLY rules the engine actually enforces — so they're contract, not stance; guide projects them)
 filing-rules:

@@ -9,9 +9,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from importlib.resources import files
 from pathlib import Path
+
+import yaml
 
 from dspx.frontmatter import FrontmatterError, parse_frontmatter
 
@@ -36,10 +38,17 @@ class Skill:
     body: str
     source: Path  # 權威 SKILL.md 的絕對路徑
     kind: str = "workflow"
+    frontmatter: dict = field(default_factory=dict)  # 原始 frontmatter（compatibility/license/metadata…）
 
     @property
     def is_workflow(self) -> bool:
         return self.kind == "workflow"
+
+    @property
+    def compatibility(self) -> str | None:
+        """環境需求一行（PATH 自救等）——skill-redesign 後住 frontmatter，body 零環境雜訊。"""
+        c = self.frontmatter.get("compatibility")
+        return str(c) if c else None
 
     @property
     def aux_files(self) -> list[Path]:
@@ -52,14 +61,13 @@ class Skill:
 
     @property
     def text(self) -> str:
-        """重組完整 SKILL.md（frontmatter + 本文），保證 name/description 齊全。"""
-        return (
-            "---\n"
-            f"name: {self.name}\n"
-            f"description: {_fold(self.description)}\n"
-            "---\n"
-            f"{self.body}"
-        )
+        """重組完整 SKILL.md（frontmatter + 本文），保證 name/description 齊全，並**保留原始
+        frontmatter 其餘欄**（compatibility/license/metadata…）——否則環境需求（PATH 自救）在安裝
+        當下被丟掉、body 又已無環境雜訊＝零落點。name/description 置頂，其餘照原序。"""
+        meta = {k: v for k, v in self.frontmatter.items() if k not in ("name", "description")}
+        ordered = {"name": self.name, "description": _fold(self.description), **meta}
+        block = yaml.safe_dump(ordered, allow_unicode=True, sort_keys=False, width=4096).strip()
+        return f"---\n{block}\n---\n{self.body}"
 
 
 def _fold(value: str) -> str:
@@ -93,6 +101,7 @@ def _load_one(skill_dir: Path) -> Skill:
         body=body.lstrip("\n"),
         source=md,
         kind=kind,
+        frontmatter=dict(meta),
     )
 
 

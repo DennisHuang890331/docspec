@@ -139,81 +139,59 @@ def test_guide_json_carries_reasoning_step_in_develop_skill(make_project, monkey
     assert "--reopen" in steps_text
 
 
-# ── 3. 〔#16〕〔#19〕skill 文案落地 ──────────────────────────────────
+# ── 2b. 〔develop step〕fractional order 也由 schema 投影（task 1.3）─────
 
 
-def test_apply_merges_both_modes():
-    """dspx-apply 併 draft+edit 雙模式：body 真含 rewrite（盲渲染/寫作原則/Bans）
-    與 align（三階段/verdict verb/exclusion list）兩模式內容——非空殼。"""
+def test_guide_projects_develop_fractional_order(make_project, monkeypatch, capsys):
+    """docspec guide 的 develop steps 帶 fractional order（order: 2.5 插節不重編號）——來源＝schema。"""
+    home = make_project()
+    monkeypatch.chdir(home.parent)
+    assert guide_cmd.run([]) == 0
+    out = capsys.readouterr().out
+    assert "order: 2.5" in out
+
+
+# ── 3. 〔#16〕〔#19〕skill drive-through 落地（規則搬進投影、skill 只錨、不重抄）────
+
+
+def test_apply_drives_both_modes_via_engine_routing():
+    """dspx-apply 併 draft+edit：body 以 drive-through Steps 驅動 rewrite 與 align 兩模式，
+    engine 路由（不查表）、錨定 instructions apply 投影；舊結構標題/舊名全廢。"""
     body = _skill_body("dspx-apply")
-    assert "Choosing the mode" in body            # 模式選擇段（engine 路由、不查表）
-    assert "# Rewrite mode" in body               # rewrite 模式（原 draft）
-    assert "Inverted pyramid" in body
-    assert "blind to its siblings" in body
-    assert "## Bans" in body
-    assert "# Align mode" in body                 # align 模式（原 edit）
-    assert "## The Routing Rule" in body
-    assert "Stage 1 — Line edit" in body
-    assert "Stage 3 — Proofread" in body
-    assert "--ack-own" in body                    # verdict verb 白名單
+    assert "rewrite" in body and "align" in body
+    assert "The engine routes" in body               # engine 路由、不查表
+    assert "instructions apply" in body              # 錨定投影
+    for old in ("# Rewrite mode", "# Align mode", "## Bans", "## The Routing Rule", "## Stage 1"):
+        assert old not in body, f"old-structure header leaked: {old}"
     assert "dspx-draft" not in body and "dspx-edit" not in body   # 舊名不再出現
 
 
-def test_apply_align_carries_exclusion_list_after_routing_rule_before_stage1():
-    """dspx-apply align 模式：排除清單節在「The Routing Rule」之後、Stage 1 之前，逐條列排除項＋去處。"""
+def test_apply_body_anchors_exclusion_list_but_does_not_restate_it():
+    """派工排除清單搬進投影：apply body 只保留態度錨（copy the dispatch-exclusion list verbatim、
+    SEMANTIC work only），不再逐條重抄（逐條在 instructions apply）。"""
     body = _skill_body("dspx-apply")
-    routing = body.index("## The Routing Rule")
-    excl = body.index("## Subagent dispatch briefs — the exclusion list")
-    stage1 = body.index("## Stage 1")
-    assert routing < excl < stage1               # 插入位置正確
-    section = body[excl:stage1]
-    assert "SEMANTIC work only" in section        # brief 開頭必聲明
-    assert "Punctuation width" in section
-    assert "docspec normalize" in section         # 引擎確定性 auto-fix
-    assert "V18" in section                        # lint 殘留兜底、指回 normalize
-    assert "docspec lint" in section              # 洩漏 scaffolding／drift 去處
-    assert "docspec check" in section             # 錨點去處
-    assert "grep" in section                      # banned openers 監工手動、同樣不派
+    assert "dispatch-exclusion list" in body          # 指向投影的錨
+    assert "SEMANTIC work only" in body               # 保留「brief 開頭聲明」態度核
+    assert "── Dispatch exclusions ──" not in body    # 逐條 header 不在 body（搬進投影）
 
 
-def test_apply_guardrails_dont_has_punctuation_ban():
-    """dspx-apply 共用 Guardrails Don't 含標點寬度禁令（禁手改 sweep、byte-exact 點名、導向 normalize）。"""
+def test_apply_punctuation_guardrail_points_to_normalize():
+    """標點寬度紀律：apply Guardrails 仍指向引擎確定性 docspec normalize（禁手改 sweep、byte-exact
+    點名），但長文寫作原則已搬進投影。"""
     body = _skill_body("dspx-apply")
-    dont = body[body.rindex("**Don't**"):]        # 最後一段＝共用 Guardrails Don't
-    assert "punctuation-width sweep" in dont.lower()
-    assert "no blind regex" in dont.lower()
+    dont = body[body.rindex("**Guardrails**"):]
+    assert "docspec normalize" in dont
     assert "byte-exact" in dont.lower()
-    assert "code spans, identifiers, protocol tokens, and URLs" in dont
-    assert "docspec normalize" in dont       # 導向引擎確定性 normalize（非手改、非 audit finding）
+    assert "width sweep" in dont.lower() or "blind regex" in dont.lower()
+    assert "no punctuation auto-fix today" not in body       # 誠實版已過時、不得殘留
 
 
-def test_apply_rewrite_bans_have_punctuation_ban():
-    """dspx-apply rewrite 模式 Bans 含同旨禁令（禁手改 sweep、不禁寫稿當下寫對、byte-exact 點名、導向 normalize）。"""
-    body = _skill_body("dspx-apply")
-    bans = body[body.index("## Bans"):body.index("## Rewrite guardrails")]
-    assert "punctuation-width sweep" in bans.lower()
-    assert "as you compose" in bans          # 不禁寫稿當下寫對
-    assert "docspec normalize" in bans       # 導向引擎確定性 normalize
-    assert "byte-exact" in bans.lower()
-
-
-def test_develop_teaches_reopen_after_reversal_paragraph():
-    """dspx-develop：「Reversal is normal.」段後有 reopen 段落（--reopen＋根節工作台＋roadmap doing）。"""
+def test_develop_teaches_reopen_and_fractional_order():
+    """dspx-develop（新格式）：Reversal 段教 reopen（--reopen＋根節工作台＋roadmap doing）；
+    Steps 教 fractional order（order: 2.5 插節不重編號）。"""
     body = _skill_body("dspx-develop")
-    reversal = body.index("**Reversal is normal.**")
-    reopen = body.index("Reasoning lands as it happens")
-    what = body.index("## What You Might Do")
-    assert reversal < reopen < what           # 插在 Reversal 段之後、清單之前
-    para = body[reopen:what]
-    assert "docspec new <section>\n--reopen" in para or "--reopen" in para
-    assert "root section" in para.lower() and "central workbench" in para
-    assert "roadmap" in para and "doing" in para
-
-
-def test_punctuation_stance_points_to_normalize():
-    """punctuation-normalizer 落地後：標點文案改指向引擎確定性 `docspec normalize`（不再手改、
-    不再是誠實版「無 auto-fix」）；仍不宣稱引擎會創作/改寫內容（normalize 只換字寬）。"""
-    for name in ("dspx-apply",):
-        body = _skill_body(name)
-        assert "docspec normalize" in body                     # 導向引擎確定性 auto-fix
-        assert "no punctuation auto-fix today" not in body       # 誠實版已過時、不得殘留
+    assert "Reversal is normal" in body
+    assert "--reopen" in body
+    assert "central workbench" in body
+    assert "roadmap" in body and "doing" in body
+    assert "order: 2.5" in body                        # fractional order（task 1.3）
