@@ -57,7 +57,17 @@ def run_archive(layout, schema, change: "chg.Change", *, override_drift: bool = 
         if t.action != "move":
             corpus_sections.append(section)
 
+    # 本單顯式 target 的節集合（★2.2：非此集、卻被 rebaseline 靜默轉 synced 的下游要列名）
+    target_sections: set[str] = set(corpus_sections)
+    for t in move_targets:
+        msec = chg.section_of_ref(t.ref, union_leaves)
+        if msec:
+            target_sections.add(msec)
+        if t.dest:
+            target_sections.add(t.dest)
+
     done_steps: list[str] = []
+    absorbed: list[tuple[str, str]] = []
     try:
         # ③ corpus 章節結構化檔整檔搬進正式 corpus
         for section in corpus_sections:
@@ -102,6 +112,11 @@ def run_archive(layout, schema, change: "chg.Change", *, override_drift: bool = 
                 patched = chg.slot_patch_deliverable(layout, change, art, sections)
                 done_steps.append(f"{art}: slot patch ({len(patched)} section(s))")
 
+        # ★2.2：rebaseline 前偵測「被本次改動波及、但非本單 target」的下游節——它們現在 stale，
+        #   下一步 rebaseline 會把它們**靜默**重戳 synced（未經本次顯式復驗）。先列名、archive 不阻塞。
+        absorbed = _silently_absorbed_downstream(layout, schema,
+                                                 set(article_actions.keys()), target_sections)
+
         # ⑧ 正式帳本重算（等效 rebaseline、散文即剛收案內容）
         from dspx.render import render_article
         official_leaves = load_project(layout)
@@ -132,7 +147,38 @@ def run_archive(layout, schema, change: "chg.Change", *, override_drift: bool = 
         print(f"  · {s}")
     if pruned:
         print(f"  · pruned roadmap entry {pruned}")
+
+    # ★2.2：列名被 rebaseline 靜默轉 synced 的非 target 下游（未經本次顯式復驗）——非阻塞 WARN。
+    if absorbed:
+        sys.stderr.write(
+            f"docspec: ⚠ change \"{change.id}\" recomputed {len(absorbed)} downstream section(s) to "
+            "synced that were NOT explicit targets of this change (not re-verified this change — "
+            "the rebaseline absorbed their inherited staleness):\n")
+        for sec, sync in absorbed:
+            sys.stderr.write(f"    · {sec}  (was {sync})\n")
+        sys.stderr.write("  if any needs real re-verification, open a follow-up change targeting it "
+                         "(or docspec redraft it).\n")
     return 0
+
+
+def _silently_absorbed_downstream(layout, schema, articles: set, target_sections: set) -> list:
+    """★2.2：收案落地上游後、rebaseline 前，哪些**非本單 target** 的下游節現在 stale？
+    這些節接著會被 rebaseline 靜默重戳 synced（未經本次顯式復驗）。回 [(section, sync)]。"""
+    from dspx.commands.status import _docs_hashes, _leaf_row
+    from dspx.model import decision_index, load_project
+    leaves = load_project(layout)
+    by = {lf.section: lf for lf in leaves}
+    dindex = decision_index(leaves)
+    out: list = []
+    for art in sorted(articles):
+        dh = _docs_hashes(layout, art)
+        for lf in leaves:
+            if lf.article != art or lf.section in target_sections:
+                continue
+            sync = _leaf_row(layout, lf, schema, True, dh, by, dindex)["sync"]
+            if isinstance(sync, str) and sync.startswith("stale"):
+                out.append((lf.section, sync))
+    return out
 
 
 class _ArchiveAbort(Exception):

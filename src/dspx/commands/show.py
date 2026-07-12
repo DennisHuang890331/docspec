@@ -115,6 +115,44 @@ def _find_section(leaves: list, layout, arg: str) -> dict | None:
     return None
 
 
+# ── 定址統一（id 與節路徑自動判別；四個查詢一律兩種都吃、錯定址指路另一種）────────────
+
+def _resolve_to_section(leaves: list, arg: str) -> str | None:
+    """arg（節路徑 或 concept/decision/history id）→ 所屬 leaf section 路徑；找不到 → None。
+
+    id 形式（`sec-`/`dec-`/`rm-` 前綴或匹配某 id）與節路徑形式（含 `/` 或匹配 leaf.section）皆吃：
+    任一 id 皆唯一對應一個 leaf，故 `--impact`/`--referenced-by` 不再只認完整節路徑。"""
+    a = arg.strip("/")
+    if not a:
+        return None
+    for lf in leaves:                       # id 形式：concept / decision / history id
+        c = lf.concept or {}
+        if str(c.get("id")) == a:
+            return lf.section
+        if any(str(e.get("id")) == a for e in lf.decisions):
+            return lf.section
+        if any(str(e.get("id")) == a for e in lf.history):
+            return lf.section
+    for lf in leaves:                       # 節路徑形式：直接匹配 leaf.section
+        if lf.section == a:
+            return lf.section
+    return None
+
+
+def _addr_hint(leaves: list, arg: str) -> str:
+    """錯定址時的指路訊息（指向另一種定址形式）。"""
+    a = arg.strip("/")
+    for lf in leaves:
+        c = lf.concept or {}
+        if str(c.get("id")) == a:
+            return (f"\"{a}\" is the concept id of section {lf.section} — pass either form.")
+        if any(str(e.get("id")) == a for e in lf.decisions):
+            return (f"\"{a}\" is a decision id owned by {lf.section} — try "
+                    f"`docspec show {a} --realized-by`, or address the section \"{lf.section}\".")
+    return ("give a leaf section path (has '/', e.g. guide/intro) or a concept id "
+            "(docspec list shows sections; docspec show <id> shows an id's payload).")
+
+
 # ── 反向關係查詢（改動影響預覽；反向索引＝既有正向邊的反向鄰接表，同源不漂）──────────
 
 def _active_decisions(leaf) -> list[dict]:
@@ -224,8 +262,15 @@ def _realized_by_payload(leaves, decision_id: str) -> dict:
     realizers = sorted(lf.section for lf in ri.reverse_realizes.get(decision_id, []))
     dindex = decision_index(leaves)
     rec = dindex.get(decision_id)
+    defined_at = rec["section"] if rec else None
+    # 定址統一：decision id miss 時，看是不是 concept id（concept 也可被 realize）
+    if defined_at is None:
+        for lf in leaves:
+            if lf.concept and str(lf.concept.get("id")) == decision_id:
+                defined_at = lf.section
+                break
     return {"kind": "realized-by", "decision": decision_id,
-            "definedAt": rec["section"] if rec else None,
+            "definedAt": defined_at,
             "realizedBy": realizers}
 
 
@@ -286,17 +331,20 @@ def _print_referenced_by(payload: dict) -> None:
 
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec show", description=HELP)
-    parser.add_argument("id", help="id of the decision/concept/retirement, or a section path")
+    parser.add_argument("id", help="a section path OR an id (concept/decision/retirement) — "
+                                   "every view auto-detects which and accepts both forms")
     parser.add_argument("--json", action="store_true", dest="as_json", help="output as JSON")
     view = parser.add_mutually_exclusive_group()
     view.add_argument("--impact", action="store_true",
-                      help="reverse view: every section across ALL documents a change to <section> "
-                           "would make stale (upstream/inherited/norm/cross-reference)")
+                      help="reverse view: every section across ALL documents a change to the "
+                           "section (given by path or its concept id) would make stale "
+                           "(upstream/inherited/norm/cross-reference)")
     view.add_argument("--realized-by", action="store_true", dest="realized_by",
                       help="reverse view: every section, across all articles, whose realizes "
-                           "includes <decision-id>")
+                           "includes the decision id (or the section given by path)")
     view.add_argument("--referenced-by", action="store_true", dest="referenced_by",
-                      help="reverse view: every section whose prose anchor points at <section>")
+                      help="reverse view: every section whose prose anchor points at the section "
+                           "(given by path or its concept id)")
     args = parser.parse_args(argv)
 
     try:
@@ -305,13 +353,13 @@ def run(argv: list[str]) -> int:
     except BootstrapError as exc:
         return exc.exit_code
 
-    # ── 反向關係查詢 ─────────────────────────────────────────────────────
+    # ── 反向關係查詢（定址統一：id 與節路徑自動判別、兩種都吃）────────────────────
     if args.impact:
-        section = args.id.strip("/")
-        payload = _impact_payload(leaves, layout, section)
+        section = _resolve_to_section(leaves, args.id)
+        payload = _impact_payload(leaves, layout, section) if section else None
         if payload is None:
-            sys.stderr.write(f"docspec: section \"{args.id}\" not found (--impact takes a leaf "
-                             "section path; use docspec list / docspec status for paths)\n")
+            sys.stderr.write(f"docspec: --impact could not resolve \"{args.id}\" to a leaf section. "
+                             + _addr_hint(leaves, args.id) + "\n")
             return 1
         if args.as_json:
             print(json.dumps({"id": args.id, **payload}, ensure_ascii=False, indent=2))
@@ -319,18 +367,33 @@ def run(argv: list[str]) -> int:
             _print_impact(payload)
         return 0
     if args.realized_by:
-        payload = _realized_by_payload(leaves, args.id)
+        # decision/concept id 直查；節路徑形式 → 解析成該節 concept.id 當查詢鍵
+        query = args.id.strip("/")
+        if "/" in args.id:
+            section = _resolve_to_section(leaves, args.id)
+            if section is None:
+                sys.stderr.write(f"docspec: --realized-by could not resolve \"{args.id}\". "
+                                 + _addr_hint(leaves, args.id) + "\n")
+                return 1
+            lf = next((l for l in leaves if l.section == section), None)
+            cid = str(lf.concept.get("id")) if lf and lf.concept and lf.concept.get("id") else None
+            if cid is None:
+                sys.stderr.write(f"docspec: section \"{section}\" has no concept id to query "
+                                 "realizers for (crystallize its concept first).\n")
+                return 1
+            query = cid
+        payload = _realized_by_payload(leaves, query)
         if args.as_json:
             print(json.dumps({"id": args.id, **payload}, ensure_ascii=False, indent=2))
         else:
             _print_realized_by(payload)
         return 0
     if args.referenced_by:
-        section = args.id.strip("/")
-        payload = _referenced_by_payload(leaves, layout, section)
+        section = _resolve_to_section(leaves, args.id)
+        payload = _referenced_by_payload(leaves, layout, section) if section else None
         if payload is None:
-            sys.stderr.write(f"docspec: section \"{args.id}\" not found (--referenced-by takes a "
-                             "leaf section path; use docspec list / docspec status for paths)\n")
+            sys.stderr.write(f"docspec: --referenced-by could not resolve \"{args.id}\" to a leaf "
+                             "section. " + _addr_hint(leaves, args.id) + "\n")
             return 1
         if args.as_json:
             print(json.dumps({"id": args.id, **payload}, ensure_ascii=False, indent=2))

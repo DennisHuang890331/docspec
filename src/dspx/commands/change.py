@@ -116,6 +116,14 @@ def _cmd_new(argv: list[str]) -> int:
             print(f"    [{t.action}] {t.ref}")
     else:
         print("  no auto targets from seeds — add them with `docspec change add-target`.")
+    # ★2.1 通用引用型下游提示：以散文錨引用 seed（不硬寫值）的 auto target，改動未必需重寫，
+    #   可 remove-target 免除誤卡導出完成度（避免 byte-identical 被反作弊拒收）。
+    generic = _generic_reference_autos(layout, leaves, autos, args.seed)
+    if generic:
+        print(f"  ↳ generic-reference downstream ({len(generic)}): "
+              + ", ".join(generic) + " — their prose cites the seed by anchor (no hardwired value), "
+              "so a value change may not require rewriting them. If a target does not actually "
+              f"change, drop it: `docspec change remove-target {args.id} <ref>`.")
     # 盲區提醒（投影、不落檔）
     print("  ↳ blind-spot reminder: auto targets cover only reverse-realizes. Add MANUAL targets "
           "for prose cross-references, figures, schemas, and file targets the engine cannot see "
@@ -124,6 +132,27 @@ def _cmd_new(argv: list[str]) -> int:
         print(f"  ↳ term seed(s) {', '.join(blind_terms)}: run "
               f"`docspec rename-term <old> <new> --dry-run` to find prose hits, then add-target them.")
     return 0
+
+
+def _generic_reference_autos(layout, leaves, autos: list, seeds: list[str]) -> list[str]:
+    """★2.1：哪些 auto target 是「通用引用型下游」＝其散文以穩定錨引用某 seed（不硬寫值）。
+
+    signal＝reverse_anchor[seed] 含該 auto target 的 (article, section)＝它的散文錨指向 seed。
+    未 render 的文章算不出錨（reverse_anchor 空）＝不誤報（誠實不提示）。回傳 ref 清單。"""
+    from dspx.crossref import build_reverse_indices
+    seed_ids = [s for s in seeds if not s.startswith("term:")]
+    if not seed_ids or not autos:
+        return []
+    ri = build_reverse_indices(leaves, layout)
+    flagged: list[str] = []
+    for t in autos:
+        section = chg.section_of_ref(t.ref, leaves)
+        if section is None:
+            continue
+        article = section.split("/", 1)[0]
+        if any((article, section) in ri.reverse_anchor.get(sid, []) for sid in seed_ids):
+            flagged.append(t.ref)
+    return flagged
 
 
 def _promote_roadmap(layout, entry_id: str, change: "chg.Change") -> str | None:

@@ -10,6 +10,27 @@ a minor bump.
 
 ## [Unreleased]
 
+### Fixed — `put` now routes into a change's staging instead of the frozen official corpus
+
+- A stress test surfaced a P0 workflow trap: while a change was active, `docspec put` on a
+  target section wrote the edit into the **official** corpus (the change's staging copy stayed
+  stale) — the exact opposite of the change container's model ("edits land in staging, official
+  stays byte-frozen until archive"), which the develop skill already promised. It also left no
+  command able to write a validated source edit into staging, forcing hand-edits of staging files.
+- `put` now detects the active change that targets a section and writes the validated content into
+  that change's `staging/` (copy-on-write), leaving the official file **byte-frozen**; a section
+  targeted by two active changes fails loud and requires `--change <id>`; a non-target section
+  writes official as before. `get` reads the staging version of a staged target by default, with
+  `--official` for the frozen baseline and `--change` to disambiguate. `abandon` once again leaves
+  zero residue on the official side.
+- `docspec show <arg>` now accepts a section path OR an id interchangeably across `--impact` /
+  `--referenced-by` / `--realized-by` / bare show (an id resolves to its owning section, a path to
+  itself); a mis-addressed argument gets a pointing hint instead of a bare "not found".
+- `change new --seed` now hints that a generic-reference downstream (prose that cites via an anchor
+  rather than restating a value) can be dropped with `remove-target`; archive now names any
+  dropped-target section whose ledger recompute flipped it to synced without explicit re-review,
+  instead of absorbing it silently.
+
 ### Changed — all six agent skills rewritten as engine-anchored drive-through loops
 
 - **Every SKILL.md was scrapped and rewritten** (develop / apply / factcheck / publish / release /

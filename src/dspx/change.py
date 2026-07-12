@@ -734,6 +734,73 @@ def changes_hitting_article(layout: Layout, article: str,
     return out
 
 
+# ── put/get 寫讀路由（感知 active change：staging 優先、official 凍結）────────
+
+def section_concept_id(layout: Layout, section: str) -> str | None:
+    """讀某節正式 concept.yaml 的 id（供 put/get 判 target ref==concept.id）；缺/壞 → None。"""
+    cpath = layout.section_dir(section) / "concept.yaml"
+    if not cpath.is_file():
+        return None
+    try:
+        data = yaml.safe_load(cpath.read_text(encoding="utf-8"))
+    except yaml.YAMLError:
+        return None
+    if isinstance(data, dict) and data.get("id"):
+        return str(data["id"])
+    return None
+
+
+def changes_staging_section(layout: Layout, section: str,
+                            concept_id: str | None) -> list[Change]:
+    """以此節（section 路徑或其 concept.id、或 create 路徑）為 target 的 active changes，
+    去重（一張 change 即使多個 target 命中也只列一次）。"""
+    out: list[Change] = []
+    seen: set[str] = set()
+    for change, _t in changes_hitting_section(layout, section, concept_id, []):
+        if change.id not in seen:
+            seen.add(change.id)
+            out.append(change)
+    return out
+
+
+class RoutingAmbiguous(Exception):
+    """一節被多張 active change 同時 stage：put/get 不得猜、要求 `--change <id>` 指名。"""
+
+    def __init__(self, section: str, candidates: list[Change]):
+        super().__init__(section)
+        self.section = section
+        self.candidates = candidates
+
+
+def routing_change_for(layout: Layout, section: str, *,
+                       explicit_id: str | None = None) -> Change | None:
+    """某節 put/get 該路由到哪張 active change 的 staging？
+
+    - `explicit_id` 指名：必須是 active 且以此節為 target，否則 ChangeError（不隱式加 target）。
+    - 未指名：0 張命中 → None（照舊 official）；1 張 → 該張；多張 → RoutingAmbiguous。
+    """
+    concept_id = section_concept_id(layout, section)
+    candidates = changes_staging_section(layout, section, concept_id)
+    if explicit_id is not None:
+        chosen = next((c for c in candidates if c.id == explicit_id), None)
+        if chosen is not None:
+            return chosen
+        state = change_state(layout, explicit_id)
+        if state is None:
+            raise ChangeError(f"--change \"{explicit_id}\": no change by that id")
+        if state != STATE_ACTIVE:
+            raise ChangeError(f"--change \"{explicit_id}\" is {state}, not active "
+                              "(only an active change has a staging branch to write into)")
+        raise ChangeError(
+            f"--change \"{explicit_id}\" does not target section \"{section}\" — enlist it first: "
+            f"`docspec change add-target {explicit_id} {section} --action revise`")
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+    raise RoutingAmbiguous(section, candidates)
+
+
 # ── 驗收全導出（per-action 現態判準、零時序；D4 / 3.1 / 3.1b）─────────
 
 def _read_preview_ledger(change: Change, article: str) -> dict:

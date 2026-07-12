@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+from dspx import change as chg
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
 
 NAME = "get"
@@ -45,6 +46,12 @@ def run(argv: list[str]) -> int:
     parser.add_argument("category", choices=sorted(_CATEGORIES),
                         help="which artifact to read: concept | decisions | material")
     parser.add_argument("--out", default=None, help="write to this FILE instead of stdout")
+    parser.add_argument("--official", action="store_true",
+                        help="read the frozen official baseline even if an active change stages "
+                             "this section (default: the staging version — what you edit is what you see)")
+    parser.add_argument("--change", default=None, metavar="ID",
+                        help="read this active change's staging (required to disambiguate when >1 "
+                             "active change targets the section)")
     args = parser.parse_args(argv)
 
     try:
@@ -53,20 +60,45 @@ def run(argv: list[str]) -> int:
     except BootstrapError as exc:
         return exc.exit_code
 
+    section = args.section.strip("/")
+
+    # ── change-aware 讀（★P0 union 語義）：staged target 預設吐 staging；--official 看凍結基準 ──
+    change = None
+    if not args.official:
+        try:
+            change = chg.routing_change_for(layout, section, explicit_id=args.change)
+        except chg.RoutingAmbiguous as amb:
+            sys.stderr.write(
+                f"docspec: section \"{section}\" is staged by {len(amb.candidates)} active changes "
+                f"({', '.join(c.id for c in amb.candidates)}) — get refuses to guess which staging. "
+                "Re-run with --change <id>, or --official for the frozen baseline.\n")
+            return 2
+        except chg.ChangeError as exc:
+            sys.stderr.write(f"docspec: {exc}\n")
+            return 2
+
     filename, artifact_id = _CATEGORIES[args.category]
-    path = layout.section_dir(args.section.strip("/")) / filename
+    if change is not None:
+        sec_dir = chg.staging_target(change.dir, layout, layout.section_dir(section))
+        # staging 未鏡像此檔（該節此分類尚無暫存副本）→ 回退正式檔，維持 union「補底」語義
+        if not (sec_dir / filename).is_file():
+            sec_dir = layout.section_dir(section)
+    else:
+        sec_dir = layout.section_dir(section)
+    path = sec_dir / filename
     if path.is_file():
         content = path.read_text(encoding="utf-8")
     else:
         content = _skeleton(schema, artifact_id)
 
+    origin = f" (change \"{change.id}\" staging)" if change is not None else ""
     if args.out:
         from pathlib import Path
         out_path = Path(args.out)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(content, encoding="utf-8", newline="\n")
         src = "file" if path.is_file() else "empty schema skeleton (no file yet)"
-        print(f"get: {args.section} {args.category} -> {out_path} ({src})")
+        print(f"get: {args.section} {args.category} -> {out_path} ({src}){origin}")
     else:
         sys.stdout.write(content)
         if content and not content.endswith("\n"):

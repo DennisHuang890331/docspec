@@ -21,6 +21,7 @@ from pathlib import Path
 
 import yaml
 
+from dspx import change as chg
 from dspx.check import run_file_check
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
 from dspx.commands.new import _next_order, _stable_id, validate_section_path
@@ -94,9 +95,10 @@ def _candidate_ids_ordered(leaf: Leaf) -> list[str]:
     return [iid for iid, _sec in _leaf_ids_with_section(leaf)]
 
 
-def _build_candidate(layout, section: str, category: str, parsed) -> Leaf:
-    """從現行散檔建 candidate leaf、把目標分類換成 parsed 後的新內容（其餘欄容錯沿用現行）。"""
-    d = layout.section_dir(section)
+def _build_candidate(sec_dir: Path, section: str, category: str, parsed) -> Leaf:
+    """從某節資料夾（正式或 staging）建 candidate leaf、把目標分類換成 parsed 後的新內容
+    （其餘欄容錯沿用該資料夾現行檔）。sec_dir 由呼叫端解析（routing：staging 副本／否則正式）。"""
+    d = sec_dir
     concept = _safe_dict(d / "concept.yaml")
     decisions = _safe_entries(d / "decisions.yaml")
     history = _safe_entries(d / "history.yaml")
@@ -207,6 +209,9 @@ def run(argv: list[str]) -> int:
     parser.add_argument("category", choices=sorted(_CATEGORIES),
                         help="which artifact to write: concept | decisions | material")
     parser.add_argument("source", help="FILE with the new content, or - for stdin")
+    parser.add_argument("--change", default=None, metavar="ID",
+                        help="route the write into this active change's staging (required to "
+                             "disambiguate when >1 active change targets the section)")
     args = parser.parse_args(argv)
 
     section = args.section.strip("/")
@@ -230,8 +235,27 @@ def run(argv: list[str]) -> int:
         sys.stderr.write(f"docspec: source file not found: {args.source}\n")
         return 2
 
+    # ── change-aware 路由（★P0）：target 節在某 active change → 寫進該單 staging、official 凍結 ──
+    try:
+        change = chg.routing_change_for(layout, section, explicit_id=args.change)
+    except chg.RoutingAmbiguous as amb:
+        sys.stderr.write(
+            f"docspec: section \"{section}\" is targeted by {len(amb.candidates)} active changes "
+            f"({', '.join(c.id for c in amb.candidates)}) — put refuses to guess. "
+            "Re-run with --change <id> to name which staging to write into.\n")
+        return 2
+    except chg.ChangeError as exc:
+        sys.stderr.write(f"docspec: {exc}\n")
+        return 2
+
     filename = _CATEGORIES[args.category]
-    path = layout.section_dir(section) / filename
+    if change is not None:
+        # 進 staging 前先 copy-on-write 該節（既有暫存機制；官方 byte 不動）
+        chg.stage_section(change, layout, section)
+        sec_dir = chg.staging_target(change.dir, layout, layout.section_dir(section))
+    else:
+        sec_dir = layout.section_dir(section)
+    path = sec_dir / filename
     first_write = not path.is_file()
 
     # ── 解析 + 形狀（壞 YAML / 壞形狀 fail-loud、原檔不動）────────────────────
@@ -262,9 +286,14 @@ def run(argv: list[str]) -> int:
         return 1
 
     # ── 結構驗證（拒收判準）；通過才寫 ─────────────────────────────────────
-    candidate = _build_candidate(layout, section, args.category,
+    candidate = _build_candidate(sec_dir, section, args.category,
                                  parsed if args.category != "material" else None)
-    others = _other_leaves(layout, section)
+    # id 唯一／relation 目標的宇宙：routing 時用 union（staging 優先，含同單其他 staged 節），
+    # 否則正式散檔——確保驗證管線對 staging 寫入同樣過閘、且看見同單的暫存真相。
+    if change is not None:
+        others = [lf for lf in chg.load_union(layout, change) if lf.section != section]
+    else:
+        others = _other_leaves(layout, section)
     errs = _structural_errors(schema, section, args.category, candidate, others)
     if errs:
         sys.stderr.write(f"docspec: put rejected — {len(errs)} structural error(s), "
@@ -287,9 +316,14 @@ def run(argv: list[str]) -> int:
     _atomic_write(path, write_text)
 
     verb = "created" if first_write else "updated"
-    print(f"put: {verb} {section}/{filename} (validated: field check + duplicate-id + "
+    where = f" into change \"{change.id}\" staging" if change is not None else ""
+    print(f"put: {verb} {section}/{filename}{where} (validated: field check + duplicate-id + "
           "relation-target + enum)")
     if stamped:
         print(f"  stamped id: {parsed['id']}  order: {parsed['order']} (first write of concept)")
-    print("  next: docspec status / docspec check picks up staleness; render to project prose.")
+    if change is not None:
+        print("  official corpus file is byte-frozen (changes land at archive); "
+              f"next: docspec render --change {change.id}  then  docspec change status {change.id}.")
+    else:
+        print("  next: docspec status / docspec check picks up staleness; render to project prose.")
     return 0
