@@ -10,8 +10,8 @@ from pathlib import Path
 
 import yaml
 
-from dspx.commands import mv as mv_cmd
-from dspx.commands import render as render_cmd
+from dspx.commands.corpus import mv as mv_cmd
+from dspx.commands.deliverable import render as render_cmd
 from dspx.layout import Layout
 
 
@@ -149,7 +149,7 @@ def test_mv_rollback_on_check_failure(make_project, write_leaf, monkeypatch):
     構造：audit finding 的 target 指向一個「搬移後仍不存在」的死引用，使搬移後 check 轉紅。
     這裡直接讓 check 在搬移後偵測到問題——用一個引用 old 路徑但 mv 不會重寫的偽造 store
     不現實；改以 monkeypatch 讓 run_check 在第二次呼叫回紅，驗回滾。"""
-    import dspx.commands.mv as mvmod
+    import dspx.commands.corpus.mv as mvmod
 
     home = make_project()
     _leaf(write_leaf, home, "sc/a", cid="c1")

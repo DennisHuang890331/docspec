@@ -6,7 +6,7 @@
     publish 寫快照時把 hash 記進 `docspec/.freeze.yaml`；lint（V11）/ publish 閘重算比對，
     被竄改/刪除/未登記 → 報錯。純看內容、與同步工具無關（Drive/OneDrive/本機皆有效）。
   - 三層防護：① skill 規則（告訴 agent 別改）② 本模組 hash 抓包（引擎保證、跨工具）
-    ③ PreToolUse hook（動手前就擋；見 dspx.commands.hook）。
+    ③ PreToolUse hook（動手前就擋；見 dspx.commands._internal.hook）。
 """
 
 from __future__ import annotations

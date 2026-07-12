@@ -9,11 +9,11 @@ import time
 import pytest
 
 from dspx import paths
-from dspx.commands import doctor as doctor_cmd
-from dspx.commands import init as init_cmd
-from dspx.commands import setup as setup_cmd
-from dspx.commands import upgrade as upgrade_cmd
-from dspx.commands import version as version_cmd
+from dspx.commands.maintenance import doctor as doctor_cmd
+from dspx.commands.maintenance import init as init_cmd
+from dspx.commands.maintenance import setup as setup_cmd
+from dspx.commands.maintenance import upgrade as upgrade_cmd
+from dspx.commands.maintenance import version as version_cmd
 
 
 # ── 共用：把 data_dir 導到 tmp、灌一個健康的 tex.lock＋字型 ─────────────
@@ -318,7 +318,7 @@ def test_init_no_tex_hint_flag_silences(monkeypatch, tmp_path, capsys):
 
 def test_init_degrades_on_broken_skills(monkeypatch, tmp_path, capsys):
     """init guards against an uncaught SkillError from broken packaged-skill data."""
-    from dspx.commands import skills_cmd
+    from dspx.commands.maintenance import skills_cmd
     from dspx.skills import SkillError
     proj = tmp_path / "pbroken"
     proj.mkdir()
@@ -335,7 +335,7 @@ def test_init_degrades_on_broken_skills(monkeypatch, tmp_path, capsys):
 
 def test_version_honors_help(capsys):
     import pytest
-    from dspx.commands import version as version_cmd
+    from dspx.commands.maintenance import version as version_cmd
     with pytest.raises(SystemExit) as ei:        # argparse exits 0 on --help
         version_cmd.run(["--help"])
     assert ei.value.code == 0
@@ -343,7 +343,7 @@ def test_version_honors_help(capsys):
 
 
 def test_hook_honors_help(capsys):
-    from dspx.commands import hook as hook_cmd
+    from dspx.commands._internal import hook as hook_cmd
     assert hook_cmd.run(["--help"]) == 0
     assert "guard" in capsys.readouterr().out
 

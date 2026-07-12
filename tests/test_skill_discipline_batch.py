@@ -7,10 +7,10 @@ import json
 
 import yaml
 
-from dspx.commands import guide as guide_cmd
-from dspx.commands import new as new_cmd
-from dspx.commands import ready as ready_cmd
-from dspx.commands import status as status_cmd
+from dspx.commands.projection import guide as guide_cmd
+from dspx.commands.corpus import new as new_cmd
+from dspx.commands.corpus import ready as ready_cmd
+from dspx.commands.query import status as status_cmd
 from dspx.skills import available_skills
 
 

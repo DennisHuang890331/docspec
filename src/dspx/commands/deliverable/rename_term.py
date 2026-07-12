@@ -18,7 +18,7 @@ import sys
 from dataclasses import dataclass
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.commands.normalize import _update_ledger_prose
+from dspx.commands.deliverable.normalize import _update_ledger_prose
 from dspx.spans import PROSE_KINDS, classify_deliverable
 
 NAME = "rename-term"

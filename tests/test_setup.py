@@ -12,7 +12,7 @@ import zipfile
 import pytest
 
 from dspx import paths
-from dspx.commands import setup as setup_cmd
+from dspx.commands.maintenance import setup as setup_cmd
 
 
 # ── setup.run()：TinyTeX 改 optional（--with-latex 才裝）─────────────

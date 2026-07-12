@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from dspx.commands import audit as audit_cmd
-from dspx.commands import publish as publish_cmd
-from dspx.commands import render as render_cmd
+from dspx.commands.governance import audit as audit_cmd
+from dspx.commands.deliverable import publish as publish_cmd
+from dspx.commands.deliverable import render as render_cmd
 
 
 def _draft(home, article):

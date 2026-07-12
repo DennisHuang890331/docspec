@@ -15,12 +15,12 @@ import re
 import yaml
 
 from dspx import change as chg
-from dspx.commands import change as change_cmd
-from dspx.commands import get as get_cmd
-from dspx.commands import put as put_cmd
-from dspx.commands import render as render_cmd
-from dspx.commands import show as show_cmd
-from dspx.commands import status as status_cmd
+from dspx.commands.change import change as change_cmd
+from dspx.commands.corpus import get as get_cmd
+from dspx.commands.corpus import put as put_cmd
+from dspx.commands.deliverable import render as render_cmd
+from dspx.commands.query import show as show_cmd
+from dspx.commands.query import status as status_cmd
 from dspx.layout import Layout
 
 

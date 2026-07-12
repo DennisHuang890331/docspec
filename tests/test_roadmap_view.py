@@ -11,8 +11,8 @@ from pathlib import Path
 
 import yaml
 
-from dspx.commands import roadmap as roadmap_cmd
-from dspx.commands.roadmap import build_backlog_view
+from dspx.commands.governance import roadmap as roadmap_cmd
+from dspx.commands.governance.roadmap import build_backlog_view
 from dspx.layout import Layout
 from dspx.model import load_project
 

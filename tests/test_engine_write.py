@@ -11,10 +11,10 @@ import json
 import yaml
 
 from dspx.check import run_check
-from dspx.commands import check as check_cmd
-from dspx.commands import get as get_cmd
-from dspx.commands import put as put_cmd
-from dspx.commands import status as status_cmd
+from dspx.commands.query import check as check_cmd
+from dspx.commands.corpus import get as get_cmd
+from dspx.commands.corpus import put as put_cmd
+from dspx.commands.query import status as status_cmd
 from dspx.layout import Layout
 from dspx.model import load_project
 from dspx.schema import load_schema

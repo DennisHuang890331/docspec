@@ -279,7 +279,7 @@ def _dry_run(layout: Layout, schema, leaves, args) -> int:
             print(f"  ✓ no-op: content differs from v{prev_v}")
 
     # ℹ 資訊行（永不阻塞——與真 publish 的非阻塞語義一致）
-    from dspx.commands.status import _docs_hashes, _leaf_row
+    from dspx.commands.query.status import _docs_hashes, _leaf_row
     from dspx.model import decision_index
     by_section = {lf.section: lf for lf in leaves}
     dindex = decision_index(leaves)

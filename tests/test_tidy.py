@@ -11,9 +11,9 @@ from pathlib import Path
 
 import yaml
 
-from dspx.commands import check as check_cmd
-from dspx.commands import render as render_cmd
-from dspx.commands import tidy as tidy_cmd
+from dspx.commands.query import check as check_cmd
+from dspx.commands.deliverable import render as render_cmd
+from dspx.commands.corpus import tidy as tidy_cmd
 from dspx.layout import Layout
 
 

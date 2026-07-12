@@ -12,10 +12,10 @@ import pytest
 
 from dspx import _install_source
 from dspx import cli
-from dspx.commands import init as init_cmd
-from dspx.commands import self_update as su_cmd
-from dspx.commands import upgrade as upgrade_cmd
-from dspx.commands import version as version_cmd
+from dspx.commands.maintenance import init as init_cmd
+from dspx.commands.maintenance import self_update as su_cmd
+from dspx.commands.maintenance import upgrade as upgrade_cmd
+from dspx.commands.maintenance import version as version_cmd
 
 
 # ── 安裝來源解析（PEP 610 direct_url.json）─────────────────────────

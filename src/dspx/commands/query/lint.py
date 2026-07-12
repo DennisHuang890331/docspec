@@ -50,7 +50,7 @@ def run(argv: list[str]) -> int:
 
     known = {lf.article for lf in leaves}
     if args.article:
-        from dspx.commands.status import develop_only_sections
+        from dspx.commands.query.status import develop_only_sections
         known |= {s.split("/", 1)[0]
                   for s in develop_only_sections(layout, {lf.section for lf in leaves})}
         if args.article not in known:

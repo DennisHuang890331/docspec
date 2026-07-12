@@ -80,7 +80,7 @@ def _ensure_pandoc(*, force: bool, no_download: bool) -> bool:
     """把釘版 pandoc binary 放進 data_dir/pandoc。冪等：已在就跳過。"""
     # 透過套件頂層取得可被 monkeypatch 的名字（_pandoc_platform_key/_PANDOC_MANIFEST/
     # _download），確保測試對 `setup_cmd.X` 的 patch 對這裡的呼叫生效。
-    from dspx.commands import setup as _pkg
+    from dspx.commands.maintenance import setup as _pkg
     pkey = _pkg._pandoc_platform_key()
     if pkey is None:
         sys.stderr.write(

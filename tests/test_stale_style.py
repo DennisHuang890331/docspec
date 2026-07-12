@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import yaml
 
-from dspx.commands import render as render_cmd
+from dspx.commands.deliverable import render as render_cmd
 from dspx.layout import Layout
 from dspx.model import style_fingerprint
 from dspx.render import read_ledger
@@ -20,7 +20,7 @@ GUIDE_B = "# Writing guide\n\n## Project conventions\n整體文體：口語化�
 
 def _sync_of(home, article, section):
     """重算某節 sync 狀態（同 status._leaf_row）。"""
-    from dspx.commands.status import _docs_hashes, _leaf_row
+    from dspx.commands.query.status import _docs_hashes, _leaf_row
     from dspx.model import decision_index, load_project
     from dspx.schema import load_schema
     layout = Layout(home)

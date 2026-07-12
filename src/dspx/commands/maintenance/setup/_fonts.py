@@ -163,7 +163,7 @@ def _download_font_source(key: str, dest: Path, *, force: bool) -> bool:
     """
     # 透過套件頂層取得 _FONT_MANIFEST/_download（延遲 import 避免循環、且讓
     # `monkeypatch.setattr(setup_cmd, "_FONT_MANIFEST"/"_download", …)` 對呼叫端生效）。
-    from dspx.commands import setup as _pkg
+    from dspx.commands.maintenance import setup as _pkg
     version, url, sha, members = _pkg._FONT_MANIFEST[key]
     cache = paths.cache_dir()
     pkg = cache / f"{key}-{version}.zip"
@@ -217,7 +217,7 @@ def _ensure_fonts(*, force: bool, no_download: bool = False) -> bool:
             "  Missing: " + ", ".join(still) + "\n")
         return False
 
-    from dspx.commands import setup as _pkg
+    from dspx.commands.maintenance import setup as _pkg
     need_keys: list[str] = []
     for f in still:
         k = _pkg._FONT_FILE_SOURCE.get(f)

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from dspx.commands import new as new_cmd
-from dspx.commands import render as render_cmd
+from dspx.commands.corpus import new as new_cmd
+from dspx.commands.deliverable import render as render_cmd
 from dspx.render import (
     GROUP_MARKER_RE,
     MARKER_RE,

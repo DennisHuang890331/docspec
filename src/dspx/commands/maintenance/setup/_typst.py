@@ -32,7 +32,7 @@ _TYPST_MANIFEST = {
 def _ensure_typst(*, force: bool, no_download: bool) -> bool:
     """把釘版 typst binary 放進 data_dir/typst（預設 render 引擎）。冪等：已在就跳過。"""
     # 透過套件頂層取得可被 monkeypatch 的名字（同 _pandoc.py 的理由）。
-    from dspx.commands import setup as _pkg
+    from dspx.commands.maintenance import setup as _pkg
     pkey = _pkg._pandoc_platform_key()
     manifest = _pkg._TYPST_MANIFEST
     if pkey is None or pkey not in manifest["assets"]:

@@ -6,10 +6,10 @@ import json
 
 import yaml
 
-from dspx.commands import retire as retire_cmd
-from dspx.commands import retire_section as rs_cmd
-from dspx.commands import retired as retired_cmd
-from dspx.commands import status as status_cmd
+from dspx.commands.corpus import retire as retire_cmd
+from dspx.commands.corpus import retire_section as rs_cmd
+from dspx.commands.corpus import retired as retired_cmd
+from dspx.commands.query import status as status_cmd
 from dspx.layout import Layout
 from dspx.model import load_project
 

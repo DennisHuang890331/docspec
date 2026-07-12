@@ -174,7 +174,7 @@ def test_brief_valid_passes(make_project, write_leaf):
 
 def test_section_state_incomplete_is_developing(make_project, write_leaf):
     # 1.3：完整檔但必填欄空 → developing（不 ready、不擋寫）
-    from dspx.commands.status import section_state
+    from dspx.commands.query.status import section_state
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1, "concept": ""},
                decisions=[{"id": "d1", "kind": "normative", "status": "accepted", "statement": "s"}])
@@ -183,7 +183,7 @@ def test_section_state_incomplete_is_developing(make_project, write_leaf):
 
 
 def test_section_state_complete_is_ready(make_project, write_leaf):
-    from dspx.commands.status import section_state
+    from dspx.commands.query.status import section_state
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "real",
                                      "brief": {"audience": "a", "depth": "d", "breadth": "b"}},

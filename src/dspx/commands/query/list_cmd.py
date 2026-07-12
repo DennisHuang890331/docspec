@@ -8,7 +8,7 @@ import sys
 
 from dspx.check import run_check
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.commands.status import develop_only_sections, section_state
+from dspx.commands.query.status import develop_only_sections, section_state
 
 NAME = "list"
 HELP = "List the corpus's articles, leaf sections, and group nodes"

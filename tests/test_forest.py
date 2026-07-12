@@ -7,7 +7,7 @@ import yaml
 
 from dspx.aperture import project
 from dspx.check import run_check
-from dspx.commands import show as show_cmd
+from dspx.commands.query import show as show_cmd
 from dspx.crossref import build_reverse_indices
 from dspx.forest import forest_view
 from dspx.layout import Layout
@@ -141,7 +141,7 @@ def test_map_only_develop(make_project, write_leaf):
 def test_develop_prints_forest_map(make_project, write_leaf, monkeypatch, capsys):
     home = _two_tree_governed(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
-    from dspx.commands import instructions as instr
+    from dspx.commands.projection import instructions as instr
     assert instr.run(["develop", "t2"]) == 0
     out = capsys.readouterr().out
     assert "Forest map" in out
@@ -177,7 +177,7 @@ def test_governed_by_adds_no_semantic_gate(make_project, write_leaf, monkeypatch
                            "statement": "用英制"}],
                develop="<!-- drained -->")
     monkeypatch.chdir(home.parent)
-    from dspx.commands import ready as ready_cmd
+    from dspx.commands.corpus import ready as ready_cmd
     assert ready_cmd.run(["t2"]) == 0
     assert not (home / "corpus" / "t2" / "develop.md").exists()
 
@@ -329,7 +329,7 @@ def test_develop_forest_map_prints_anchors_and_catalogue_hint(make_project, writ
     """6.2：instructions develop 的 Forest map 印 anchor 行＋目錄指引；非 develop 不投。"""
     home = _anchor_forest(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
-    from dspx.commands import instructions as instr
+    from dspx.commands.projection import instructions as instr
     assert instr.run(["develop", "b"]) == 0
     out = capsys.readouterr().out
     assert "    anchor: c-a-root — A根  (a)" in out
@@ -463,7 +463,7 @@ def test_develop_forest_map_prints_uncrystallized_note_and_cycle_warning(
                                           "governed-by": ["c-t3"]})
     (home / "corpus" / "wip" / "group.yaml").write_text("title: 施工中文件\n", encoding="utf-8")
     monkeypatch.chdir(home.parent)
-    from dspx.commands import instructions as instr
+    from dspx.commands.projection import instructions as instr
     assert instr.run(["develop", "t3"]) == 0
     out = capsys.readouterr().out
     assert "[wip] 施工中文件  (root not yet crystallized)" in out

@@ -32,9 +32,9 @@ import sys
 
 import yaml
 
-from dspx.commands import mv as mv_cmd
+from dspx.commands.corpus import mv as mv_cmd
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.commands.new import _ILLEGAL_CHARS, _segment_error
+from dspx.commands.corpus.new import _ILLEGAL_CHARS, _segment_error
 from dspx.lint import _TITLE_ARABIC_PREFIX_RE, brief_dup_fields
 
 NAME = "tidy"

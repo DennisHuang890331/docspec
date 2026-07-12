@@ -421,7 +421,7 @@ def _cmd_archive(argv: list[str]) -> int:
     if args.abandon:
         return _abandon(layout, change, args.reason)
 
-    from dspx.commands.change_archive import run_archive
+    from dspx.commands.change.change_archive import run_archive
     return run_archive(layout, schema, change, override_drift=args.override_drift)
 
 

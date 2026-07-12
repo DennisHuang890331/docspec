@@ -164,7 +164,7 @@ def run_archive(layout, schema, change: "chg.Change", *, override_drift: bool = 
 def _silently_absorbed_downstream(layout, schema, articles: set, target_sections: set) -> list:
     """★2.2：收案落地上游後、rebaseline 前，哪些**非本單 target** 的下游節現在 stale？
     這些節接著會被 rebaseline 靜默重戳 synced（未經本次顯式復驗）。回 [(section, sync)]。"""
-    from dspx.commands.status import _docs_hashes, _leaf_row
+    from dspx.commands.query.status import _docs_hashes, _leaf_row
     from dspx.model import decision_index, load_project
     leaves = load_project(layout)
     by = {lf.section: lf for lf in leaves}
@@ -203,7 +203,7 @@ def _run_move(layout, schema, t: "chg.Target", leaves) -> int:
         sys.stderr.write(f"docspec: move target \"{t.ref}\" has no --dest; cannot mv.\n")
         return 1
     section = chg.section_of_ref(t.ref, leaves) or t.ref
-    from dspx.commands.mv import _run_section_mode
+    from dspx.commands.corpus.mv import _run_section_mode
     return _run_section_mode(layout, schema, section, t.dest)
 
 

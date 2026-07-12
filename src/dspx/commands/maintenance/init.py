@@ -317,7 +317,7 @@ def run(argv: list[str]) -> int:
         gitattributes.write_text(_GITATTRIBUTES_TEMPLATE, encoding="utf-8", newline="\n")
 
     # 載入/刷新 skill 到選定 agent（重 init＝刷新，force 覆寫舊 skill 檔）
-    from dspx.commands.skills_cmd import _install
+    from dspx.commands.maintenance.skills_cmd import _install
     from dspx.skills import SkillError
     try:
         _install(project_root, tools, force=True)
@@ -427,7 +427,7 @@ def _tex_env_hint_reason() -> str | None:
     if lock is None:
         return "typesetting environment not set up yet"
     try:
-        from dspx.commands.setup import _MANIFEST
+        from dspx.commands.maintenance.setup import _MANIFEST
     except Exception:  # noqa: BLE001
         return None
     declared_tag = lock.get("tinytex_tag")

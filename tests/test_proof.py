@@ -13,7 +13,7 @@ import pytest
 
 from dspx import paths
 from dspx.commands import export as export_cmd
-from dspx.commands import proof as proof_cmd
+from dspx.commands.export import proof as proof_cmd
 from dspx.layout import Layout
 
 _HAVE_PANDOC = export_cmd._pandoc_path() is not None

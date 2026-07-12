@@ -13,8 +13,8 @@ import pytest
 import yaml
 
 from dspx import store as st
-from dspx.commands import render as render_cmd
-from dspx.commands import store as store_cmd
+from dspx.commands.deliverable import render as render_cmd
+from dspx.commands.corpus import store as store_cmd
 from dspx.layout import Layout
 from dspx.model import (ancestor_brief_fingerprint, ancestor_normative_fingerprint,
                         decision_index, deps_fingerprint, leaf_from_dir, load_project)
@@ -337,7 +337,7 @@ def test_structured_swap_leaves_bystanders_byte_identical():
 def _run_guard(monkeypatch, payload):
     import io
     import json
-    from dspx.commands import hook as hook_cmd
+    from dspx.commands._internal import hook as hook_cmd
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
     monkeypatch.setattr("sys.stdin.isatty", lambda: False, raising=False)
     return hook_cmd.run(["guard"])
@@ -386,9 +386,9 @@ def _section_block(text: str, path: str) -> str:
 def test_store_new_ready_workbench_lifecycle(make_project, monkeypatch, tmp_path):
     """store 篇的 develop 工作台 lifecycle：new→work/ 建 develop.md（不進 corpus）→ put concept
     結晶進 store 記錄 → ready 刪 work/ 的 develop.md。簽章不變、backend 路由。"""
-    from dspx.commands import new as new_cmd
-    from dspx.commands import put as put_cmd
-    from dspx.commands import ready as ready_cmd
+    from dspx.commands.corpus import new as new_cmd
+    from dspx.commands.corpus import put as put_cmd
+    from dspx.commands.corpus import ready as ready_cmd
     home = make_project()
     _wl(home, "g", concept={"id": "c-root", "title": "根", "order": 1})
     monkeypatch.chdir(home.parent)
@@ -416,8 +416,8 @@ def test_store_new_ready_workbench_lifecycle(make_project, monkeypatch, tmp_path
 
 def test_store_mv_and_retire_guarded(make_project, monkeypatch, capsys):
     """mv/retire-section 對 store 篇＝誠實 fail-loud（結構化記錄搬移/退場為 Phase-C 後續），指路 store dump。"""
-    from dspx.commands import mv as mv_cmd
-    from dspx.commands import retire_section as retire_cmd
+    from dspx.commands.corpus import mv as mv_cmd
+    from dspx.commands.corpus import retire_section as retire_cmd
     home = make_project()
     _wl(home, "g", concept={"id": "c-root", "title": "根", "order": 1})
     _wl(home, "g/intro", concept={"id": "c-in", "title": "簡介", "order": 2})
@@ -432,8 +432,8 @@ def test_store_mv_and_retire_guarded(make_project, monkeypatch, capsys):
 
 def test_store_get_put_roundtrip(make_project, monkeypatch, tmp_path, capsys):
     """get/put 對 store 篇：get 從記錄吐內容（非空骨架）、put 寫回正式 store 記錄。"""
-    from dspx.commands import get as get_cmd
-    from dspx.commands import put as put_cmd
+    from dspx.commands.corpus import get as get_cmd
+    from dspx.commands.corpus import put as put_cmd
     home = make_project()
     _wl(home, "g/intro", concept={"id": "c-in", "title": "簡介", "order": 1},
         material="原材料內容\n")

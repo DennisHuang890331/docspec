@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import yaml
 
-from dspx.commands import check as check_cmd
-from dspx.commands import lint as lint_cmd
-from dspx.commands import new as new_cmd
-from dspx.commands import publish as publish_cmd
-from dspx.commands import ready as ready_cmd
-from dspx.commands import retire as retire_cmd
+from dspx.commands.query import check as check_cmd
+from dspx.commands.query import lint as lint_cmd
+from dspx.commands.corpus import new as new_cmd
+from dspx.commands.deliverable import publish as publish_cmd
+from dspx.commands.corpus import ready as ready_cmd
+from dspx.commands.corpus import retire as retire_cmd
 
 
 def _entries(path):
@@ -25,7 +25,7 @@ def test_instructions_apply_projects_authoring_three_blocks(make_project, write_
     規則住 schema 的 authoring 塊、被投影；skill 只錨。"""
     import json
 
-    from dspx.commands import instructions as instr_cmd
+    from dspx.commands.projection import instructions as instr_cmd
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     monkeypatch.chdir(home.parent)
@@ -80,7 +80,7 @@ def test_new_scaffolds_develop_only(make_project, monkeypatch):
 def test_new_then_instructions_on_uncrystallized(make_project, monkeypatch, capsys):
     """未結晶節（只有 develop.md）也能投影；concept 模板的 id/order 已填好供結晶。"""
     import json
-    from dspx.commands import instructions as instr
+    from dspx.commands.projection import instructions as instr
     home = make_project()
     monkeypatch.chdir(home.parent)
     new_cmd.run(["g/a"])
@@ -156,7 +156,7 @@ def test_ready_refuses_uncrystallized(make_project, monkeypatch):
 
 def test_show_decision_and_concept_payload(make_project, write_leaf, monkeypatch, capsys):
     import json
-    from dspx.commands import show
+    from dspx.commands.query import show
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "one-liner",
                                       "brief": {"audience": "a", "depth": "d", "breadth": "b"}},
@@ -173,7 +173,7 @@ def test_show_decision_and_concept_payload(make_project, write_leaf, monkeypatch
 
 def test_retired_lists_active_decision_retirements(make_project, write_leaf, monkeypatch, capsys):
     import json
-    from dspx.commands import retired as retired_cmd
+    from dspx.commands.corpus import retired as retired_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1},
                history=[{"id": "d-old", "kind": "normative", "status": "superseded",
@@ -187,8 +187,8 @@ def test_retired_lists_active_decision_retirements(make_project, write_leaf, mon
 def test_show_addresses_dead_decision_in_place(make_project, write_leaf, monkeypatch, capsys):
     """contract-slimming D3：死決策留原 decisions.yaml、就地可 show（不搬 history.yaml）。"""
     import json
-    from dspx.commands import retire as retire_cmd
-    from dspx.commands import show
+    from dspx.commands.corpus import retire as retire_cmd
+    from dspx.commands.query import show
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1},
                decisions=[{"id": "d-old", "kind": "normative", "status": "deprecated",
@@ -204,7 +204,7 @@ def test_show_addresses_dead_decision_in_place(make_project, write_leaf, monkeyp
 
 
 def test_show_unknown_id(make_project, monkeypatch):
-    from dspx.commands import show
+    from dspx.commands.query import show
     home = make_project()
     monkeypatch.chdir(home.parent)
     assert show.run(["ghost", "--json"]) == 1
@@ -213,7 +213,7 @@ def test_show_unknown_id(make_project, monkeypatch):
 def test_show_glossary_term_drilldown(make_project, write_leaf, monkeypatch, capsys):
     """glossary term id → show 回完整 record（含 definition/english）——精瘦索引的下鑽。"""
     import json
-    from dspx.commands import show
+    from dspx.commands.query import show
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
     (home / "glossary.yaml").write_text(yaml.safe_dump({"terms": [
@@ -232,7 +232,7 @@ def test_show_glossary_term_drilldown(make_project, write_leaf, monkeypatch, cap
 
 def test_instructions_glossary_block_is_lean(make_project, write_leaf, monkeypatch, capsys):
     """instructions draft 的術語段＝精瘦索引：含 canonical/bucket/forbidden，不含 definition/english 文字。"""
-    from dspx.commands import instructions as instr_cmd
+    from dspx.commands.projection import instructions as instr_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
     (home / "glossary.yaml").write_text(yaml.safe_dump({"terms": [
@@ -255,7 +255,7 @@ def test_instructions_glossary_block_is_lean(make_project, write_leaf, monkeypat
 
 def test_instructions_backstage_projections_warn_against_narration(make_project, write_leaf, monkeypatch, capsys):
     """報幕防漏：brief / coverage / coherence / ancestor 投影都帶『別唸進交付物』後台警告。"""
-    from dspx.commands import instructions as instr_cmd
+    from dspx.commands.projection import instructions as instr_cmd
     home = make_project()
     write_leaf(home, "art", concept={"id": "root", "title": "Art", "order": 1, "concept": "x",
                                      "brief": {"audience": "a", "depth": "d", "breadth": "b"}},
@@ -287,7 +287,7 @@ def test_instructions_backstage_projections_warn_against_narration(make_project,
 def test_instructions_writing_guide_precedes_sections_with_tail_pointer(make_project, write_leaf, monkeypatch, capsys):
     """F-edit-projection-too-large：writing guide（風格權威）印在大宗逐節內容之前（緊接 header），
     輸出最末一行回指它——巨量/被截尾的投影從頭從尾都找得到；只調順序、無截斷機制。"""
-    from dspx.commands import instructions as instr_cmd
+    from dspx.commands.projection import instructions as instr_cmd
     home = make_project()
     (home / "writing-guide.md").write_text("# Writing guide\n\n風格權威哨兵句。\n", encoding="utf-8")
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
@@ -306,7 +306,7 @@ def _write_roadmap_file(path, entries):
 
 def test_instructions_develop_prints_roadmap(make_project, write_leaf, monkeypatch, capsys):
     """develop 投影印「待辦（roadmap）」段（本文件＋forest）；draft 不印。"""
-    from dspx.commands import instructions as instr_cmd
+    from dspx.commands.projection import instructions as instr_cmd
     home = make_project()
     write_leaf(home, "art", concept={"id": "c-art", "title": "Art", "order": 1,
                                      "concept": "x", "brief": {"audience": "a"}})
@@ -329,7 +329,7 @@ def test_instructions_develop_prints_roadmap(make_project, write_leaf, monkeypat
 
 def test_guide_projects_workflow_and_artifacts(make_project, monkeypatch, capsys):
     import json
-    from dspx.commands import guide
+    from dspx.commands.projection import guide
     home = make_project()
     monkeypatch.chdir(home.parent)
     assert guide.run(["--json"]) == 0
@@ -351,7 +351,7 @@ def test_guide_projects_workflow_and_artifacts(make_project, monkeypatch, capsys
 
 def test_instructions_emits_required_fields(make_project, monkeypatch, capsys):
     import json
-    from dspx.commands import instructions as instr
+    from dspx.commands.projection import instructions as instr
     home = make_project()
     monkeypatch.chdir(home.parent)
     new_cmd.run(["g/a"])
@@ -368,7 +368,7 @@ def test_instructions_emits_required_fields(make_project, monkeypatch, capsys):
 def test_factcheck_gets_ancestor_normative(make_project, write_leaf, monkeypatch, capsys):
     # P3-lite：引擎把祖先鏈 normative 決策當非阻塞供料餵給 factcheck
     import json
-    from dspx.commands import instructions as instr
+    from dspx.commands.projection import instructions as instr
     home = make_project()
     write_leaf(home, "art", concept={"id": "root", "title": "Art", "order": 1, "concept": "x",
                                       "brief": {"audience": "a", "depth": "d", "breadth": "b"}},
@@ -389,7 +389,7 @@ def test_factcheck_gets_ancestor_normative(make_project, write_leaf, monkeypatch
 
 def test_list_json_includes_concept_and_status(make_project, write_leaf, monkeypatch, capsys):
     import json
-    from dspx.commands import list_cmd
+    from dspx.commands.query import list_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "the one-liner"},
                decisions=[{"id": "d1", "kind": "normative", "status": "accepted", "statement": "s"}])
@@ -405,7 +405,8 @@ def test_list_shows_develop_only_sections(make_project, monkeypatch, capsys):
     """只有 develop.md（未結晶）的節：status 看得到，list 也要看得到（同 liveness 判準），
     不可誤報 Corpus is empty。"""
     import json
-    from dspx.commands import list_cmd, new as new_cmd
+    from dspx.commands.query import list_cmd
+    from dspx.commands.corpus import new as new_cmd
     home = make_project()
     monkeypatch.chdir(home.parent)
     new_cmd.run(["g/intro"])                      # 只建 develop.md、未結晶
@@ -421,7 +422,7 @@ def test_list_shows_develop_only_sections(make_project, monkeypatch, capsys):
 
 
 def test_hook_postcheck_flags_incomplete(make_project, write_leaf, monkeypatch):
-    from dspx.commands import hook
+    from dspx.commands._internal import hook
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": ""})
     monkeypatch.chdir(home.parent)
@@ -431,7 +432,7 @@ def test_hook_postcheck_flags_incomplete(make_project, write_leaf, monkeypatch):
 
 
 def test_hook_postcheck_passes_complete(make_project, write_leaf, monkeypatch):
-    from dspx.commands import hook
+    from dspx.commands._internal import hook
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "real"})
     monkeypatch.chdir(home.parent)
@@ -440,7 +441,7 @@ def test_hook_postcheck_passes_complete(make_project, write_leaf, monkeypatch):
 
 
 def test_hook_postcheck_never_disturbs(tmp_path):
-    from dspx.commands import hook
+    from dspx.commands._internal import hook
     # 非 corpus 檔 / 不在專案 / 壞輸入 → 一律放行 0，絕不干擾 agent
     assert hook._postcheck({"tool_input": {"file_path": str(tmp_path / "x.txt")}}) == 0
     assert hook._postcheck({"tool_input": {"file_path": str(tmp_path / "concept.yaml")}}) == 0
@@ -513,7 +514,7 @@ def test_lint_v3_allows_domain_notation_flags_scaffold(make_project, write_leaf,
 
 
 def test_publish_gate_and_staleness(make_project, write_leaf, monkeypatch):
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1},
                decisions=[{"id": "d1", "kind": "normative", "status": "accepted", "statement": "規"}])
@@ -536,7 +537,7 @@ def test_publish_gate_and_staleness(make_project, write_leaf, monkeypatch):
 
 
 def test_publish_aborts_on_dirty_docs(make_project, write_leaf, monkeypatch):
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "sec-leak", "title": "X", "order": 1})
     monkeypatch.chdir(home.parent)
@@ -552,7 +553,7 @@ def test_publish_aborts_on_dirty_docs(make_project, write_leaf, monkeypatch):
 # ── C2：publish i18n + 版本正確性 ──────────────────────────────────
 
 def _render_and_draft(home, monkeypatch, write_leaf, prose):
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
     monkeypatch.chdir(home.parent)
     docs = home.parent / "docs" / "g"
@@ -650,7 +651,7 @@ def test_publish_dry_run_red_lint_prints_consolidated_report(make_project, write
                                                              monkeypatch, capsys):
     """8.1b：lint ERROR → exit 1、零寫入，且**彙總報告照印**（含 lint fail 行＋其餘閘行；
     舊單閘 abort 訊息不出現＝分支點在既有閘區塊之前）。"""
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "sec-leak", "title": "X", "order": 1})
     monkeypatch.chdir(home.parent)
@@ -674,7 +675,7 @@ def test_publish_dry_run_red_lint_prints_consolidated_report(make_project, write
 
 def test_publish_dry_run_no_prose_is_nogo(make_project, write_leaf, monkeypatch, capsys):
     """8.1c：零散文 → coverage 閘 fail、exit 1。"""
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
     monkeypatch.chdir(home.parent)

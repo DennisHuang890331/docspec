@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from dspx.check import run_check  # noqa: F401  (keep parity with sibling test imports)
-from dspx.commands import render as render_cmd
+from dspx.commands.deliverable import render as render_cmd
 from dspx.layout import Layout
 from dspx.lint import ERROR, WARN, run_lint
 from dspx.model import load_project

@@ -24,7 +24,7 @@ import yaml
 from dspx import change as chg
 from dspx.check import run_file_check
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
-from dspx.commands.new import _next_order, _stable_id, validate_section_path
+from dspx.commands.corpus.new import _next_order, _stable_id, validate_section_path
 from dspx.model import Leaf, ModelError, _DupCheckLoader, _entries
 
 NAME = "put"

@@ -9,9 +9,9 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from dspx.commands import render as render_cmd
-from dspx.commands import retire_section as rs_cmd
-from dspx.commands import status as status_cmd
+from dspx.commands.deliverable import render as render_cmd
+from dspx.commands.corpus import retire_section as rs_cmd
+from dspx.commands.query import status as status_cmd
 from dspx.config import ConfigError, load_config
 from dspx.layout import Layout
 

@@ -11,13 +11,13 @@ import json
 
 import yaml
 
-from dspx.commands import check as check_cmd
-from dspx.commands import lint as lint_cmd
-from dspx.commands import list_cmd
-from dspx.commands import new as new_cmd
-from dspx.commands import ready as ready_cmd
-from dspx.commands import show as show_cmd
-from dspx.commands import status as status_cmd
+from dspx.commands.query import check as check_cmd
+from dspx.commands.query import lint as lint_cmd
+from dspx.commands.query import list_cmd
+from dspx.commands.corpus import new as new_cmd
+from dspx.commands.corpus import ready as ready_cmd
+from dspx.commands.query import show as show_cmd
+from dspx.commands.query import status as status_cmd
 
 def _dec(the_id: str) -> list[dict]:
     return [{"id": the_id, "kind": "normative", "status": "accepted", "statement": "規"}]

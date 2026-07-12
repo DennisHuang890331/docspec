@@ -30,7 +30,7 @@ import urllib.request
 from pathlib import Path
 
 from dspx import __version__, paths
-from dspx.commands import setup as setup_cmd
+from dspx.commands.maintenance import setup as setup_cmd
 
 NAME = "doctor"
 HELP = "Diagnose the typesetting environment (read-only, offline; each item OK/WARN/FAIL + a fix command; any FAIL → non-zero exit code)"

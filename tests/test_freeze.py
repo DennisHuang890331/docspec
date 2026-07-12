@@ -8,7 +8,7 @@ import json
 import pytest
 
 from dspx import freeze
-from dspx.commands import hook as hook_cmd
+from dspx.commands._internal import hook as hook_cmd
 
 
 def test_is_frozen_path():
@@ -78,7 +78,7 @@ def test_hook_guard_allows_latest_write(monkeypatch):
     "Set-Content -Path docs/g/archive/v1.md -Value x",  # PowerShell 寫
 ])
 def test_command_modifies_archive_blocks(command):
-    from dspx.commands.hook import _command_modifies_archive
+    from dspx.commands._internal.hook import _command_modifies_archive
     assert _command_modifies_archive(command) is True, command
 
 
@@ -91,7 +91,7 @@ def test_command_modifies_archive_blocks(command):
     "diff docs/g/archive/v1.md docs/g/_latest.md",  # 比對
 ])
 def test_command_leaves_archive_alone_allows(command):
-    from dspx.commands.hook import _command_modifies_archive
+    from dspx.commands._internal.hook import _command_modifies_archive
     assert _command_modifies_archive(command) is False, command
 
 
@@ -112,7 +112,7 @@ def test_hook_guard_blocks_on_bad_json(monkeypatch):
 
 
 def test_claude_install_writes_freeze_hook(tmp_path):
-    from dspx.commands.skills_cmd import _install
+    from dspx.commands.maintenance.skills_cmd import _install
     _install(tmp_path, ("claude",), force=True)
     settings = tmp_path / ".claude" / "settings.json"
     assert settings.is_file()
@@ -130,7 +130,7 @@ def test_claude_install_writes_freeze_hook(tmp_path):
 
 
 def test_claude_install_preserves_existing_settings(tmp_path):
-    from dspx.commands.skills_cmd import _install
+    from dspx.commands.maintenance.skills_cmd import _install
     settings = tmp_path / ".claude" / "settings.json"
     settings.parent.mkdir(parents=True)
     settings.write_text(json.dumps({"permissions": {"allow": ["Bash(ls)"]}}), encoding="utf-8")

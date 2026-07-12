@@ -102,7 +102,7 @@ def test_filing_rules_carry_sibling_dependency_via_realizes(make_project, monkey
     由 guide 投影（鐵律2：規則住 schema、被投影，不散落散文）。"""
     import json as _json
 
-    from dspx.commands import guide
+    from dspx.commands.projection import guide
 
     s = load_schema()
     ids = {r.get("id") for r in s.filing_rules}

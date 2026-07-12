@@ -56,7 +56,7 @@ def test_check_catches_bad_glossary(make_project, write_leaf):
 
 
 def test_lint_vg1_forbidden_alias(make_project, write_leaf, monkeypatch):
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
     _set_glossary(home, [{"id": "rmm", "canonical": "風險估測與異常監測系統",
@@ -78,7 +78,7 @@ def test_lint_vg1_forbidden_alias(make_project, write_leaf, monkeypatch):
 
 def _render_with_insert(make_project, write_leaf, monkeypatch, terms, insert):
     """建專案＋glossary＋render，把 insert 塞進交付物，回傳 findings。"""
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
     _set_glossary(home, terms)
@@ -139,7 +139,7 @@ def test_validate_alias_overlapping_other_term_canonical_ok():
 
 def test_lint_vg2_suppressed_when_canonical_localized(make_project, write_leaf, monkeypatch):
     """canonical 已在文中出現（首用已在地化）→ 後續裸用縮寫不再每次誤報 Vg2。"""
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
     _set_glossary(home, [{"id": "rmm", "canonical": "風險估測與異常監測系統",

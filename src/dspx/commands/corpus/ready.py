@@ -147,7 +147,7 @@ def run(argv: list[str]) -> int:
             leaves = load_model(layout)
         except BootstrapError as exc:
             return exc.exit_code
-        from dspx.commands.status import develop_only_sections
+        from dspx.commands.query.status import develop_only_sections
         dev_only = develop_only_sections(layout, {lf.section for lf in leaves})
         art_leaf_sections = sorted(lf.section for lf in leaves if lf.article == section)
         art_dev_only = sorted(s for s in dev_only if s.split("/", 1)[0] == section)

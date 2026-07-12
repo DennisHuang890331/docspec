@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import json
 
-from dspx.commands import render as render_cmd
-from dspx.commands import show as show_cmd
-from dspx.commands.status import _docs_hashes, _leaf_row
+from dspx.commands.deliverable import render as render_cmd
+from dspx.commands.query import show as show_cmd
+from dspx.commands.query.status import _docs_hashes, _leaf_row
 from dspx.crossref import build_reverse_indices
 from dspx.layout import Layout
 from dspx.model import ancestor_leaves, decision_index, load_project

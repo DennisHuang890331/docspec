@@ -384,7 +384,7 @@ def test_mark_done_unknown_id_raises(make_project, write_leaf):
 
 
 def test_roadmap_done_command_end_to_end(make_project, write_leaf, monkeypatch, capsys):
-    from dspx.commands import roadmap as roadmap_cmd
+    from dspx.commands.governance import roadmap as roadmap_cmd
 
     home = make_project()
     write_leaf(home, "art", concept=_root_concept("c-art", "Art"))

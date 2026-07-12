@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 from dspx.check import run_check
-from dspx.commands import render as render_cmd
+from dspx.commands.deliverable import render as render_cmd
 from dspx.layout import Layout
 from dspx.lint import run_lint
 from dspx.model import load_project
@@ -100,7 +100,7 @@ def test_vr2_clean_collapsed_promoted_entry_no_warn(make_project, write_leaf):
 
 def test_vr3_roadmap_audit_mirror_warns(make_project, write_leaf, monkeypatch):
     """entry.what 散文引用一條仍全文開放的 finding id → 雙帳鏡像 WARN。"""
-    from dspx.commands import audit as audit_cmd
+    from dspx.commands.governance import audit as audit_cmd
     home = make_project()
     _root(home, write_leaf)
     monkeypatch.chdir(home.parent)
@@ -114,7 +114,7 @@ def test_vr3_roadmap_audit_mirror_warns(make_project, write_leaf, monkeypatch):
 
 
 def test_vr3_no_mirror_when_finding_closed(make_project, write_leaf, monkeypatch):
-    from dspx.commands import audit as audit_cmd
+    from dspx.commands.governance import audit as audit_cmd
     home = make_project()
     _root(home, write_leaf)
     monkeypatch.chdir(home.parent)

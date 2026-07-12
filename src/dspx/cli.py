@@ -56,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         print(_help_text(show_all=True))
         return 0
     if args[0] in ("-V", "--version"):
-        from dspx.commands import version as version_cmd
+        from dspx.commands.maintenance import version as version_cmd
         print(version_cmd.report())
         return 0
 

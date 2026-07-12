@@ -103,7 +103,7 @@ def _apply_mode(layout, schema, leaves, section: str) -> dict | None:
     """instructions apply <section> 的模式投影：change 內由 target action 選、change 外由
     staleness 型別選（同一套路由住 apply 內部，不外漏尾表）。回 {mode, verb, reason} 或 None。"""
     from dspx import change as chg
-    from dspx.commands.status import compute_sync
+    from dspx.commands.query.status import compute_sync
 
     by_section = {lf.section: lf for lf in leaves}
     leaf = by_section.get(section)

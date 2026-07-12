@@ -167,7 +167,7 @@ def _write_lock(tlmgr: Path | None, xelatex: Path | None, packages: list[str],
                 drawio: str | None = None) -> None:
     # 透過套件頂層取得可被 monkeypatch 的名字（各 manifest／_drawio_version／
     # _platform_key）——確保測試對 `setup_cmd.X` 的 patch 對這裡的呼叫生效。
-    from dspx.commands import setup as _pkg
+    from dspx.commands.maintenance import setup as _pkg
     lock = {
         "tinytex_tag": _pkg._MANIFEST["tag"],
         "pandoc_tag": _pkg._PANDOC_MANIFEST["tag"],

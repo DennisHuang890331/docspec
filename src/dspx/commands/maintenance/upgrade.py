@@ -18,7 +18,7 @@ import platform
 import sys
 
 from dspx import paths
-from dspx.commands import setup as setup_cmd
+from dspx.commands.maintenance import setup as setup_cmd
 
 NAME = "upgrade"
 HELP = ("(assets only — for the program itself: uv tool upgrade docspec / reinstall from git) "

@@ -12,7 +12,7 @@ import pytest
 
 from dspx import paths
 from dspx.commands import export as export_cmd
-from dspx.commands import template_cmd
+from dspx.commands.export import template_cmd
 from dspx.commands.export._config import _PANDOC_FROM
 from dspx.commands.export._pack_gate import _check_pack_integrity
 from dspx.commands.export._preprocess import _denumber_manual_headings

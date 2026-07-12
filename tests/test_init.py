@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dspx.commands import init as init_cmd
+from dspx.commands.maintenance import init as init_cmd
 from dspx.config import load_config
 
 

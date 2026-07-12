@@ -7,9 +7,9 @@ from pathlib import Path
 
 import yaml
 
-from dspx.commands import redraft as redraft_cmd
-from dspx.commands import render as render_cmd
-from dspx.commands import stale as stale_cmd
+from dspx.commands.deliverable import redraft as redraft_cmd
+from dspx.commands.deliverable import render as render_cmd
+from dspx.commands.deliverable import stale as stale_cmd
 from dspx.layout import Layout
 from dspx.render import parse_section_bodies, read_ledger, verdicts_path
 
@@ -37,7 +37,7 @@ def _write_prose(home, article, heading, prose):
 
 def _sync_of(home, article, section):
     """重算某節 sync 狀態（同 status._leaf_row 邏輯）。"""
-    from dspx.commands.status import _docs_hashes, _leaf_row
+    from dspx.commands.query.status import _docs_hashes, _leaf_row
     from dspx.model import decision_index, load_project
     from dspx.schema import load_schema
     layout = Layout(home)
@@ -454,7 +454,7 @@ def test_verdict_commands_registered_agent_facing():
 
 def test_guide_projects_verdict_verbs_and_whitelist(tmp_path, write_leaf, monkeypatch, capsys):
     """docspec guide 投影裁決動詞與 ack-own 白名單（schema workflow.skills steps）。"""
-    from dspx.commands import guide as guide_cmd
+    from dspx.commands.projection import guide as guide_cmd
     home = _project(tmp_path, "p1", write_leaf)
     monkeypatch.chdir(home.parent)
     assert guide_cmd.run([]) == 0

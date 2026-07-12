@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import yaml
 
-from dspx.commands import render as render_cmd
+from dspx.commands.deliverable import render as render_cmd
 from dspx.layout import Layout
 from dspx.model import decision_index, load_project
 from dspx.render import (
@@ -56,7 +56,7 @@ def _put_prose(home, article, section, prose):
 
 
 def _sync_of(home, article, section):
-    from dspx.commands.status import _docs_hashes, _leaf_row
+    from dspx.commands.query.status import _docs_hashes, _leaf_row
     layout = Layout(home)
     leaves = load_project(layout)
     by = {lf.section: lf for lf in leaves}
@@ -293,7 +293,7 @@ def test_strip_anchor_bindings_keeps_visible_number():
 
 def test_publish_snapshot_has_no_binding_comments(make_project, write_leaf, monkeypatch):
     """真 publish：凍結快照含可見號碼、零 `<!--@…-->` 綁定痕跡。"""
-    from dspx.commands import publish as publish_cmd
+    from dspx.commands.deliverable import publish as publish_cmd
     home = _three_section_project(make_project, write_leaf, monkeypatch)
     # 補齊晉升所需欄位（concept/brief）讓 publish 過閘
     for sec, cid, title, order in [("g/a", "sec-a", "甲", 1), ("g/b", "sec-b", "乙", 2),

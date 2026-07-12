@@ -5,8 +5,8 @@ from __future__ import annotations
 import yaml
 
 from dspx.aperture import project
-from dspx.commands import render as render_cmd
-from dspx.commands.status import _docs_hashes, _leaf_row
+from dspx.commands.deliverable import render as render_cmd
+from dspx.commands.query.status import _docs_hashes, _leaf_row
 from dspx.crossref import build_reverse_indices
 from dspx.layout import Layout
 from dspx.model import decision_index, load_project

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import yaml
 
-from dspx.commands import lint as lint_cmd
-from dspx.commands import publish as publish_cmd
-from dspx.commands import render as render_cmd
+from dspx.commands.query import lint as lint_cmd
+from dspx.commands.deliverable import publish as publish_cmd
+from dspx.commands.deliverable import render as render_cmd
 from dspx.frontmatter import parse_frontmatter
 from dspx.render import MARKER_RE, strip_markers
 
@@ -117,7 +117,7 @@ def test_status_synced_after_draft_and_render(make_project, write_leaf, monkeypa
         latest.read_text(encoding="utf-8").replace("## 1. 概覽\n", "## 1. 概覽\n\n內文。\n"),
         encoding="utf-8")
     render_cmd.run(["g"])
-    from dspx.commands.status import _docs_hashes
+    from dspx.commands.query.status import _docs_hashes
     from dspx.layout import Layout
     from dspx.model import load_project
     layout = Layout(home)
@@ -128,8 +128,8 @@ def test_status_synced_after_draft_and_render(make_project, write_leaf, monkeypa
 
 def test_two_flavor_staleness(make_project, write_leaf, monkeypatch):
     """父 brief 改→子節 stale-inherited；子節自己改→stale-own。"""
-    from dspx.commands import render as render_cmd
-    from dspx.commands.status import _docs_hashes, _leaf_row
+    from dspx.commands.deliverable import render as render_cmd
+    from dspx.commands.query.status import _docs_hashes, _leaf_row
     from dspx.layout import Layout
     from dspx.model import load_project
     home = make_project()
@@ -167,7 +167,7 @@ def test_two_flavor_staleness(make_project, write_leaf, monkeypatch):
 
 def test_diff_detects_hand_edit(make_project, write_leaf, monkeypatch):
     """手改 _latest 散文 → diff 抓到；重 render 後 → 不再漂移。"""
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     from dspx.layout import Layout
     from dspx.render import detect_drift
     home = _setup(make_project, write_leaf)
@@ -193,7 +193,7 @@ def test_diff_detects_hand_edit(make_project, write_leaf, monkeypatch):
 
 def test_root_section_is_intro(make_project, write_leaf, monkeypatch):
     """根節(section==article)＝# 標題＋導言；子節 ##；無重複純標題。"""
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     home = make_project()
     write_leaf(home, "guide", concept={"id": "root", "title": "指南", "order": 1})
     write_leaf(home, "guide/intro", concept={"id": "c1", "title": "簡介", "order": 1})
@@ -210,7 +210,7 @@ def test_root_section_is_intro(make_project, write_leaf, monkeypatch):
 
 def test_no_root_falls_back_to_humanized_title(make_project, write_leaf, monkeypatch):
     """A1：無根節 → 封面標題退回 humanize slug（非裸 slug）。"""
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     home = make_project()
     write_leaf(home, "guide/intro", concept={"id": "c1", "title": "簡介", "order": 1})
     monkeypatch.chdir(home.parent)
@@ -221,7 +221,7 @@ def test_no_root_falls_back_to_humanized_title(make_project, write_leaf, monkeyp
 
 def test_no_root_uses_article_group_yaml_title(make_project, write_leaf, monkeypatch):
     """A1：無根節 + corpus/<article>/group.yaml title → 封面在地化標題（治 CJK 文件冒拼音 slug）。"""
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     home = make_project()
     write_leaf(home, "guide/intro", concept={"id": "c1", "title": "簡介", "order": 1})
     (home / "corpus" / "guide" / "group.yaml").write_text("title: 系統概念\n", encoding="utf-8")
@@ -412,7 +412,7 @@ def test_publish_aborts_when_nothing_drafted(make_project, write_leaf, monkeypat
 
 def _sync_of(home, article, section):
     """重算某節的 sync 狀態（同 status._leaf_row 邏輯）。"""
-    from dspx.commands.status import _docs_hashes, _leaf_row
+    from dspx.commands.query.status import _docs_hashes, _leaf_row
     from dspx.layout import Layout
     from dspx.model import decision_index, load_project
     from dspx.schema import load_schema

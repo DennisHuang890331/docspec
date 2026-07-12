@@ -15,8 +15,8 @@ import json
 
 import yaml
 
-from dspx.commands import render as render_cmd
-from dspx.commands import status as status_cmd
+from dspx.commands.deliverable import render as render_cmd
+from dspx.commands.query import status as status_cmd
 from dspx.layout import Layout
 from dspx.model import (
     ancestor_normative_fingerprint,
@@ -35,7 +35,7 @@ def _latest(home, article="g"):
 
 def _row_of(home, article, section):
     """重算某節 status row（同 status._leaf_row；含 styleMoved 診斷欄）。"""
-    from dspx.commands.status import _docs_hashes, _leaf_row
+    from dspx.commands.query.status import _docs_hashes, _leaf_row
     from dspx.schema import load_schema
     layout = Layout(home)
     leaves = load_project(layout)
@@ -541,7 +541,7 @@ def test_rebaseline_migrates_v1_to_v2_in_one_shot(make_project, write_leaf, monk
 
 def test_stale_verb_refuses_v1_ledger(make_project, write_leaf, monkeypatch, capsys):
     """v1 帳本上 stale/redraft 拒跑（write_ledger 會蓋版本鍵＝把舊值謊稱 v2）。"""
-    from dspx.commands import stale as stale_cmd
+    from dspx.commands.deliverable import stale as stale_cmd
     home = _baseline(make_project, write_leaf, monkeypatch)
     _downgrade_ledger_to_v1(home)
     capsys.readouterr()

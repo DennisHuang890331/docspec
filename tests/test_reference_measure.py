@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from dspx.commands import measure_fonts as mf_cmd
-from dspx.commands import reference as ref_cmd
+from dspx.commands.export import measure_fonts as mf_cmd
+from dspx.commands.projection import reference as ref_cmd
 
 
 # ── docspec reference ─────────────────────────────────────────────

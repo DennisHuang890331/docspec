@@ -13,9 +13,9 @@ import yaml
 
 from dspx import change as chg
 from dspx import store as st
-from dspx.commands import change as change_cmd
-from dspx.commands import render as render_cmd
-from dspx.commands import store as store_cmd
+from dspx.commands.change import change as change_cmd
+from dspx.commands.deliverable import render as render_cmd
+from dspx.commands.corpus import store as store_cmd
 from dspx.layout import Layout
 from dspx.schema import load_schema
 
@@ -159,7 +159,7 @@ def test_g2_preview_seeded_only_changed_section_stale(make_project, write_leaf, 
     assert "The intro implements the metric rule." in ptext  # intro 舊散文仍在（源變、散文待改）
 
     # preview 側帳本：g 與 g/usage synced（seed），g/intro stale-own（源變）
-    from dspx.commands.status import _leaf_row
+    from dspx.commands.query.status import _leaf_row
     from dspx.model import decision_index
     pv_ledger = chg._read_preview_ledger(change, "g")
     union = chg.load_union(layout, change)
@@ -532,7 +532,7 @@ def test_check_rejects_dead_target_ref(make_project, write_leaf, monkeypatch):
 # ── 投影：status 概觀 / publish policy 閘 ──────────────────────────
 
 def test_status_shows_active_changes_overview(make_project, write_leaf, monkeypatch, capsys):
-    from dspx.commands import status as status_cmd
+    from dspx.commands.query import status as status_cmd
     home = _project(make_project, write_leaf)
     _render_baseline(home, monkeypatch)
     change_cmd.run(["new", "chg-x", "--publish", "advisory", "--title", "My change"])
@@ -545,7 +545,7 @@ def test_status_shows_active_changes_overview(make_project, write_leaf, monkeypa
 
 
 def test_instructions_shows_active_change_context(make_project, write_leaf, monkeypatch, capsys):
-    from dspx.commands import instructions as instr_cmd
+    from dspx.commands.projection import instructions as instr_cmd
     home = _project(make_project, write_leaf)
     _render_baseline(home, monkeypatch)
     change_cmd.run(["new", "chg-x", "--publish", "advisory", "--why", "switch units"])
@@ -562,7 +562,7 @@ def test_instructions_shows_active_change_context(make_project, write_leaf, monk
 
 
 def test_publish_release_bound_blocks(make_project, write_leaf, monkeypatch, capsys):
-    from dspx.commands import publish as publish_cmd
+    from dspx.commands.deliverable import publish as publish_cmd
     home = _project(make_project, write_leaf)
     _render_baseline(home, monkeypatch)
     change_cmd.run(["new", "chg-x", "--publish", "release-bound"])
@@ -574,7 +574,7 @@ def test_publish_release_bound_blocks(make_project, write_leaf, monkeypatch, cap
 
 
 def test_publish_advisory_warns_but_proceeds(make_project, write_leaf, monkeypatch, capsys):
-    from dspx.commands import publish as publish_cmd
+    from dspx.commands.deliverable import publish as publish_cmd
     home = _project(make_project, write_leaf)
     _render_baseline(home, monkeypatch)
     change_cmd.run(["new", "chg-x", "--publish", "advisory"])
@@ -620,7 +620,7 @@ def test_store_change_e2e_landing_bystander_byte_identical(make_project, write_l
     """★store 篇完整 change e2e ＋ landing P0：new→put 進 staging→render --change→rewrite→archive。
     收案後正式 store 的**非 target 節序列化 block 逐 byte 相等**（＋旁節記錄深等值雙保險）、target
     節記錄真換、official 於 staging 期 byte 凍結。這證明 change 層結構化 landing 真的保住旁節。"""
-    from dspx.commands import put as put_cmd
+    from dspx.commands.corpus import put as put_cmd
     home = _project(make_project, write_leaf, monkeypatch, backend="store")
     _render_baseline(home, monkeypatch)
     layout = Layout(home, "per-article")
@@ -675,7 +675,7 @@ def test_store_change_e2e_landing_bystander_byte_identical(make_project, write_l
 def test_store_put_routes_into_staging_official_frozen(make_project, write_leaf,
                                                        monkeypatch, tmp_path):
     """put <section> <cat> --change 對 store 篇：寫進 partial store staging、official store byte 凍結。"""
-    from dspx.commands import put as put_cmd
+    from dspx.commands.corpus import put as put_cmd
     home = _project(make_project, write_leaf, monkeypatch, backend="store")
     layout = Layout(home, "per-article")
     sp = st.store_path(layout, "g")
@@ -695,7 +695,7 @@ def test_store_put_routes_into_staging_official_frozen(make_project, write_leaf,
 
 def test_store_abandon_zero_residue(make_project, write_leaf, monkeypatch, tmp_path):
     """store 篇 abandon：official store byte 零變化、staging/preview 隨案卷搬走且無殘留。"""
-    from dspx.commands import put as put_cmd
+    from dspx.commands.corpus import put as put_cmd
     home = _project(make_project, write_leaf, monkeypatch, backend="store")
     _render_baseline(home, monkeypatch)
     layout = Layout(home, "per-article")
@@ -719,7 +719,7 @@ def test_store_abandon_zero_residue(make_project, write_leaf, monkeypatch, tmp_p
 
 def test_store_fork_drift_guard(make_project, write_leaf, monkeypatch, tmp_path, capsys):
     """store 篇 fork 守門：第三方零開單直改正式 store 同節分類 → fork hash 失配、archive 中止。"""
-    from dspx.commands import put as put_cmd
+    from dspx.commands.corpus import put as put_cmd
     home = _project(make_project, write_leaf, monkeypatch, backend="store")
     _render_baseline(home, monkeypatch)
     layout = Layout(home, "per-article")

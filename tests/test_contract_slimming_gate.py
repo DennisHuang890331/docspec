@@ -13,12 +13,12 @@ import pytest
 import yaml
 
 from dspx.check import run_check
-from dspx.commands import check as check_cmd
-from dspx.commands import ready as ready_cmd
-from dspx.commands import show as show_cmd
-from dspx.commands import status as status_cmd
-from dspx.commands.ready import _graduate
-from dspx.commands.status import section_state
+from dspx.commands.query import check as check_cmd
+from dspx.commands.corpus import ready as ready_cmd
+from dspx.commands.query import show as show_cmd
+from dspx.commands.query import status as status_cmd
+from dspx.commands.corpus.ready import _graduate
+from dspx.commands.query.status import section_state
 from dspx.layout import Layout
 from dspx.model import (
     ModelError,
@@ -90,7 +90,7 @@ def test_ready_graduates_without_decisions(make_project, write_leaf, monkeypatch
 
 def test_ready_missing_concept_still_refused(make_project, monkeypatch, capsys):
     """缺 concept.yaml 的拒絕維持原樣（concept 無合法空形狀）。"""
-    from dspx.commands import new as new_cmd
+    from dspx.commands.corpus import new as new_cmd
     home = make_project()
     monkeypatch.chdir(home.parent)
     new_cmd.run(["g/a"])                              # 只有 develop.md

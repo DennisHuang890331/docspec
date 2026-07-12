@@ -360,7 +360,7 @@ def test_document_map_follows_shared_outline_order_with_groups(make_project, wri
     assert by_sec["art/intro"]["kind"] == "leaf"
 
     # documentMap 列序＝render 交付物章節順序（同一共用排序器）
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     monkeypatch.chdir(home.parent)
     assert render_cmd.run(["art"]) == 0
     text = (home.parent / "docs" / "art" / "_latest.md").read_text(encoding="utf-8")
@@ -388,7 +388,7 @@ def test_instructions_draft_prints_group_row_without_you_are_here(make_project, 
     home = make_project()
     _ordered_group_corpus(home, write_leaf)
     monkeypatch.chdir(home.parent)
-    from dspx.commands import instructions as instr
+    from dspx.commands.projection import instructions as instr
     assert instr.run(["apply", "art/annex-b/ground"]) == 0
     out = capsys.readouterr().out
     group_line = next(ln for ln in out.splitlines() if "[group]" in ln)

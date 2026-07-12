@@ -6,7 +6,7 @@ import yaml
 
 from dspx.audit import load_doc_audit, load_forest_audit
 from dspx.check import run_check
-from dspx.commands import audit as audit_cmd
+from dspx.commands.governance import audit as audit_cmd
 from dspx.layout import Layout
 from dspx.model import load_project
 from dspx.schema import load_schema

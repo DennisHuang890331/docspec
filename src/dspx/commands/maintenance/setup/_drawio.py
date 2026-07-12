@@ -127,7 +127,7 @@ def _ensure_drawio(*, force: bool, no_download: bool, interactive: bool = False)
     # 透過套件頂層取得可被 monkeypatch 的名字（_pandoc_platform_key/_DRAWIO_MANIFEST/
     # _drawio_version/_check_linux_drawio_runtime/_download/_version_tuple）——確保測試
     # 對 `setup_cmd.X` 的 patch（含自身模組定義的 _drawio_version 等）對這裡的呼叫生效。
-    from dspx.commands import setup as _pkg
+    from dspx.commands.maintenance import setup as _pkg
     pkey = _pkg._pandoc_platform_key()
     manifest = _pkg._DRAWIO_MANIFEST
     if pkey is None or pkey not in manifest["assets"]:

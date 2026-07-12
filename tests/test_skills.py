@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dspx.commands import skills_cmd as skills_cmd
+from dspx.commands.maintenance import skills_cmd as skills_cmd
 from dspx.frontmatter import parse_frontmatter
 from dspx.skills import available_skills
 

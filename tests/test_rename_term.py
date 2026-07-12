@@ -8,8 +8,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dspx.commands import render as render_cmd
-from dspx.commands import rename_term as rt_cmd
+from dspx.commands.deliverable import render as render_cmd
+from dspx.commands.deliverable import rename_term as rt_cmd
 from dspx.layout import Layout
 from dspx.render import detect_drift
 

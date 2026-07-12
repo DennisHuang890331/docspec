@@ -965,7 +965,7 @@ def derive_change_status(layout: Layout, change: Change, schema) -> list[TargetS
     synced 不足以證明本單做過事（否則一個本就 synced 的節矇過整個「驗收永不手勾」保證）。判準
     只讀本單 staging（preview 帳本＋preview 產物），別的單/零開單改的是正式面，互不污染（MOE R1
     由構造解掉）。"""
-    from dspx.commands.status import _leaf_row
+    from dspx.commands.query.status import _leaf_row
     from dspx.model import decision_index
 
     leaves = load_union(layout, change)
@@ -1000,14 +1000,14 @@ def derive_change_status(layout: Layout, change: Change, schema) -> list[TargetS
 
 
 def _sync_of(overlay, leaf, schema, preview_ledger, by_section, dindex) -> str:
-    from dspx.commands.status import _leaf_row
+    from dspx.commands.query.status import _leaf_row
     row = _leaf_row(overlay, leaf, schema, True, preview_ledger, by_section, dindex)
     return row["sync"]
 
 
 def _derive_one(layout, change, schema, t, section, leaves, by_section, dindex,
                 overlay, for_article) -> tuple[bool, str]:
-    from dspx.commands.status import run_file_check
+    from dspx.commands.query.status import run_file_check
 
     # ── file target：hash ≠ 記錄 baseline（人語義確認在 archive 現場）──
     if t.kind == "file":

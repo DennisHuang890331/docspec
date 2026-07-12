@@ -8,12 +8,13 @@ import pytest
 import yaml
 
 from dspx import freeze
-from dspx.commands import freeze_cmd, publish as publish_cmd
+from dspx.commands.governance import freeze_cmd
+from dspx.commands.deliverable import publish as publish_cmd
 
 
 def _render_and_draft(home, monkeypatch, write_leaf, prose="內文。"):
     """建骨架＋模擬 draft 寫散文（per-article layout）。"""
-    from dspx.commands import render as render_cmd
+    from dspx.commands.deliverable import render as render_cmd
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
     monkeypatch.chdir(home.parent)
     docs = home.parent / "docs" / "g"
@@ -393,7 +394,7 @@ def test_dry_run_set_version_previews_and_forecasts_refusal(make_project, write_
 
 def test_guide_projects_migration_recipe(make_project, monkeypatch, capsys):
     """6.15a：docspec guide 輸出遷移配方區塊，三步依序（register-legacy → 預種沿革 → --set-version）。"""
-    from dspx.commands import guide
+    from dspx.commands.projection import guide
     home = make_project()
     monkeypatch.chdir(home.parent)
     assert guide.run([]) == 0
@@ -407,7 +408,7 @@ def test_guide_projects_migration_recipe(make_project, monkeypatch, capsys):
 
 def test_guide_json_carries_migration(make_project, monkeypatch, capsys):
     import json
-    from dspx.commands import guide
+    from dspx.commands.projection import guide
     home = make_project()
     monkeypatch.chdir(home.parent)
     assert guide.run(["--json"]) == 0
@@ -419,7 +420,7 @@ def test_guide_json_carries_migration(make_project, monkeypatch, capsys):
 def test_guide_omits_migration_when_schema_lacks_key(make_project, monkeypatch, capsys):
     """6.15b：schema 缺 workflow.migration 鍵 → guide 正常輸出、無遷移區塊、不報錯。"""
     import dataclasses
-    from dspx.commands import guide
+    from dspx.commands.projection import guide
     from dspx.schema import load_schema
     s = load_schema()
     wf = {k: v for k, v in s.workflow.items() if k != "migration"}
