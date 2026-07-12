@@ -34,27 +34,9 @@ NAME = "retire"
 HELP = "retire an entire section (including children) to corpus/_archive/; recorded as a kind:section entry in the section's history.yaml"
 
 
-def _concept_field(section_dir, field: str) -> str | None:
-    path = section_dir / "concept.yaml"
-    if not path.is_file():
-        return None
-    try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError:
-        return None
-    if isinstance(data, dict) and data.get(field):
-        return str(data[field])
-    return None
-
-
 def _section_id_for_path(section: str) -> str:
     """develop-only 節退場用路徑指紋（同 new 規則）；leaf 有 concept.id 時優先用它（見呼叫端）。"""
     return "sec-" + hashlib.sha1(section.encode("utf-8")).hexdigest()[:8]
-
-
-def _section_id(section_dir, section: str) -> str:
-    """整節退場用該節穩定 concept.id（非路徑！）；develop-only 節退場則用路徑指紋（同 new 規則）。"""
-    return _concept_field(section_dir, "id") or _section_id_for_path(section)
 
 
 def _archived_retired_ids(layout) -> dict[str, str]:
@@ -78,16 +60,6 @@ def _archived_retired_ids(layout) -> dict[str, str]:
                                str(e.get("archive")
                                    or hist.parent.relative_to(layout.planning_home).as_posix()))
     return out
-
-
-def _subtree_concept_ids(src) -> set[str]:
-    """待退子樹內全部 concept.id（含子節），供反向引用比對（target 可能是 id 而非路徑）。"""
-    ids: set[str] = set()
-    for cy in src.rglob("concept.yaml"):
-        cid = _concept_field(cy.parent, "id")
-        if cid:
-            ids.add(cid)
-    return ids
 
 
 def _warn_back_references(layout, section: str, sub_ids: set[str]) -> None:
@@ -144,18 +116,6 @@ def _migrate_orphan_deliverable(layout, article: str, dest) -> list[str]:
             shutil.move(str(f), str(target))
             moved.append(f.name)
     return moved
-
-
-def _article_has_live_sections(layout, article: str) -> bool:
-    """該文章在活樹是否還有任何節（concept/develop；`_` 隱形區不算）。"""
-    art_dir = layout.section_dir(article)
-    if not art_dir.is_dir():
-        return False
-    for name in ("concept.yaml", "develop.md"):
-        for f in art_dir.rglob(name):
-            if not layout.is_archived_path(f.parent):
-                return True
-    return False
 
 
 def _write_history_yaml(history_path, entries: list) -> None:
@@ -282,78 +242,6 @@ def _retire_store(layout, schema, section: str, args) -> int:
     return 0
 
 
-# ── tree 篇退場：整包搬進 _archive/ ──────────────────────────────────────────────
-
-def _retire_tree(layout, section: str, args) -> int:
-    src = layout.section_dir(section)
-    if not src.is_dir() or not (
-        (src / "concept.yaml").is_file() or (src / "develop.md").is_file()
-    ):
-        sys.stderr.write(
-            f"docspec: section \"{section}\" not found (needs concept.yaml or develop.md). "
-            f"Use docspec status to get the correct path.\n")
-        return 1
-    if layout.is_archived_path(src):
-        sys.stderr.write(f"docspec: \"{section}\" is already in the archive.\n")
-        return 1
-
-    note = args.note or _concept_field(src, "concept") or section
-    sec_id = _section_id(src, section)
-    archive_root = layout.corpus_archive_dir
-    dest = archive_root / section.replace("/", "__")
-    # 撞號拒絕（D5）：先於 dest-exists 檢查（同路徑重退時 id 撞號訊息更對症）。
-    archived_ids = _archived_retired_ids(layout)
-    if sec_id in archived_ids:
-        sys.stderr.write(
-            f"docspec: refusing to retire \"{section}\": its id \"{sec_id}\" is already recorded "
-            f"as retired in the archive at {archived_ids[sec_id]}.\n"
-            "  a retired and a live section cannot share the same id — give this section a new "
-            "concept id, or resolve the archived entry first, then retire again.\n")
-        return 1
-
-    if dest.exists():
-        sys.stderr.write(f"docspec: archive destination already exists: {dest}. Resolve it before retiring.\n")
-        return 1
-    archive_link = dest.relative_to(layout.planning_home).as_posix()
-
-    # 反向引用警告（D5：警告、不擋）。
-    _warn_back_references(layout, section, _subtree_concept_ids(src))
-
-    # 整節退場＝該節 history.yaml entries 多一筆 kind:section（id=concept.id、附 archive link）。
-    history_path = src / "history.yaml"
-    entries: list = []
-    if history_path.is_file():
-        try:
-            loaded = yaml.safe_load(history_path.read_text(encoding="utf-8")) or {}
-            if isinstance(loaded, dict):
-                entries = [e for e in (loaded.get("entries") or []) if isinstance(e, dict)]
-        except yaml.YAMLError:
-            entries = []
-    entries.append(_section_entry(sec_id, note, archive_link, args.retired_in))
-    _write_history_yaml(history_path, entries)
-
-    # 整包搬進扁平封存區（可回復、引擎隱形）
-    archive_root.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(src), str(dest))
-    if src.exists() or not (dest / "history.yaml").is_file():
-        sys.stderr.write(f"docspec: retire move anomaly (src={src.exists()} dest_ok={dest.is_dir()})\n")
-        return 1
-
-    article = layout.article_of(section)
-    moved_deliverables: list[str] = []
-    if article and not _article_has_live_sections(layout, article):
-        moved_deliverables = _migrate_orphan_deliverable(layout, article, dest)
-
-    print(f"retire: \"{section}\" retired -> {dest.relative_to(layout.project_root)}")
-    print(f"  one-liner: {note}")
-    print(f"  link (archive): {archive_link}")
-    if moved_deliverables:
-        print(f"  whole article \"{article}\" retired: moved its deliverable + ledger into the "
-              f"archive package ({', '.join(moved_deliverables)}) — docs/.ledger keep no orphans.")
-    print("  content is recoverable; query with docspec retired, the engine already ignores the archive.")
-    return 0
-
-
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec retire", description=HELP)
     parser.add_argument("section", help="path of the section to retire (relative to corpus/)")
@@ -371,8 +259,12 @@ def run(argv: list[str]) -> int:
 
     section = args.section.strip("/")
 
-    # backend 路由：store 篇走結構化記錄退場、tree 篇搬資料夾。
+    # ★store-only：結構化記錄退場——抽該子樹記錄→dump 封存包（散檔形態）→活 store 移除、revision+1。
     from dspx.engine import store as _store
-    if _store.article_has_store(layout, layout.article_of(section)):
-        return _retire_store(layout, schema, section, args)
-    return _retire_tree(layout, section, args)
+    if not _store.article_has_store(layout, layout.article_of(section)):
+        sys.stderr.write(
+            f"docspec: section \"{section}\" is not in a store (corpus/{layout.article_of(section)}"
+            ".yaml not found). retire operates on crystallized store sections; an uncrystallized "
+            "develop-only section is discarded by deleting its work/ develop.md.\n")
+        return 1
+    return _retire_store(layout, schema, section, args)

@@ -93,8 +93,11 @@ def _find_section(leaves: list, layout, arg: str) -> dict | None:
     section = arg.strip("/")
     if not section:
         return None
+    # ★store-only：develop-only（未結晶）節的 develop.md 住 work/（非 corpus 資料夾）。
+    from dspx.engine import store as _store
+    develop_only = _store.work_develop(layout, section).is_file()
     section_dir = layout.section_dir(section)
-    dir_hit = section_dir.is_dir() and not layout.is_archived_path(section_dir)
+    dir_hit = develop_only or (section_dir.is_dir() and not layout.is_archived_path(section_dir))
     if "/" not in arg and not dir_hit:
         return None
     for leaf in leaves:

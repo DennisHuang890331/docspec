@@ -60,21 +60,17 @@ def test_change_shared_truth_makes_consumer_stale_upstream(make_project, write_l
                          by, decision_index(leaves))["sync"]
 
     assert sync_of("occ/mirror") == "synced"
-    # 改 SC 的共享真相（OCC 自己的檔沒動）
-    sc_dec = home / "corpus" / "sc" / "state-machine" / "decisions.yaml"
-    sc_dec.write_text(sc_dec.read_text(encoding="utf-8").replace("四態。", "五態（加 SUSPENDED）。"),
-                      encoding="utf-8")
+    # 改 SC 的共享真相（OCC 自己的檔沒動）★store-only：改 store 記錄的 decisions
+    write_leaf.edit_replace(home, "sc/state-machine", "四態。", "五態（加 SUSPENDED）。",
+                            category="decisions")
     assert sync_of("occ/mirror") == "stale-upstream"   # ★跨文件依賴觸發
 
 
 def test_deps_only_tracks_statement_not_rationale(make_project, write_leaf, monkeypatch):
     """改被 realizes 決策的 rationale（statement 不變）→ 不該 stale。"""
     home = _shared_project(make_project, write_leaf)
-    # 給共享決策補個 rationale
-    sc_dec = home / "corpus" / "sc" / "state-machine" / "decisions.yaml"
-    data = yaml.safe_load(sc_dec.read_text(encoding="utf-8"))
-    data["entries"][0]["rationale"] = "舊理由"
-    sc_dec.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    # 給共享決策補個 rationale ★store-only：改 store 記錄的 decisions 欄位
+    write_leaf.edit_decision(home, "sc/state-machine", 0, rationale="舊理由")
     monkeypatch.chdir(home.parent)
     render_cmd.run(["occ"])
     latest = home.parent / "docs" / "occ" / "_latest.md"
@@ -82,9 +78,8 @@ def test_deps_only_tracks_statement_not_rationale(make_project, write_leaf, monk
                       encoding="utf-8")
     render_cmd.run(["occ"])
 
-    data = yaml.safe_load(sc_dec.read_text(encoding="utf-8"))
-    data["entries"][0]["rationale"] = "新理由（statement 沒動）"
-    sc_dec.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    write_leaf.edit_decision(home, "sc/state-machine", 0,
+                             rationale="新理由（statement 沒動）")
 
     layout = Layout(home)
     leaves = load_project(layout)

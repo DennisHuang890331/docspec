@@ -553,26 +553,13 @@ def load_leaf(layout: Layout, leaf_dir: Path) -> Leaf:
 def load_project(layout: Layout, schema: Schema | None = None) -> list[Leaf]:
     """載入 corpus/ 下所有末節，依 section 路徑排序。
 
-    per-article backend 自動偵測（article-store-backend 階段 2）：某篇有 `corpus/<article>.yaml`
-    store 檔＝走 StoreBackend（記錄→Leaf）；否則散檔 leaf 夾樹＝TreeBackend；同篇兩者並存 fail-loud。
-    上層無感——兩路都吐同構的 Leaf 清單。"""
+    **store-only（store-only-corpus 階段 3）**：corpus 真相一律住 `corpus/<article>.yaml` store。
+    每篇 store → 記錄 → Leaf。散檔（一節一夾）已退場為遷移橋，正常讀取不再走它——散檔讀取碼
+    集中在 `store.load_tree_leaves`（`store migrate`/`dump` 專用），此處不掃 `leaf_dirs`。"""
     from dspx.engine import store as _store
 
     leaves: list[Leaf] = []
-    tree_dirs = layout.leaf_dirs()
-    store_arts = _store.store_articles(layout)
-    if not store_arts:
-        # 常態快路徑：全散檔（現行行為逐 byte 不變）。
-        return [load_leaf(layout, d) for d in tree_dirs]
-
-    store_set = set(store_arts)
-    for d in tree_dirs:
-        art = layout.article_of(layout.section_id(d))
-        if art in store_set:
-            # 同篇既有 store 檔又有散檔葉 → fail-loud（backend_of 給指路訊息）。
-            _store.backend_of(layout, art)
-        leaves.append(load_leaf(layout, d))
-    for art in store_arts:
+    for art in _store.store_articles(layout):
         leaves.extend(_store.load_store_leaves(layout, art))
     leaves.sort(key=lambda lf: lf.section)
     return leaves

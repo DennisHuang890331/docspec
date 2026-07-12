@@ -68,12 +68,9 @@ def test_new_scaffolds_develop_only(make_project, monkeypatch):
     home = make_project()
     monkeypatch.chdir(home.parent)
     assert new_cmd.run(["guide/intro"]) == 0
-    leaf = home / "corpus" / "guide" / "intro"
-    assert (leaf / "develop.md").is_file()
-    assert not (leaf / "concept.yaml").exists()
-    assert not (leaf / "decisions.yaml").exists()
-    assert not (leaf / "material.md").exists()
-    assert not (leaf / "history.yaml").exists()
+    # ★store-only：develop.md 住 work/；concept/decisions 尚未結晶＝無 store 檔
+    assert (home / "work" / "guide" / "intro" / "develop.md").is_file()
+    assert not (home / "corpus" / "guide.yaml").exists()
 
 
 def test_new_then_instructions_on_uncrystallized(make_project, monkeypatch, capsys):
@@ -104,14 +101,14 @@ def test_new_seeds_develop_header_with_id_title_order(make_project, monkeypatch)
     home = make_project()
     monkeypatch.chdir(home.parent)
     assert new_cmd.run(["demo/intro", "--title", "導言"]) == 0
-    body = (home / "corpus" / "demo" / "intro" / "develop.md").read_text(encoding="utf-8")
+    body = (home / "work" / "demo" / "intro" / "develop.md").read_text(encoding="utf-8")
     assert "sec-" in body                 # 生成的 id 持久化在鷹架裡
     assert "導言" in body                  # --title 不再是 no-op
     assert "order: 1" in body
     assert ready_cmd.drain_remainder(body) == ""   # 種子＝註解，不算實質殘留
 
     assert new_cmd.run(["demo/guide"]) == 0        # 無 --title → 路徑末段
-    body2 = (home / "corpus" / "demo" / "guide" / "develop.md").read_text(encoding="utf-8")
+    body2 = (home / "work" / "demo" / "guide" / "develop.md").read_text(encoding="utf-8")
     assert "guide" in body2
     assert ready_cmd.drain_remainder(body2) == ""
 
@@ -130,7 +127,7 @@ def test_ready_graduates_complete_and_drained(make_project, write_leaf, monkeypa
                develop="<!-- thinking workbench, now drained -->")
     monkeypatch.chdir(home.parent)
     assert ready_cmd.run(["g/x"]) == 0
-    assert not (home / "corpus" / "g" / "x" / "develop.md").exists()  # 刪除＝畢業的持久動作
+    assert not (home / "work" / "g" / "x" / "develop.md").exists()  # 刪除＝畢業的持久動作
 
 
 def test_ready_refuses_when_develop_has_content(make_project, write_leaf, monkeypatch):
@@ -140,7 +137,7 @@ def test_ready_refuses_when_develop_has_content(make_project, write_leaf, monkey
                develop="## still thinking\nthis paragraph is not yet distributed")
     monkeypatch.chdir(home.parent)
     assert ready_cmd.run(["g/x"]) == 1
-    assert (home / "corpus" / "g" / "x" / "develop.md").is_file()  # 帶內容不准畢業、不刪
+    assert (home / "work" / "g" / "x" / "develop.md").is_file()  # 帶內容不准畢業、不刪
 
 
 def test_ready_refuses_incomplete_fields(make_project, write_leaf, monkeypatch):
@@ -426,22 +423,33 @@ def test_status_shows_develop_only_sections(make_project, monkeypatch, capsys):
     assert any(r["section"] == "g/intro" and r["state"] == "developing" for r in rows)
 
 
-def test_hook_postcheck_flags_incomplete(make_project, write_leaf, monkeypatch):
+def _write_scatter_concept(home, section, data):
+    """★store-only：PostToolUse 檔案級 hook 檢視「剛寫的散檔」——直接寫該散檔（模擬 agent
+    的檔案寫入，hook 對它 load_leaf 讀取）。此 hook 為 store 前的相容路徑（put 已內建驗證）。"""
+    cpath = home / "corpus"
+    for p in section.split("/"):
+        cpath = cpath / p
+    cpath = cpath / "concept.yaml"
+    cpath.parent.mkdir(parents=True, exist_ok=True)
+    cpath.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+    return cpath
+
+
+def test_hook_postcheck_flags_incomplete(make_project, monkeypatch):
     from dspx.commands._internal import hook
     home = make_project()
-    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": ""})
     monkeypatch.chdir(home.parent)
-    cpath = home / "corpus" / "g" / "x" / "concept.yaml"
+    cpath = _write_scatter_concept(home, "g/x", {"id": "c1", "title": "X", "order": 1, "concept": ""})
     # exit 2＝把「必填未齊」提醒餵回 agent（非阻擋，檔已寫）
     assert hook._postcheck({"tool_input": {"file_path": str(cpath)}}) == 2
 
 
-def test_hook_postcheck_passes_complete(make_project, write_leaf, monkeypatch):
+def test_hook_postcheck_passes_complete(make_project, monkeypatch):
     from dspx.commands._internal import hook
     home = make_project()
-    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "real"})
     monkeypatch.chdir(home.parent)
-    cpath = home / "corpus" / "g" / "x" / "concept.yaml"
+    cpath = _write_scatter_concept(home, "g/x", {"id": "c1", "title": "X", "order": 1,
+                                                 "status": "draft", "concept": "real", "brief": {}})
     assert hook._postcheck({"tool_input": {"file_path": str(cpath)}}) == 0
 
 
@@ -466,14 +474,18 @@ def test_dead_decisions_stay_in_place_shown_by_all_status(make_project, write_le
                    {"id": "d-new", "kind": "normative", "status": "accepted", "statement": "新"},
                ])
     monkeypatch.chdir(home.parent)
-    leaf = home / "corpus" / "g" / "x"
-    before = (leaf / "decisions.yaml").read_bytes()
+    # ★store-only：死決策就地留在 store 記錄；show 不動 store（byte 不變）
+    from dspx.engine import store as _store
+    from dspx.engine.layout import Layout
+    store_file = _store.store_path(Layout(home), "g")
+    before = store_file.read_bytes()
     assert show_cmd.run(["g", "--decisions", "--all-status"]) == 0
     out = capsys.readouterr().out
     assert "d-old" in out and "DEAD" in out
-    assert (leaf / "decisions.yaml").read_bytes() == before
-    assert [e["id"] for e in _entries(leaf / "decisions.yaml")] == ["d-old", "d-new"]
-    assert not (leaf / "history.yaml").exists()
+    assert store_file.read_bytes() == before
+    rec = _store.load_article(store_file, verify=False).record_by_path("g/x")
+    assert [e["id"] for e in rec.decisions] == ["d-old", "d-new"]
+    assert not rec.history
     assert check_cmd.run([]) == 0
 
 

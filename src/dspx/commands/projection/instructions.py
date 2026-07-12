@@ -229,12 +229,15 @@ def run(argv: list[str]) -> int:
     except BootstrapError as exc:
         return exc.exit_code
 
-    # develop-only (not-yet-crystallized) sections must also project — develop needs the concept/decisions templates at crystallization.
+    # develop-only (not-yet-crystallized) sections must also project — develop needs the concept/decisions
+    # templates at crystallization. ★store-only：develop.md 住 work/、尚無 store 記錄 → 建 concept=None 樁 Leaf。
     if not any(lf.section == args.section for lf in leaves):
-        folder = layout.section_dir(args.section)
-        if (folder / "develop.md").is_file() or (folder / "concept.yaml").is_file():
-            from dspx.engine.model import load_leaf
-            leaves = leaves + [load_leaf(layout, folder)]
+        from dspx.engine import store as _store
+        if _store.work_develop(layout, args.section).is_file():
+            from dspx.engine.model import Leaf
+            leaves = leaves + [Leaf(section=args.section,
+                                    dir=layout.section_dir(args.section),
+                                    concept=None, has_develop=True)]
 
     try:
         proj = project(layout, schema, args.skill, args.section, leaves, config)

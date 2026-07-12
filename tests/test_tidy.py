@@ -27,6 +27,26 @@ def _read_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
+def _art(home, article):
+    from dspx.engine import store as _store
+    return _store.load_article(_store.store_path(Layout(home), article), verify=False)
+
+
+def _store_concept(home, section):
+    """★store-only：某節 store 記錄的 concept dict。"""
+    return _art(home, section.split("/", 1)[0]).record_by_path(section).concept
+
+
+def _store_group_title(home, section):
+    rec = _art(home, section.split("/", 1)[0]).record_by_path(section)
+    return (rec.group or {}).get("title") if rec else None
+
+
+def _store_sections(home, article):
+    """★store-only：某篇 store 全部 section 路徑集合。"""
+    return {r.path for r in _art(home, article).records}
+
+
 def _snapshot_tree(root: Path) -> dict[str, bytes]:
     return {p.relative_to(root).as_posix(): p.read_bytes()
             for p in sorted(root.rglob("*")) if p.is_file()}
@@ -56,33 +76,29 @@ def _inject_prose(layout: Layout, article: str, section: str, body: str) -> None
     p.write_text("\n".join(out), encoding="utf-8", newline="\n")
 
 
-# ── 動作 1：空殼 decisions.yaml ────────────────────────────────────────────
+# ── 動作 1（★store-only 已消滅）：空殼 decisions 由 store canonical serializer 天然不落地 ──
 
-def test_tidy_deletes_empty_shell_decisions(make_project, write_leaf, monkeypatch, capsys):
+def test_store_never_persists_empty_shell_decisions(make_project, write_leaf, monkeypatch, capsys):
+    """★store-only：`decisions=[]` 空殼在 store canonical serializer 天然不落地（無 `decisions:`
+    區塊），根本沒有可刪的空殼檔——舊 tidy「刪空殼 decisions.yaml」動作因此結構性消滅。
+    tidy 對空殼節＝零動作；真決策節照常保留。"""
     home = make_project()
-    _leaf(write_leaf, home, "sc/殼節", cid="c1", title="殼節", decisions=[])   # entries: []
+    _leaf(write_leaf, home, "sc/殼節", cid="c1", title="殼節", decisions=[])   # 空 → 不落地
     _leaf(write_leaf, home, "sc/實節", cid="c2", title="實節", order=2,
-          decisions=[{"id": "d1", "statement": "真決策", "status": "active"}])
-    # 空 mapping 與純空白檔也是空殼
-    empty_map = home / "corpus" / "sc" / "空映" ; empty_map.mkdir(parents=True)
-    _leaf(write_leaf, home, "sc/空映", cid="c3", title="空映", order=3)
-    (home / "corpus" / "sc" / "空映" / "decisions.yaml").write_text("{}\n", encoding="utf-8")
-    _leaf(write_leaf, home, "sc/空白", cid="c4", title="空白", order=4)
-    (home / "corpus" / "sc" / "空白" / "decisions.yaml").write_text("   \n", encoding="utf-8")
-    # 壞檔（頂層 list）不是空殼——不能被 tidy 吃掉；但它會讓 load_model fail-loud，
-    # 這裡不放壞檔（loader 行為另有回歸測試），只驗空殼三型＋實檔保留。
-
+          decisions=[{"id": "d1", "statement": "真決策", "status": "accepted", "kind": "normative"}])
     monkeypatch.chdir(home.parent)
+
+    # store 記錄：空殼節 decisions 空、實節保留（結構性、非 tidy 刪）
+    assert _art(home, "sc").record_by_path("sc/殼節").decisions == []
+    assert _art(home, "sc").record_by_path("sc/實節").decisions[0]["id"] == "d1"
+    # store 檔文字裡沒有空殼節的 decisions 區塊
+    store_text = (home / "corpus" / "sc.yaml").read_text(encoding="utf-8")
+    assert "d1" in store_text and store_text.count("decisions:") == 1   # 只有實節那一塊
+
     assert tidy_cmd.run([]) == 0
     out = capsys.readouterr().out
-    assert "sc/殼節/decisions.yaml" in out
-    assert "sc/空映/decisions.yaml" in out
-    assert "sc/空白/decisions.yaml" in out
-    assert not (home / "corpus" / "sc" / "殼節" / "decisions.yaml").exists()
-    assert not (home / "corpus" / "sc" / "空映" / "decisions.yaml").exists()
-    assert not (home / "corpus" / "sc" / "空白" / "decisions.yaml").exists()
-    assert (home / "corpus" / "sc" / "實節" / "decisions.yaml").is_file()      # 真決策保留
-    assert "render sc --rebaseline" in out                                     # 收尾提示
+    assert "delete empty-shell" not in out                    # 該動作已消滅
+    assert _art(home, "sc").record_by_path("sc/實節").decisions[0]["id"] == "d1"  # 真決策仍在
 
 
 # ── 動作 2：brief 逐字重複剝除（spec 情境）────────────────────────────────
@@ -105,12 +121,12 @@ def test_tidy_strips_verbatim_dup_brief_field_keeps_specialized(
     out = capsys.readouterr().out
     assert "sc/child/concept.yaml brief.audience" in out
 
-    child = _read_yaml(home / "corpus" / "sc" / "child" / "concept.yaml")
+    child = _store_concept(home, "sc/child")
     assert "audience" not in child["brief"]            # 逐字相同 → 刪
     assert child["brief"]["depth"] == "深入"           # 一字之差 → 保留
-    child2 = _read_yaml(home / "corpus" / "sc" / "child2" / "concept.yaml")
+    child2 = _store_concept(home, "sc/child2")
     assert "brief" not in child2                       # 空 brief 整塊省略＝繼承
-    root = _read_yaml(home / "corpus" / "sc" / "concept.yaml")
+    root = _store_concept(home, "sc")
     assert root["brief"]["audience"] == "現場工程師"   # root 永不剝
 
 
@@ -124,24 +140,22 @@ def test_tidy_strips_hierarchical_arabic_title_prefixes(
     _leaf(write_leaf, home, "sc/範圍", cid="c3", title="6、範圍", order=3)
     _leaf(write_leaf, home, "sc/5G 網路架構", cid="c4", title="5G 網路架構", order=4)
     _leaf(write_leaf, home, "sc/純數字", cid="c5", title="6.", order=5)        # 剝了變空→不動
-    # group.yaml title 同樣剝（資料夾名先取剝後 slug、免二次改名）
-    gdir = home / "corpus" / "sc" / "群組" ; gdir.mkdir(parents=True)
-    (gdir / "group.yaml").write_text(
-        yaml.safe_dump({"title": "3. 群組", "order": 9}, allow_unicode=True), encoding="utf-8")
+    # group title 同樣剝（資料夾名先取剝後 slug、免二次改名）★store-only：group 是 store 記錄
+    write_leaf.group(home, "sc/群組", title="3. 群組", order=9)
     _leaf(write_leaf, home, "sc/群組/子節", cid="c6", title="子節", order=1)
 
     monkeypatch.chdir(home.parent)
     assert tidy_cmd.run([]) == 0
     out = capsys.readouterr().out
 
-    c = lambda sec: _read_yaml(home / "corpus" / sec / "concept.yaml")["title"]
+    c = lambda sec: _store_concept(home, sec)["title"]
     assert c("sc/防撞防護區域安全機能") == "防撞防護區域安全機能"
     assert c("sc/概觀") == "概觀"                       # 完整層級前綴：不是 "1 概觀"
     assert c("sc/範圍") == "範圍"
     assert c("sc/5G 網路架構") == "5G 網路架構"         # 數字後接字母＝名稱本體，不觸發
     assert c("sc/純數字") == "6."                       # 只剩空→不動
     assert "skip title strip" in out and "純數字" in out
-    assert _read_yaml(gdir / "group.yaml")["title"] == "群組"
+    assert _store_group_title(home, "sc/群組") == "群組"
 
 
 # ── 動作 4：改名（slug、撞名、root 排除、`/` 剝除）─────────────────────────
@@ -160,10 +174,9 @@ def test_tidy_renames_folder_to_delivery_language_slug(
     out = capsys.readouterr().out
     assert "sc/safety/protective-zone -> sc/safety/防撞防護區域安全機能" in out
 
-    assert not (home / "corpus" / "sc" / "safety" / "protective-zone").exists()
-    new_dir = home / "corpus" / "sc" / "safety" / "防撞防護區域安全機能"
-    assert (new_dir / "concept.yaml").is_file()
-    assert _read_yaml(new_dir / "concept.yaml")["title"] == "防撞防護區域安全機能"  # 先剝再改名
+    assert "sc/safety/protective-zone" not in _store_sections(home, "sc")
+    assert "sc/safety/防撞防護區域安全機能" in _store_sections(home, "sc")
+    assert _store_concept(home, "sc/safety/防撞防護區域安全機能")["title"] == "防撞防護區域安全機能"  # 先剝再改名
     # _latest marker 已由 mv 交易重寫
     latest = Layout(home).docs_latest("sc").read_text(encoding="utf-8")
     assert "<!-- dspx:section sc/safety/防撞防護區域安全機能 -->" in latest
@@ -174,9 +187,7 @@ def test_tidy_renames_folder_to_delivery_language_slug(
 def test_tidy_renames_group_folder_from_group_yaml_title(
         make_project, write_leaf, monkeypatch, capsys):
     home = make_project()
-    gdir = home / "corpus" / "sc" / "safety" ; gdir.mkdir(parents=True)
-    (gdir / "group.yaml").write_text(
-        yaml.safe_dump({"title": "安全機能", "order": 1}, allow_unicode=True), encoding="utf-8")
+    write_leaf.group(home, "sc/safety", title="安全機能", order=1)   # ★store-only：group 記錄
     _leaf(write_leaf, home, "sc/safety/zone", cid="c1", title="zone")
     _leaf(write_leaf, home, "sc/arch", cid="c2", title="arch", order=2)
     _render(home, monkeypatch, "sc")
@@ -184,8 +195,8 @@ def test_tidy_renames_group_folder_from_group_yaml_title(
 
     monkeypatch.chdir(home.parent)
     assert tidy_cmd.run([]) == 0
-    assert (home / "corpus" / "sc" / "安全機能" / "zone" / "concept.yaml").is_file()
-    assert not (home / "corpus" / "sc" / "safety").exists()
+    assert "sc/安全機能/zone" in _store_sections(home, "sc")
+    assert "sc/safety" not in _store_sections(home, "sc")
     assert check_cmd.run([]) == 0
 
 
@@ -201,9 +212,9 @@ def test_tidy_sibling_slug_collision_keeps_both_and_reports(
     assert tidy_cmd.run([]) == 0
     out = capsys.readouterr().out
     assert "rename conflict" in out and "sc/同名節" in out
-    assert (home / "corpus" / "sc" / "alpha" / "concept.yaml").is_file()   # 兩者原地保留
-    assert (home / "corpus" / "sc" / "beta" / "concept.yaml").is_file()
-    assert not (home / "corpus" / "sc" / "同名節").exists()
+    assert "sc/alpha" in _store_sections(home, "sc")   # 兩者原地保留
+    assert "sc/beta" in _store_sections(home, "sc")
+    assert "sc/同名節" not in _store_sections(home, "sc")
 
 
 def test_tidy_never_renames_article_root(make_project, write_leaf, monkeypatch, capsys):
@@ -216,8 +227,9 @@ def test_tidy_never_renames_article_root(make_project, write_leaf, monkeypatch, 
 
     monkeypatch.chdir(home.parent)
     assert tidy_cmd.run([]) == 0
-    assert (home / "corpus" / "sc" / "concept.yaml").is_file()             # root 資料夾不動
-    assert not (home / "corpus" / "跨運車控制架構").exists()
+    assert "sc" in _store_sections(home, "sc")             # root 記錄不動（未改名）
+    # ★store-only：root 未被改名成 title slug（無 corpus/跨運車控制架構.yaml store 檔）
+    assert not (home / "corpus" / "跨運車控制架構.yaml").exists()
 
 
 def test_tidy_slug_strips_slash_without_extra_dir_level(
@@ -230,8 +242,8 @@ def test_tidy_slug_strips_slash_without_extra_dir_level(
 
     monkeypatch.chdir(home.parent)
     assert tidy_cmd.run([]) == 0
-    assert (home / "corpus" / "sc" / "輸入輸出介面" / "concept.yaml").is_file()
-    assert not (home / "corpus" / "sc" / "輸入").exists()                  # 不產生額外層級
+    assert "sc/輸入輸出介面" in _store_sections(home, "sc")
+    assert "sc/輸入" not in _store_sections(home, "sc")                  # 不產生額外層級
     assert check_cmd.run([]) == 0
 
 
@@ -251,7 +263,7 @@ def test_tidy_dry_run_lists_everything_and_writes_nothing(
     monkeypatch.chdir(home.parent)
     assert tidy_cmd.run(["--dry-run"]) == 0
     out = capsys.readouterr().out
-    assert "delete empty-shell decisions.yaml: sc/shell/decisions.yaml" in out
+    # ★store-only：空殼 decisions 結構性消滅，無「delete empty-shell」動作
     assert "brief.audience" in out
     assert '"6.1 概觀" -> "概觀"' in out
     assert "rename: sc/shell -> sc/概觀" in out          # slug 以剝章號後 title 為基準
@@ -259,19 +271,20 @@ def test_tidy_dry_run_lists_everything_and_writes_nothing(
     assert _snapshot_tree(home.parent) == before          # 零 byte 變更
 
 
-# ── live 樹 history.yaml：只報告、不動 ─────────────────────────────────────
+# ── history（★store-only）：history 住 store 記錄，tidy 只碰 brief/title/path、不動 history ──
 
-def test_tidy_reports_live_history_yaml_untouched(make_project, write_leaf, monkeypatch, capsys):
+def test_tidy_leaves_store_history_untouched(make_project, write_leaf, monkeypatch, capsys):
+    """★store-only：舊「live 樹 history.yaml 只報告」動作已消滅（store 無散檔 history.yaml；
+    history 是 store 記錄的一個區塊）。tidy 只改 brief/title/path，記錄的 history 一字不動。"""
     home = make_project()
-    _leaf(write_leaf, home, "sc/old", cid="c1", title="old",
-          history=[{"id": "h1", "statement": "退場理由", "status": "superseded"}])
+    _leaf(write_leaf, home, "sc/old", cid="c1", title="6. 舊節",   # 帶章號前綴 → 觸發 title strip
+          history=[{"id": "h1", "statement": "退場理由", "status": "superseded", "kind": "normative"}])
 
     monkeypatch.chdir(home.parent)
     assert tidy_cmd.run([]) == 0
-    out = capsys.readouterr().out
-    assert "sc/old/history.yaml" in out
-    assert "status: superseded" in out                    # 遷移指引
-    assert (home / "corpus" / "sc" / "old" / "history.yaml").is_file()   # 未動
+    rec = _art(home, "sc").record_by_path("sc/舊節")   # 章號剝除後改名 sc/old→sc/舊節
+    assert rec.history == [{"id": "h1", "statement": "退場理由", "status": "superseded",
+                            "kind": "normative"}]   # history 一字不動
 
 
 # ── 冪等 ───────────────────────────────────────────────────────────────────
@@ -291,7 +304,7 @@ def test_tidy_is_idempotent_second_run_zero_actions(
     assert tidy_cmd.run([]) == 0
     first = capsys.readouterr().out
     assert "action(s) applied" in first
-    assert (home / "corpus" / "sc" / "防撞防護" / "concept.yaml").is_file()
+    assert "sc/防撞防護" in _store_sections(home, "sc")
 
     assert tidy_cmd.run([]) == 0
     second = capsys.readouterr().out
@@ -338,11 +351,12 @@ def test_tidy_red_check_skips_renames_but_does_other_actions(
     monkeypatch.chdir(home.parent)
     assert tidy_cmd.run([]) == 0
     out = capsys.readouterr().out
-    assert "SKIPPED all folder renames" in out
+    assert "SKIPPED all record renames" in out
     assert "sc/a -> sc/甲節" in out                        # 列出本會執行的清單
-    assert not (home / "corpus" / "sc" / "a" / "decisions.yaml").exists()   # 空殼照刪
-    assert (home / "corpus" / "sc" / "a" / "concept.yaml").is_file()        # 未改名
-    assert not (home / "corpus" / "sc" / "甲節").exists()
+    # ★store-only：空殼 decisions 結構性消滅；紅 check 下改名跳過但記錄仍在原路徑
+    assert _art(home, "sc").record_by_path("sc/a").decisions == []
+    assert "sc/a" in _store_sections(home, "sc")        # 未改名
+    assert "sc/甲節" not in _store_sections(home, "sc")
 
 
 # ── CLI 面 ─────────────────────────────────────────────────────────────────

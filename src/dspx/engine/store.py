@@ -409,14 +409,23 @@ def backend_of(layout: Layout, article: str) -> str:
     return "none"
 
 
+# Drive 同步衝突副本檔名（`<stem> (N).yaml`）＋暫存（`*.tmp.drive*`）：引擎只讀固定 store 名，
+# 這些副本一律隱形（否則 load_project 會把 `a (1).yaml` 當文章 `a (1)` 載入而炸）。衛生 check 另 WARN。
+import re as _re
+_CONFLICT_STORE_RE = _re.compile(r".* \(\d+\)$")
+
+
 def store_articles(layout: Layout) -> list[str]:
-    """corpus/ 下所有 store 檔對應的文章名（依名排序，`_` 前綴隱形）。"""
+    """corpus/ 下所有 store 檔對應的文章名（依名排序，`_` 前綴隱形；Drive 衝突副本/暫存隱形）。"""
     if not layout.corpus_dir.is_dir():
         return []
     out = []
     for p in sorted(layout.corpus_dir.glob("*.yaml")):
-        if p.is_file() and not p.name.startswith("_"):
-            out.append(p.stem)
+        if not (p.is_file() and not p.name.startswith("_")):
+            continue
+        if _CONFLICT_STORE_RE.match(p.stem) or ".tmp.drive" in p.name.lower():
+            continue   # Drive 同步垃圾：引擎隱形（衛生 check 會 WARN）
+        out.append(p.stem)
     return out
 
 
@@ -462,7 +471,31 @@ def load_store_leaves(layout: Layout, article: str, *, verify: bool = True) -> l
     return leaves_from_article(layout, load_article(store_path(layout, article), verify=verify))
 
 
-# ── tree → Article（migrate / dump 的來源）─────────────────────────────
+# ── tree → Article（★遷移橋 only：散檔讀取碼一律集中在此段，`store migrate`/`store dump`/
+#    `store load` 專用；正常讀寫路徑 store-only、不得走這裡）────────────────
+
+def load_tree_leaves(layout: Layout, article: str | None = None) -> list[Leaf]:
+    """散檔（一節一夾）→ Leaf 清單。**僅 migrate/dump/load 遷移橋用**——store-only 世界的
+    正常讀取走 `model.load_project`（store）。article=None＝全散檔樹；否則只該篇。"""
+    from dspx.engine.model import load_leaf
+    out: list[Leaf] = []
+    for d in layout.leaf_dirs():
+        sec = layout.section_id(d)
+        if article is None or layout.article_of(sec) == article:
+            out.append(load_leaf(layout, d))
+    out.sort(key=lambda lf: lf.section)
+    return out
+
+
+def tree_articles(layout: Layout) -> list[str]:
+    """仍有散檔葉夾樹的文章名（依名排序）。**僅 migrate 遷移橋用**。"""
+    seen: list[str] = []
+    for d in layout.leaf_dirs():
+        art = layout.article_of(layout.section_id(d))
+        if art and art not in seen:
+            seen.append(art)
+    return sorted(seen)
+
 
 def article_from_leaves(name: str, leaves: list[Leaf], groups: list[dict],
                         revision: int = 1) -> Article:

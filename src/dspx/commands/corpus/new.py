@@ -6,8 +6,6 @@ import argparse
 import hashlib
 import sys
 
-import yaml
-
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
 from dspx.engine.layout import Layout
 
@@ -79,15 +77,27 @@ def _stable_id(section: str) -> str:
 
 
 def _next_order(layout: Layout, section: str) -> int:
-    """同層自動接龍（建議值；develop 階段 order 還沒存進檔，結晶時才寫進 concept）。
-    數同層既有「章節資料夾」（含 develop.md 或 concept.yaml）＋1。"""
-    parent = layout.section_dir(section).parent
-    n = 0
-    if parent.is_dir():
-        for sib in parent.iterdir():
-            if sib.is_dir() and ((sib / "develop.md").is_file() or (sib / "concept.yaml").is_file()):
-                n += 1
-    return n + 1
+    """同層自動接龍（建議值；develop 階段 order 還沒存進 store，結晶時才寫進 concept）。
+    ★store-only：數同層既有節＝store 記錄（leaf/group）＋ `work/` 下 develop-only 節，＋1。"""
+    from dspx.engine import store as _store
+    parent = section.rsplit("/", 1)[0] if "/" in section else ""
+    sibs: set[str] = set()
+    for art in _store.store_articles(layout):
+        art_obj = _store.cached_article(layout, art)
+        for rec in (art_obj.records if art_obj is not None else []):
+            p = rec.path
+            pp = p.rsplit("/", 1)[0] if "/" in p else ""
+            if pp == parent and p != section:
+                sibs.add(p)
+    # work/ 下的 develop-only 兄弟（尚未結晶、無 store 記錄）
+    work_parent = _store.work_dir(layout, parent) if parent else layout.planning_home / "work"
+    if work_parent.is_dir():
+        for sib in work_parent.iterdir():
+            if sib.is_dir() and (sib / "develop.md").is_file():
+                sec = f"{parent}/{sib.name}" if parent else sib.name
+                if sec != section:
+                    sibs.add(sec)
+    return len(sibs) + 1
 
 
 def run(argv: list[str]) -> int:
@@ -120,21 +130,15 @@ def run(argv: list[str]) -> int:
     except BootstrapError as exc:
         return exc.exit_code
 
-    # ── backend 路由：store 篇的 develop 工作台住 docspec/work/<section>/（不進 store、結晶才進）──
+    # ★store-only：develop 工作台一律住 docspec/work/<section>/（不進 store、結晶才進 store）；
+    # concept 已結晶＝正式 store 有此節記錄且帶 concept。
     from dspx.engine import store as _store
-    is_store = _store.article_has_store(layout, layout.article_of(section))
-    store_concept = None
-    if is_store:
-        target = _store.work_dir(layout, section)
-        art = _store.cached_article(layout, layout.article_of(section))
-        rec = art.record_by_path(section) if art is not None else None
-        store_concept = rec.concept if (rec is not None and rec.kind == "leaf") else None
-        has_concept = store_concept is not None
-        has_develop = _store.work_develop(layout, section).is_file()
-    else:
-        target = layout.section_dir(section)
-        has_concept = (target / "concept.yaml").exists()
-        has_develop = (target / "develop.md").exists()
+    target = _store.work_dir(layout, section)
+    art = _store.cached_article(layout, layout.article_of(section))
+    rec = art.record_by_path(section) if art is not None else None
+    store_concept = rec.concept if (rec is not None and rec.kind == "leaf") else None
+    has_concept = store_concept is not None
+    has_develop = _store.work_develop(layout, section).is_file()
 
     # ── --reopen：為已結晶節（有 concept.yaml、無 develop.md）從 schema template 重建 develop.md ──
     # fills 的 id/title/order 一律從現有 concept.yaml 讀出（入帳身份／同層位置皆已定案，重算會脫鉤/漂移）。
@@ -149,8 +153,7 @@ def run(argv: list[str]) -> int:
                 f"docspec: section \"{section}\" is not crystallized (no concept.yaml); "
                 f"use `docspec new {section}` to scaffold a new section\n")
             return 2
-        concept = (store_concept if is_store
-                   else yaml.safe_load((target / "concept.yaml").read_text(encoding="utf-8"))) or {}
+        concept = store_concept or {}
         fills = {
             "id": str(concept.get("id", _stable_id(section))),
             "title": str(concept.get("title") or section.rsplit("/", 1)[-1]),

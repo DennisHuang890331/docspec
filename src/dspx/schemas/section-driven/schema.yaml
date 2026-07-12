@@ -434,9 +434,19 @@ project-files:
 # The engine recognizes only these reference arrows (closed set)
 relation-kinds: [realizes, governs, supersedes]
 
+# ARTIFACTS = store category blocks (store-only-corpus). Each leaf lives as one record inside the
+# engine-owned single-file store `corpus/<article>.yaml`, holding three named category blocks:
+# concept (mapping) / decisions (list) / material (text). `generates:` is NOT a file the engine
+# writes per section on disk — it is the get/put EXPORT-FILENAME convention (`docspec get <section>
+# concept` still emits editable `concept.yaml` content for the agent to edit, `docspec put` validates
+# and writes it back into the store block). The yaml skeleton is DERIVED from each artifact's field
+# schema (yaml_skeleton) — a single source, no hand-maintained templates/{concept,decisions,history}.yaml.
+# develop.md is a WORKFILE (workbench in docspec/work/, drained at ready) — outside the store; history
+# is a store record category surfaced only in retirement archive packages. Only the .md artifacts
+# (material/develop/history-md) keep a real `template:` — they have no yaml fields to derive a skeleton from.
 artifacts:
   - id: concept
-    generates: concept.yaml
+    generates: concept.yaml   # get/put export-filename convention (store block, not a per-section file)
     kind: yaml
     description: The leaf section's governance and structural contract (one-line concept + writing envelope + source pointers + references).
     # Single source of truth = this schema: the fillable scaffold is DERIVED (yaml_skeleton from the field
@@ -548,8 +558,8 @@ artifacts:
       entry (id = that section's concept.id, with an archive link); the summary lives here (a one-line statement), the
       prose detail of "why it was abandoned" lives in the paired history.md (same id), and the detail of a whole-section
       retirement = the archive folder itself. The agent queries via `docspec retired` (summary) / `docspec show <id>`
-      (detail), and **never reads the raw files directly**. Loading an OLD project that still has a live-tree history.yaml
-      stays backward-compatible (the engine reads it); `docspec tidy` reports it as migratable.
+      (detail), and **never reads the raw files directly**. (store-only-corpus: history is a store record category;
+      a legacy scattered live-tree history.yaml is read only by the `docspec store migrate` bridge, never the live path.)
     # scaffold DERIVED from the schema below (yaml_skeleton); no hand-maintained templates/history.yaml.
     instruction: instructions/history.md
     requires: []

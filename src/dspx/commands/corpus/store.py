@@ -65,12 +65,14 @@ def _leaf_truth(lf) -> tuple:
 
 
 def _parity_check(layout: Layout, article: str, schema) -> tuple[st.Article, list[str]]:
-    """建 store Article、對散檔跑平價閘。回 (article_obj, mismatches)；mismatches 空＝過關。"""
+    """建 store Article、對散檔跑平價閘。回 (article_obj, mismatches)；mismatches 空＝過關。
+
+    ★store-only：散檔讀取集中在 `st.load_tree_leaves`（遷移橋），其它篇已是 store（load_project）。"""
     from dspx.engine.model import load_project
-    tree_all = load_project(layout)          # 全專案（該篇仍散檔，尚未寫 store 檔）
-    tree_x = [lf for lf in tree_all if layout.article_of(lf.section) == article]
+    tree_x = st.load_tree_leaves(layout, article)   # 該篇散檔（遷移橋唯讀路徑）
     if not tree_x:
         raise st.StoreError(f"no scattered sections found for article {article!r}")
+    others = load_project(layout)                   # 其它篇（已 store；不含本散檔篇）
 
     groups = st.group_records_from_tree(layout, article)
     article_obj = st.article_from_leaves(article, tree_x, groups, revision=1)
@@ -91,10 +93,9 @@ def _parity_check(layout: Layout, article: str, schema) -> tuple[st.Article, lis
         if _leaf_truth(tree_by[sec]) != _leaf_truth(store_by[sec]):
             mism.append(f"{sec}: leaf truth differs (concept/decisions/history/material)")
 
-    # ② anc/deps/norm 三軸逐節相等（用全專案 leaf-set：非 X 篇不變、X 篇換 store 讀）
-    fp_tree = _fingerprints(tree_all)
-    store_all = [lf for lf in tree_all if layout.article_of(lf.section) != article] + store_x
-    fp_store = _fingerprints(store_all)
+    # ② anc/deps/norm 三軸逐節相等（全 leaf-set：其它篇 store 不變、X 篇 tree vs store 讀）
+    fp_tree = _fingerprints(others + tree_x)
+    fp_store = _fingerprints(others + store_x)
     for sec in sorted(set(tree_by) & set(store_by)):
         if fp_tree.get(sec) != fp_store.get(sec):
             mism.append(f"{sec}: anc/deps/norm fingerprint differs "
@@ -320,10 +321,8 @@ def run(argv: list[str]) -> int:
 
     if args.sub == "migrate":
         if args.all:
-            # 掃全散檔文章（有 leaf 夾樹者；store 篇已遷、跳過）。
-            from dspx.engine.model import load_project
-            arts = sorted({layout.article_of(lf.section) for lf in load_project(layout)
-                           if st.backend_of(layout, layout.article_of(lf.section)) == "tree"})
+            # 掃全散檔文章（有 leaf 夾樹者；store 篇已遷、跳過）——遷移橋 tree_articles。
+            arts = st.tree_articles(layout)
             rc = 0
             for a in arts:
                 rc = _migrate_one(layout, a, schema) or rc

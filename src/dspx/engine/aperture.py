@@ -143,13 +143,16 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
             if content:
                 proj.reads["material"] = content
         elif art_id == "develop":
-            content = _read_file(leaf, "develop.md")
+            # ★store-only：develop.md 住 work/（結晶前工作台）。
+            from dspx.engine import store as _store
+            dp = _store.work_develop(layout, leaf.section)
+            content = dp.read_text(encoding="utf-8") if dp.is_file() else None
             if content:
                 proj.reads["develop"] = content
         elif art_id == "history":
-            content = _read_file(leaf, "history.yaml")
-            if content:
-                proj.reads["history"] = content
+            # ★store-only：history 由 store 記錄供（非散檔 history.yaml）。
+            if leaf.history:
+                proj.reads["history"] = _yaml_text({"entries": leaf.history})
         elif art_id == "docs":
             content = _read_docs(layout, leaf)
             if content:

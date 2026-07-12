@@ -598,8 +598,7 @@ def test_v20_variant_prefixes_caught(make_project, write_leaf):
 def test_v20_group_title_numbering_prefix_caught(make_project, write_leaf):
     home = make_project()
     write_leaf(home, "g/howto/s3", concept={"id": "c", "title": "S3 後端", "order": 1})
-    (home / "corpus" / "g" / "howto" / "group.yaml").write_text(
-        "title: 6. 操作指南\n", encoding="utf-8")
+    write_leaf.group(home, "g/howto", title='6. 操作指南')
     v20 = [f for f in _corpus_lint(home) if f.rule == "V20"]
     assert any(f.where == "g/howto/group.yaml" for f in v20)
 
@@ -608,6 +607,5 @@ def test_v20_clean_titles_silent(make_project, write_leaf):
     """無編號前綴的正常標題（含分組）→ 零 V20。"""
     home = make_project()
     write_leaf(home, "g/howto/s3", concept={"id": "c", "title": "S3 後端設定", "order": 1})
-    (home / "corpus" / "g" / "howto" / "group.yaml").write_text(
-        "title: 操作指南\n", encoding="utf-8")
+    write_leaf.group(home, "g/howto", title='操作指南')
     assert not any(f.rule == "V20" for f in _corpus_lint(home))

@@ -24,7 +24,7 @@ from pathlib import Path
 
 import yaml
 
-from dspx.engine.layout import CORPUS_DIR_NAME, LEDGER_DIR_NAME, Layout
+from dspx.engine.layout import Layout
 from dspx.engine.model import Leaf, content_hash
 
 CHANGES_DIR = "changes"
@@ -393,26 +393,10 @@ def staging_target(cdir: Path, layout: Layout, official: Path) -> Path:
     return staging_dir(cdir).joinpath(*rel.split("/"))
 
 
-# 一個節「自己的來源檔」白名單（★P0 檔案粒度：staging 一節只複製這些＋assets/，
-# **絕不遞迴子章節資料夾**——父/根節的 staging 永不代表其子樹，子節是各自獨立的鏡像路徑）。
-_SECTION_OWN_FILES = ("concept.yaml", "decisions.yaml", "material.md", "develop.md",
-                      "history.yaml", "history.md", "group.yaml")
-_SECTION_ASSET_DIR = "assets"
-
-
-def _has_own_files(d: Path) -> bool:
-    """d（staging 或正式節夾）直接含任一「自己的來源檔」＝真正被 stage 的節（非順帶建出的父路徑）。"""
-    return d.is_dir() and (any((d / n).is_file() for n in _SECTION_OWN_FILES)
-                           or (d / _SECTION_ASSET_DIR).is_dir())
-
-
-def is_section_official_dir(layout: Layout, section: str) -> bool:
-    return (layout.section_dir(section) / "concept.yaml").is_file()
-
-
 def record_fork(change: Change, layout: Layout, official: Path) -> None:
-    """記錄單一 official 檔 fork 當下的 hash（★#9 漂移守門）。node 級的 fork 記錄由
-    stage_section 逐「自己的來源檔」呼叫（不遞迴子章節，見 _SECTION_OWN_FILES）。"""
+    """記錄單一 official 檔 fork 當下的 hash（★#9 漂移守門）。森林級檔（glossary/writing-guide/
+    config）與外部 file target 的 copy-on-write 由 stage_file 呼叫；corpus 節走結構化 store fork
+    key（見 _record_store_fork）。"""
     if official.is_file():
         change.fork_hashes[workspace_rel(layout, official)] = content_hash(official) or ""
 
@@ -494,38 +478,11 @@ def _unstage_store_section(change: Change, layout: Layout, section: str) -> None
         change.fork_hashes.pop(_store_fork_key(article, section, cat), None)
 
 
-def stage_section(change: Change, layout: Layout, section: str) -> Path | None:
-    """corpus 節暫存化。**backend 路由**：store 篇走結構化 partial store（回 None）；散檔篇走
-    現行檔案粒度 copy-on-write（回 staging 內該節路徑）。
-
-    散檔（★P0 檔案粒度）：首次改該節時只複製它**自己的來源檔**（concept/decisions/material/
-    develop/history/group ＋ assets/）進 staging——**不遞迴子章節資料夾**。已 stage（含自己的檔）＝
-    直接回、不覆蓋既有暫存編輯。"""
-    from dspx.engine import store as _store
-    if _store.article_has_store(layout, layout.article_of(section)):
-        _stage_store_section(change, layout, section)
-        return None
-    official = layout.section_dir(section)
-    staged = staging_target(change.dir, layout, official)
-    if _has_own_files(staged):
-        return staged
-    staged.mkdir(parents=True, exist_ok=True)
-    if official.is_dir():
-        for name in _SECTION_OWN_FILES:
-            src = official / name
-            if src.is_file():
-                shutil.copy2(src, staged / name)
-                record_fork(change, layout, src)
-        adir = official / _SECTION_ASSET_DIR
-        if adir.is_dir():
-            dst = staged / _SECTION_ASSET_DIR
-            if not dst.exists():
-                shutil.copytree(adir, dst)
-            for f in sorted(adir.rglob("*")):
-                if f.is_file():
-                    record_fork(change, layout, f)
-    # create action：正式面尚無此節（staged 為空夾，agent 之後填 concept/…）。
-    return staged
+def stage_section(change: Change, layout: Layout, section: str) -> None:
+    """corpus 節暫存化（★store-only：結構化 partial store）。把正式 store 該 path 記錄深拷貝進
+    `changes/<id>/staging/<article>.yaml`（已 stage＝不覆蓋既有暫存編輯）；正式面尚無此節（create）＝
+    落 leaf 記錄 concept=None 佔位（未結晶＝不入 union）。"""
+    _stage_store_section(change, layout, section)
 
 
 def stage_file(change: Change, layout: Layout, official: Path) -> Path:
@@ -542,30 +499,9 @@ def stage_file(change: Change, layout: Layout, official: Path) -> Path:
 
 
 def unstage_section(change: Change, layout: Layout, section: str) -> None:
-    """丟棄某節的 staging（★8.4 remove-target 用）。**backend 路由**：store 篇移除 partial store
-    記錄＋清分類 fork key；散檔篇只刪它**自己的來源檔**＋assets/、清 fork_hashes 對應項——
-    **不 rmtree staging 節夾**（該夾可能巢狀著子章節的 staging，rmtree 會誤刪子節暫存）。"""
-    from dspx.engine import store as _store
-    if _store.article_has_store(layout, layout.article_of(section)):
-        _unstage_store_section(change, layout, section)
-        _clear_preview_redraft(change, section)
-        return
-    official = layout.section_dir(section)
-    staged = staging_target(change.dir, layout, official)
-    for name in _SECTION_OWN_FILES:
-        f = staged / name
-        if f.is_file():
-            f.unlink()
-        change.fork_hashes.pop(workspace_rel(layout, official / name), None)
-    adir = staged / _SECTION_ASSET_DIR
-    if adir.is_dir():
-        for f in sorted(adir.rglob("*")):
-            if f.is_file():
-                change.fork_hashes.pop(
-                    workspace_rel(layout, official / _SECTION_ASSET_DIR / f.relative_to(adir)),
-                    None)
-        shutil.rmtree(adir)
-    # 清 preview 側的入單標髒（該 target 已不在單，不再需要 stale 信號）
+    """丟棄某節的 staging（★8.4 remove-target 用；★store-only）：從 partial store 移除該記錄＋
+    清該節三分類 fork key＋清 preview 側入單標髒（該 target 已不在單，不再需要 stale 信號）。"""
+    _unstage_store_section(change, layout, section)
     _clear_preview_redraft(change, section)
 
 
@@ -580,70 +516,12 @@ def _clear_preview_redraft(change: Change, section: str) -> None:
         _write_preview_ledger(change, article, ledger)
 
 
-def staged_sections(change: Change, layout: Layout) -> list[str]:
-    """staging 內已鏡像的 corpus 節（含 concept.yaml 或空 create 節）section 路徑。"""
-    corpus_root = staging_target_corpus(change.dir, layout)
-    if not corpus_root.is_dir():
-        return []
-    out: list[str] = []
-    for cp in sorted(corpus_root.rglob("concept.yaml")):
-        rel = cp.parent.relative_to(corpus_root).as_posix()
-        out.append(rel)
-    # create 節可能尚無 concept.yaml——以資料夾（含任何檔或空）補列
-    return out
-
-
-def staging_target_corpus(cdir: Path, layout: Layout) -> Path:
-    """staging 內的 corpus 根（staging/<planning_home_rel>/corpus）。"""
-    return staging_dir(cdir).joinpath(*planning_home_rel(layout).parts) / CORPUS_DIR_NAME
-
-
-# ── union view 載入 ──────────────────────────────────────────────────
-
-def _resolved_section_dir(change: Change, layout: Layout, section: str) -> Path:
-    """某節的 union 解析：staging 內**真正被複製的節**（直接含自己的來源檔）＝優先，否則正式
-    corpus。注意：暫存某子節會**順帶建出**其父路徑資料夾（如 staging/.../guide/），但那不是
-    「被 stage 的節」——它沒有自己的來源檔，不得遮蔽正式的同名祖先節（★P0 檔案粒度）。"""
-    official = layout.section_dir(section)
-    staged = staging_target(change.dir, layout, official)
-    if _has_own_files(staged):
-        return staged
-    return official
-
-
-def _load_leaf_from(section: str, leaf_dir: Path) -> Leaf:
-    """從一個具體資料夾（正式或 staging）讀出 Leaf——section 由呼叫端明確給（staging 路徑
-    無法 relative_to 正式 corpus）。委派 model.leaf_from_dir（含 material 讀入＝own 軸 v5 正確）。"""
-    from dspx.engine.model import leaf_from_dir
-    return leaf_from_dir(section, leaf_dir)
-
+# ── union view 載入（★store-only：正式記錄 ∪ staging overlay）──────────
 
 def load_union(layout: Layout, change: Change) -> list[Leaf]:
-    """union view：staging 優先、正式補底，合成森林 leaves（依 section 路徑排序）。
-
-    節集合＝正式 corpus 活節 ∪ staging 內有 concept.yaml 的節（含新 create 節）。每節從
-    「staging 整包（若存在）否則正式」讀 concept/decisions/material/... 建 Leaf。無 change
-    context 時呼叫端仍走 model.load_project（逐 byte 同現行）。"""
-    sections: list[str] = []
-    seen: set[str] = set()
-    for d in layout.leaf_dirs():
-        sec = layout.section_id(d)
-        if sec not in seen:
-            seen.add(sec)
-            sections.append(sec)
-    for sec in staged_sections(change, layout):
-        if sec not in seen:
-            seen.add(sec)
-            sections.append(sec)
-    sections.sort()
-    leaves: list[Leaf] = []
-    for sec in sections:
-        rd = _resolved_section_dir(change, layout, sec)
-        if not (rd / "concept.yaml").is_file():
-            continue   # create 節尚未結晶（無 concept.yaml）→ 不入 union（同正式 develop-only 語義）
-        leaves.append(_load_leaf_from(sec, rd))
-    # ── store 篇：正式記錄 ∪ staging overlay（partial store）──
-    leaves.extend(_union_store_leaves(layout, change))
+    """union view：正式 store 記錄 ∪ staging overlay（整記錄蓋／tombstone 刪／pending-create 佔位），
+    合成森林 leaves（依 section 路徑排序）。無 change context 時呼叫端走 model.load_project。"""
+    leaves = _union_store_leaves(layout, change)
     leaves.sort(key=lambda lf: lf.section)
     return leaves
 
@@ -723,8 +601,10 @@ class OverlayLayout:
         return self._base.docs_assets_dir(article)
 
     # ── staging-first 讀 ──
+    # ★store-only：corpus 節真相走 store 記錄（render preview 由 load_union 供 leaves），section_dir
+    # 只服務「該節目錄」名目路徑（assets/docs_assets 等 backend-neutral 查詢），直接透傳正式路徑。
     def section_dir(self, section: str) -> Path:
-        return _resolved_section_dir(self._change, self._base, section)
+        return self._base.section_dir(section)
 
     @property
     def writing_guide(self) -> Path:
@@ -842,25 +722,14 @@ def changes_hitting_article(layout: Layout, article: str,
 # ── put/get 寫讀路由（感知 active change：staging 優先、official 凍結）────────
 
 def section_concept_id(layout: Layout, section: str) -> str | None:
-    """讀某節正式 concept 的 id（供 put/get 判 target ref==concept.id）；缺/壞 → None。
-    **backend 路由**：store 篇由記錄供（散檔篇無 concept.yaml，只能靠 section 路徑匹配 target）。"""
+    """讀某節正式 concept 的 id（供 put/get 判 target ref==concept.id）；缺/未結晶 → None。
+    ★store-only：由正式 store 記錄供（尚無 store／尚無 concept＝None，靠 section 路徑匹配 target）。"""
     from dspx.engine import store as _store
     article = layout.article_of(section)
-    if _store.article_has_store(layout, article):
-        art = _store.cached_article(layout, article)
-        rec = art.record_by_path(section) if art is not None else None
-        if rec is not None and rec.concept and rec.concept.get("id"):
-            return str(rec.concept["id"])
-        return None
-    cpath = layout.section_dir(section) / "concept.yaml"
-    if not cpath.is_file():
-        return None
-    try:
-        data = yaml.safe_load(cpath.read_text(encoding="utf-8"))
-    except yaml.YAMLError:
-        return None
-    if isinstance(data, dict) and data.get("id"):
-        return str(data["id"])
+    art = _store.cached_article(layout, article)
+    rec = art.record_by_path(section) if art is not None else None
+    if rec is not None and rec.concept and rec.concept.get("id"):
+        return str(rec.concept["id"])
     return None
 
 
@@ -1126,34 +995,12 @@ def _store_current_category_hash(layout: Layout, fork_key: str) -> str | None:
 # ── 收案落地 primitives（whole-file/dir 替換、無文字合併；D3/G4/G5）────
 
 def land_corpus_section(layout: Layout, change: Change, section: str, schema=None) -> None:
-    """把某 target 節從 staging 落地正式 corpus。**backend 路由**：store 篇走結構化
-    merge-by-section-id（讀正式 store→只換 target 記錄→revision+1→canonical dump）；散檔篇走
-    現行檔案粒度整檔搬回。
+    """把某 target 節從 staging 落地正式 corpus（★store-only：結構化 merge-by-section-id）。
+    讀正式 store→只換 target 記錄→revision+1→canonical dump→原子寫。
 
-    ★P0（兩 backend 皆然）：**只**動這個 target 節、非 target 節 byte 全程不變。散檔靠「根本不
-    碰旁節的檔」；store 靠「旁節記錄全程同一物件、序列化冪等＝其序列化 block byte 不變」。"""
-    from dspx.engine import store as _store
-    if _store.article_has_store(layout, layout.article_of(section)):
-        _land_store_section(layout, change, section, schema)
-        return
-    official = layout.section_dir(section)
-    staged = staging_target(change.dir, layout, official)
-    if not _has_own_files(staged):
-        return
-    official.mkdir(parents=True, exist_ok=True)
-    for name in _SECTION_OWN_FILES:
-        sf = staged / name
-        of = official / name
-        if sf.is_file():
-            shutil.copy2(sf, of)
-        elif of.is_file() and workspace_rel(layout, of) in change.fork_hashes:
-            of.unlink()   # 暫存中被作者刪除的來源檔 → 正式面同步刪（僅限本節自己的檔）
-    sassets = staged / _SECTION_ASSET_DIR
-    if sassets.is_dir():
-        oassets = official / _SECTION_ASSET_DIR
-        if oassets.exists():
-            shutil.rmtree(oassets)
-        shutil.copytree(sassets, oassets)
+    ★P0：**只**動這個 target 節、非 target 節 byte 全程不變——旁節記錄全程同一物件、序列化冪等
+    ⇒ 其序列化 block byte 不變。"""
+    _land_store_section(layout, change, section, schema)
 
 
 def _land_store_section(layout: Layout, change: Change, section: str, schema=None) -> None:

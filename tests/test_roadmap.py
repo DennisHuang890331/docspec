@@ -40,12 +40,17 @@ def _write_roadmap(path: Path, entries: list[dict]) -> None:
 
 
 def _doc_root(home: Path, article: str) -> Path:
-    """per-doc roadmap 路徑＝corpus/<article>/roadmap.yaml。"""
-    return home / "corpus" / article / "roadmap.yaml"
+    """per-doc roadmap 路徑＝corpus/<article>/roadmap.yaml。★store-only：corpus/<article>/ 夾不再由
+    write_leaf 順帶建出——先建夾（引擎 save() 亦自建）。"""
+    p = home / "corpus" / article / "roadmap.yaml"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
 
 
 def _doc_archive(home: Path, article: str) -> Path:
-    return home / "corpus" / article / "roadmap-archive.yaml"
+    p = home / "corpus" / article / "roadmap-archive.yaml"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
 
 
 def _forest(home: Path) -> Path:
@@ -229,6 +234,7 @@ def test_from_audit_dead_ref_fails(make_project, write_leaf):
     home = make_project()
     leaf_dir = write_leaf(home, "art", concept=_root_concept("c-art", "Art"))
     # 寫一個 audit.yaml 含 finding F1
+    leaf_dir.mkdir(parents=True, exist_ok=True)   # ★store-only：corpus/art/ 夾另建放 audit
     (leaf_dir / "audit.yaml").write_text(
         yaml.safe_dump({"findings": [
             {"id": "F1", "face": "logic", "severity": "med", "status": "open",
@@ -248,6 +254,7 @@ def test_from_audit_live_ref_passes(make_project, write_leaf):
     leaf_dir = write_leaf(home, "art", concept=_root_concept("c-art", "Art"),
                           decisions=[{"id": "d1", "kind": "normative",
                                       "status": "accepted", "statement": "s"}])
+    leaf_dir.mkdir(parents=True, exist_ok=True)   # ★store-only：corpus/art/ 夾另建放 audit
     (leaf_dir / "audit.yaml").write_text(
         yaml.safe_dump({"findings": [
             {"id": "F1", "face": "logic", "severity": "med", "status": "open",

@@ -134,11 +134,13 @@ def test_new_accepts_legal_chinese_path(make_project, monkeypatch, capsys):
     monkeypatch.chdir(home.parent)
     assert new_cmd.run(["測試文章/適用範圍"]) == 0
     assert capsys.readouterr().err == ""
-    leaf = home / "corpus" / "測試文章" / "適用範圍"
+    # ★store-only：develop.md 住 work/（結晶前工作台）；corpus 不建任何散檔
+    leaf = home / "work" / "測試文章" / "適用範圍"
     assert (leaf / "develop.md").is_file()
     assert list(p.name for p in leaf.iterdir()) == ["develop.md"]
     # 中間段是純目錄、不被鋪任何檔案
-    assert [p.name for p in (home / "corpus" / "測試文章").iterdir()] == ["適用範圍"]
+    assert [p.name for p in (home / "work" / "測試文章").iterdir()] == ["適用範圍"]
+    assert not (home / "corpus" / "測試文章").exists()
 
 
 def test_new_accepts_spaced_and_numbered_names(make_project, monkeypatch):

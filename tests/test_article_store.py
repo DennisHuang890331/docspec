@@ -202,8 +202,8 @@ def test_migrate_five_faces_zero_change(make_project, monkeypatch):
     home = make_project()
     _sample_corpus(home)
     layout = Layout(home)
-    before = _six_faces([lf for lf in load_project(layout)
-                         if layout.article_of(lf.section) == "g"])
+    # ★store-only：遷移前的 g 是散檔，正常 load_project 已不讀散檔——經遷移橋唯讀路徑取。
+    before = _six_faces(st.load_tree_leaves(layout, "g"))
     monkeypatch.chdir(home.parent)
     assert store_cmd.run(["migrate", "g"]) == 0
     after = _six_faces([lf for lf in load_project(layout)

@@ -55,7 +55,7 @@ def _get_store(layout, schema, args, section: str, change) -> int:
         if staged_rec is not None and staged_rec.kind == "leaf":
             rec = staged_rec
             origin = f" (change \"{change.id}\" staging)"
-    if rec is None:
+    if rec is None and _store.article_has_store(layout, article):
         art = _store.load_article(_store.store_path(layout, article), verify=True)
         rec = art.record_by_path(section)
 
@@ -126,35 +126,5 @@ def run(argv: list[str]) -> int:
             sys.stderr.write(f"docspec: {exc}\n")
             return 2
 
-    # ── backend 路由：store 篇由記錄吐內容（staging 優先、正式補底），非散檔 ──
-    from dspx.engine import store as store_mod
-    if store_mod.article_has_store(layout, layout.article_of(section)):
-        return _get_store(layout, schema, args, section, change)
-
-    filename, artifact_id = _CATEGORIES[args.category]
-    if change is not None:
-        sec_dir = chg.staging_target(change.dir, layout, layout.section_dir(section))
-        # staging 未鏡像此檔（該節此分類尚無暫存副本）→ 回退正式檔，維持 union「補底」語義
-        if not (sec_dir / filename).is_file():
-            sec_dir = layout.section_dir(section)
-    else:
-        sec_dir = layout.section_dir(section)
-    path = sec_dir / filename
-    if path.is_file():
-        content = path.read_text(encoding="utf-8")
-    else:
-        content = _skeleton(schema, artifact_id)
-
-    origin = f" (change \"{change.id}\" staging)" if change is not None else ""
-    if args.out:
-        from pathlib import Path
-        out_path = Path(args.out)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(content, encoding="utf-8", newline="\n")
-        src = "file" if path.is_file() else "empty schema skeleton (no file yet)"
-        print(f"get: {args.section} {args.category} -> {out_path} ({src}){origin}")
-    else:
-        sys.stdout.write(content)
-        if content and not content.endswith("\n"):
-            sys.stdout.write("\n")
-    return 0
+    # ★store-only：由 store 記錄吐內容（staging 優先、正式補底），缺＝schema 空骨架。
+    return _get_store(layout, schema, args, section, change)

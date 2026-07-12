@@ -10,6 +10,20 @@ a minor bump.
 
 ## [Unreleased]
 
+### Removed — the scattered per-section file layout retires; one-file store is the only corpus format
+
+- The one-file `corpus/<article>.yaml` store is now the ONLY live corpus format. The old scattered
+  layout (one folder per section holding `concept.yaml` / `decisions.yaml` / `material.md`) survives
+  only as a migration/recovery bridge: `store migrate` reads it once to convert to the store, and
+  `store dump` writes it for debugging/recovery. `new` / `get` / `put` / `mv` / `retire` / `tidy` /
+  render / status / check all operate on the store — the dual-backend branching in the normal path
+  is gone; `change.py`'s file-granular tree staging is gone (only the structured store staging
+  remains). `develop.md` stays outside the store in `work/<section>/`.
+- The engine core was regrouped into subpackages by responsibility: `dspx/engine/` (the coupled
+  core — model, render, change, store, aperture, crossref, forest, spans, schema, layout, paths,
+  lint, config, glossary), `dspx/reports/` (audit, roadmap, freeze), `dspx/typeset/` (slots,
+  format_config), `dspx/env/` (skills, welcome, _install_source, frontmatter). Pure moves.
+
 ### Changed / Removed — command-surface consolidation (kill redundant commands, finish store lifecycle)
 
 Four commands were folded into the command that already owned their behavior, and the dead

@@ -19,7 +19,6 @@ import sys
 from dspx.check import run_file_check
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
 from dspx.engine.layout import Layout
-from dspx.engine.model import load_leaf
 from dspx.engine.schema import Schema
 
 NAME = "ready"
@@ -48,28 +47,18 @@ def _graduate(layout: Layout, schema: Schema, section: str) -> tuple[bool, list[
     回傳 (ok, reasons, deleted, remainder)——remainder＝develop.md 未榨乾文字（乾淨＝""），
     single 模式在外面照舊印節錄；batch 模式只取第一個 reason。
 
-    **backend 路由**：store 篇 leaf 由記錄餵、develop.md 住 work/（結晶前工作台），畢業＝刪 work/
-    的 develop.md；散檔篇照舊（concept.yaml 存在性＋節夾內 develop.md）。
+    ★store-only：leaf 由 store 記錄餵、develop.md 住 work/（結晶前工作台），畢業＝刪 work/ 的
+    develop.md。concept 尚未結晶（無 store 記錄或無 concept）＝拒絕（needs crystallize first）。
     """
     from dspx.engine import store as _store
     reasons: list[str] = []
-    is_store = _store.article_has_store(layout, layout.article_of(section))
 
-    if is_store:
-        art = _store.cached_article(layout, layout.article_of(section))
-        rec = art.record_by_path(section) if art is not None else None
-        if rec is None or rec.kind != "leaf" or rec.concept is None:
-            return False, ["not crystallized yet: no store record with a concept"], False, ""
-        leaf = _store.leaf_from_record(layout, rec)
-        develop_path = _store.work_develop(layout, section)
-    else:
-        section_dir = layout.section_dir(section)
-        leaf = load_leaf(layout, section_dir)
-        # ① 目的地存在（結晶過）。concept 無合法空形狀＝必備；decisions.yaml 缺席＝合法空
-        # （該節無自有裁決），不再是拒絕理由（contract-slimming D2；空殼反模式已撤）。
-        if not (section_dir / "concept.yaml").is_file():
-            reasons.append("not crystallized yet: missing concept.yaml")
-        develop_path = section_dir / "develop.md"
+    art = _store.cached_article(layout, layout.article_of(section))
+    rec = art.record_by_path(section) if art is not None else None
+    if rec is None or rec.kind != "leaf" or rec.concept is None:
+        return False, ["not crystallized yet: no store record with a concept"], False, ""
+    leaf = _store.leaf_from_record(layout, rec)
+    develop_path = _store.work_develop(layout, section)
 
     # ② 完整性（per-section 欄位級）
     reasons.extend(run_file_check(leaf, schema))
@@ -156,17 +145,14 @@ def run(argv: list[str]) -> int:
             return _run_batch(layout, schema, section, targets, args.as_json)
 
     from dspx.engine import store as _store
-    if _store.article_has_store(layout, layout.article_of(section)):
-        art = _store.cached_article(layout, layout.article_of(section))
-        if art is None or art.record_by_path(section) is None:
-            sys.stderr.write(f"docspec: section \"{section}\" not found in store "
-                             f"corpus/{layout.article_of(section)}.yaml\n")
-            return 2
-    else:
-        section_dir = layout.section_dir(section)
-        if not section_dir.is_dir():
-            sys.stderr.write(f"docspec: section \"{section}\" not found: {section_dir}\n")
-            return 2
+    art = _store.cached_article(layout, layout.article_of(section))
+    has_record = art is not None and art.record_by_path(section) is not None
+    has_develop = _store.work_develop(layout, section).is_file()
+    if not has_record and not has_develop:
+        sys.stderr.write(f"docspec: section \"{section}\" not found "
+                         f"(no store record in corpus/{layout.article_of(section)}.yaml, "
+                         "no work/ develop.md)\n")
+        return 2
 
     ok, reasons, deleted, remainder = _graduate(layout, schema, section)
 

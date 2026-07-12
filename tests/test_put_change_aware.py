@@ -15,6 +15,7 @@ import re
 import yaml
 
 from dspx.engine import change as chg
+from dspx.engine import store as st
 from dspx.commands.change import change as change_cmd
 from dspx.commands.corpus import get as get_cmd
 from dspx.commands.corpus import put as put_cmd
@@ -91,10 +92,31 @@ def _concept_src(tmp_path, name, concept_field):
     return str(p)
 
 
-def _staged(home, cid, section, filename):
+# ── ★store-only staging accessors（取代舊的散檔 staging_target/<file>）──
+
+def _official_sp(home, article="g"):
+    """正式 store 檔路徑（official byte-frozen 斷言的實體）。"""
+    return st.store_path(Layout(home, "per-article"), article)
+
+
+def _official_concept(home, section):
+    layout = Layout(home, "per-article")
+    art = st.load_article(st.store_path(layout, section.split("/", 1)[0]), verify=False)
+    return art.record_by_path(section).concept
+
+
+def _staging_rec(home, cid, section):
     layout = Layout(home, "per-article")
     change = chg.load_change(layout, cid)
-    return chg.staging_target(change.dir, layout, layout.section_dir(section)) / filename
+    staging = chg._load_staging_article(change.dir, section.split("/", 1)[0])
+    return staging.record_by_path(section) if staging is not None else None
+
+
+def _staging_concept_text(home, cid, section):
+    """change staging 內某節 concept 的 yaml 文字（無記錄＝空字串）。"""
+    import yaml as _y
+    rec = _staging_rec(home, cid, section)
+    return _y.safe_dump(rec.concept, allow_unicode=True) if (rec and rec.concept) else ""
 
 
 # ── 4.1：active change 期間 put target → staging 有新內容、official byte 不變 ──
@@ -104,8 +126,8 @@ def test_put_target_routes_to_staging_official_byte_frozen(
     home = _project(make_project, write_leaf)
     _render_baseline(home, monkeypatch)
     layout = Layout(home, "per-article")
-    official = home / "corpus" / "g" / "intro" / "concept.yaml"
-    before = official.read_bytes()          # ★收案前的 official bytes
+    sp = _official_sp(home)                 # ★store-only：official＝corpus/g.yaml store 檔
+    before = sp.read_bytes()                # ★收案前的 official store bytes
 
     change_cmd.run(["new", "chg-x", "--publish", "advisory"])
     change_cmd.run(["add-target", "chg-x", "sec-intro", "--action", "revise"])
@@ -113,14 +135,12 @@ def test_put_target_routes_to_staging_official_byte_frozen(
     src = _concept_src(tmp_path, "c.yaml", "REVISED-IN-STAGING")
     assert put_cmd.run(["g/intro", "concept", src]) == 0
 
-    # ★official 檔逐 byte 不變（byte-frozen）
-    assert official.read_bytes() == before
+    # ★official store 逐 byte 不變（byte-frozen）
+    assert sp.read_bytes() == before
 
-    # ★staging 副本有新內容
-    staged = _staged(home, "chg-x", "g/intro", "concept.yaml")
-    assert staged.is_file()
-    assert "REVISED-IN-STAGING" in staged.read_text(encoding="utf-8")
-    assert "REVISED-IN-STAGING" not in official.read_text(encoding="utf-8")
+    # ★staging partial store 有新內容
+    assert "REVISED-IN-STAGING" in _staging_concept_text(home, "chg-x", "g/intro")
+    assert "REVISED-IN-STAGING" not in sp.read_text(encoding="utf-8")
 
 
 def test_official_status_unaffected_change_status_reflects(
@@ -157,16 +177,15 @@ def test_put_nontarget_writes_official(make_project, write_leaf, monkeypatch, tm
     change_cmd.run(["new", "chg-x", "--publish", "advisory"])
     change_cmd.run(["add-target", "chg-x", "sec-intro", "--action", "revise"])
 
-    # 對旁節 g/usage（不在任何單）put → 寫 official（無 staging 路由）
-    usage_official = home / "corpus" / "g" / "usage" / "concept.yaml"
-    data = yaml.safe_load(usage_official.read_text(encoding="utf-8"))
+    # 對旁節 g/usage（不在任何單）put → 寫 official store（無 staging 路由）★store-only
+    data = dict(_official_concept(home, "g/usage"))
     data["concept"] = "USAGE-OFFICIAL-EDIT"
     p = tmp_path / "u.yaml"
     p.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
     assert put_cmd.run(["g/usage", "concept", str(p)]) == 0
-    assert "USAGE-OFFICIAL-EDIT" in usage_official.read_text(encoding="utf-8")
-    # 沒有 g/usage 的 staging 冒出來
-    assert not _staged(home, "chg-x", "g/usage", "concept.yaml").is_file()
+    assert _official_concept(home, "g/usage")["concept"] == "USAGE-OFFICIAL-EDIT"
+    # 沒有 g/usage 的 staging 記錄冒出來
+    assert _staging_rec(home, "chg-x", "g/usage") is None
 
 
 # ── 4.2：多 change 同 target fail-loud；--change 指名可寫 ──
@@ -174,16 +193,16 @@ def test_put_nontarget_writes_official(make_project, write_leaf, monkeypatch, tm
 def test_multi_change_same_target_fail_loud(make_project, write_leaf, monkeypatch, tmp_path, capsys):
     home = _project(make_project, write_leaf)
     _render_baseline(home, monkeypatch)
-    official = home / "corpus" / "g" / "intro" / "concept.yaml"
-    before = official.read_bytes()
+    sp = _official_sp(home)
+    before = sp.read_bytes()
 
     change_cmd.run(["new", "chg-a", "--publish", "advisory"])
     change_cmd.run(["add-target", "chg-a", "sec-intro", "--action", "revise"])
     change_cmd.run(["new", "chg-b", "--publish", "advisory"])
     change_cmd.run(["add-target", "chg-b", "sec-intro", "--action", "revise"])
 
-    a_before = _staged(home, "chg-a", "g/intro", "concept.yaml").read_bytes()
-    b_before = _staged(home, "chg-b", "g/intro", "concept.yaml").read_bytes()
+    a_before = _staging_concept_text(home, "chg-a", "g/intro")
+    b_before = _staging_concept_text(home, "chg-b", "g/intro")
 
     src = _concept_src(tmp_path, "c.yaml", "AMBIGUOUS")
     capsys.readouterr()
@@ -191,16 +210,16 @@ def test_multi_change_same_target_fail_loud(make_project, write_leaf, monkeypatc
     assert rc == 2                                   # ★fail-loud、不猜
     err = capsys.readouterr().err
     assert "--change" in err and "chg-a" in err and "chg-b" in err
-    # 沒寫任何一邊
-    assert official.read_bytes() == before
-    assert _staged(home, "chg-a", "g/intro", "concept.yaml").read_bytes() == a_before
-    assert _staged(home, "chg-b", "g/intro", "concept.yaml").read_bytes() == b_before
+    # 沒寫任何一邊（★store-only：official store 檔 + 兩張 staging partial store 皆不變）
+    assert sp.read_bytes() == before
+    assert _staging_concept_text(home, "chg-a", "g/intro") == a_before
+    assert _staging_concept_text(home, "chg-b", "g/intro") == b_before
 
     # --change 指名 chg-a → 只寫 chg-a staging
     assert put_cmd.run(["g/intro", "concept", src, "--change", "chg-a"]) == 0
-    assert "AMBIGUOUS" in _staged(home, "chg-a", "g/intro", "concept.yaml").read_text(encoding="utf-8")
-    assert _staged(home, "chg-b", "g/intro", "concept.yaml").read_bytes() == b_before
-    assert official.read_bytes() == before
+    assert "AMBIGUOUS" in _staging_concept_text(home, "chg-a", "g/intro")
+    assert _staging_concept_text(home, "chg-b", "g/intro") == b_before
+    assert sp.read_bytes() == before
 
 
 def test_put_change_not_targeting_section_errors(
@@ -244,8 +263,8 @@ def test_abandon_after_put_leaves_official_zero_residue(
     home = _project(make_project, write_leaf)
     _render_baseline(home, monkeypatch)
     layout = Layout(home, "per-article")
-    official = home / "corpus" / "g" / "intro" / "concept.yaml"
-    before = official.read_bytes()
+    sp = _official_sp(home)                 # ★store-only：official＝store 檔
+    before = sp.read_bytes()
     latest_before = _latest(home).read_bytes()
 
     change_cmd.run(["new", "chg-x", "--publish", "advisory"])
@@ -258,8 +277,8 @@ def test_abandon_after_put_leaves_official_zero_residue(
 
     assert change_cmd.run(["archive", "chg-x", "--abandon", "--reason", "wrong turn"]) == 0
 
-    # ★official + 交付物零 byte 變化；staging 副本整包消失（零回滾假設成立）
-    assert official.read_bytes() == before
+    # ★official store + 交付物零 byte 變化；staging 副本整包消失（零回滾假設成立）
+    assert sp.read_bytes() == before
     assert _latest(home).read_bytes() == latest_before
     assert chg.change_state(layout, "chg-x") == "abandoned"
     abandoned = chg.change_dir(layout, "chg-x", chg.STATE_ABANDONED)
@@ -373,12 +392,12 @@ def test_archive_lists_silently_absorbed_downstream(
     change_cmd.run(["new", "chg-x", "--seed", "dec-1", "--publish", "advisory"])
 
     # 改上游（staging g 的 dec-1 statement）——落地後會令下游 g/intro stale-upstream
+    # ★store-only：改 change 的 partial store staging 記錄 g 的 decisions
     change = chg.load_change(layout, "chg-x")
-    dpath = chg.staging_target(change.dir, layout, layout.section_dir("g")) / "decisions.yaml"
-    d = yaml.safe_load(dpath.read_text(encoding="utf-8"))
-    d["entries"][0]["statement"] = "Use imperial units."
-    dpath.write_text(yaml.safe_dump(d, allow_unicode=True, sort_keys=False),
-                     encoding="utf-8", newline="\n")
+    chg.stage_section(change, layout, "g")
+    staging = chg._load_staging_article(change.dir, "g")
+    staging.record_by_path("g").decisions[0]["statement"] = "Use imperial units."
+    chg._save_staging_article(change.dir, staging)
 
     # 把下游 g/intro 踢出單（通用引用型、不需重寫）
     assert change_cmd.run(["remove-target", "chg-x", "sec-intro"]) == 0

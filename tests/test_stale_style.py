@@ -95,8 +95,7 @@ def test_ack_refused_on_stale_own_even_if_style_also_changed(
         make_project, write_leaf, monkeypatch, capsys):
     """守門：節其實 stale-own（自己源變了）→ 即使 doctrine 也變了，--ack 仍拒絕、保住信號。"""
     home = _baseline_with_prose(make_project, write_leaf, monkeypatch)
-    cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
-    cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（改）"), "utf-8")
+    write_leaf.edit_replace(home, "g/intro", "title: 概覽", "title: 概覽（改）")
     (home / "writing-guide.md").write_text(GUIDE_B, encoding="utf-8")
     assert _sync_of(home, "g", "g/intro") == "stale-own"     # own 優先於 style
     capsys.readouterr()
@@ -108,8 +107,7 @@ def test_ack_refused_on_stale_own_even_if_style_also_changed(
 def test_stale_own_takes_precedence_over_style(make_project, write_leaf, monkeypatch):
     """own 與 style 同時變 → 報 stale-own（較嚴重、回 draft），不被 style 遮蔽。"""
     home = _baseline_with_prose(make_project, write_leaf, monkeypatch)
-    cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
-    cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（修訂）"), "utf-8")
+    write_leaf.edit_replace(home, "g/intro", "title: 概覽", "title: 概覽（修訂）")
     (home / "writing-guide.md").write_text(GUIDE_B, encoding="utf-8")
     render_cmd.run(["g"])
     assert _sync_of(home, "g", "g/intro") == "stale-own"

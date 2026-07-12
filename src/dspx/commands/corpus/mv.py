@@ -229,6 +229,8 @@ def _is_section_folder(layout, src: Path) -> bool:
 
 
 def _run_section_mode(layout, schema, old_arg: str, new_arg: str) -> int:
+    """★store-only：改名/搬移一個 leaf/group＝改 store 記錄的 path 前綴（不搬資料夾），走結構化
+    記錄搬移。基本非空/自等檢查後委派 `_run_store_section_mode`（tidy 也走這個入口）。"""
     old = old_arg.strip("/")
     new = new_arg.strip("/")
     if not old or not new:
@@ -237,104 +239,7 @@ def _run_section_mode(layout, schema, old_arg: str, new_arg: str) -> int:
     if old == new:
         sys.stderr.write("docspec: source and destination are identical (nothing to move)\n")
         return 2
-
-    # ── backend 路由：store 篇改的是記錄的 path 前綴（不搬資料夾），走結構化記錄搬移。 ──
-    from dspx.engine import store as _store
-    if (_store.article_has_store(layout, layout.article_of(old))
-            or _store.article_has_store(layout, layout.article_of(new))):
-        return _run_store_section_mode(layout, schema, old, new)
-
-    src = layout.section_dir(old)
-    dst = layout.section_dir(new)
-
-    if layout.is_archived_path(src):
-        sys.stderr.write(f"docspec: \"{old}\" is in the archive; mv operates on the live tree only.\n")
-        return 1
-    if not _is_section_folder(layout, src):
-        sys.stderr.write(
-            f"docspec: section \"{old}\" not found (needs a leaf with concept.yaml/develop.md or a "
-            "group folder containing sections). Use docspec status for paths.\n")
-        return 1
-
-    # v1 範圍：article root（無 `/`）不搬——交付檔名/publish 凍結/verdicts journal 綁 article 名。
-    if "/" not in old:
-        sys.stderr.write(
-            f"docspec: refusing to move article root \"{old}\" — deliverable filename, publish "
-            "freeze ledger and verdicts journal are keyed by the article name; root moves are a "
-            "later mv extension (designed together with freeze linkage). v1 scope is leaf/group.\n")
-        return 1
-    if "/" not in new:
-        sys.stderr.write(
-            f"docspec: destination \"{new}\" would be an article root (no parent segment); v1 mv "
-            "cannot promote a section to an article root.\n")
-        return 1
-    # v1 範圍：同一 article（跨 article 牽動 audit/roadmap/ledger 的 article 歸屬，屬後續擴充）。
-    if old.split("/", 1)[0] != new.split("/", 1)[0]:
-        sys.stderr.write(
-            f"docspec: refusing cross-article move (\"{old.split('/', 1)[0]}\" -> "
-            f"\"{new.split('/', 1)[0]}\") — v1 mv is same-article only (cross-article changes the "
-            "deliverable/ledger/audit article ownership; that is a later extension).\n")
-        return 1
-
-    problem = validate_section_path(new)
-    if problem:
-        sys.stderr.write(f"docspec: refusing to move to \"{new}\": {problem}\n")
-        return 2
-    if dst.exists():
-        sys.stderr.write(
-            f"docspec: destination \"{new}\" already exists ({dst}); resolve it before moving.\n")
-        return 1
-
-    # mv 以 check 自驗——若專案已非綠，無法分辨「本次搬移」是否破壞引用；先要求綠。
-    pre = _check_result(layout, schema)
-    if not pre.ok:
-        sys.stderr.write(
-            "docspec: refusing to mv — docspec check is not green; mv self-verifies with check and "
-            "cannot tell a pre-existing error from one it caused. Fix these first:\n")
-        for err in pre.errors[:20]:
-            sys.stderr.write(f"    ✗ {err}\n")
-        return 1
-
-    article = old.split("/", 1)[0]
-    touched = [
-        layout.docs_latest(article),
-        forest_audit_path(layout), doc_audit_path(layout, article),
-        forest_roadmap_path(layout), doc_roadmap_path(layout, article),
-    ]
-    snapshots = _snapshot(touched)
-    created_dirs = _ensure_parent(dst)
-    moved = False
-    report: list[str] = []
-    try:
-        shutil.move(str(src), str(dst))
-        moved = True
-        report += _rewrite_latest_markers(layout.docs_latest(article), old, new)
-        report += _rewrite_audit_file(forest_audit_path(layout), old, new)
-        report += _rewrite_audit_file(doc_audit_path(layout, article), old, new)
-        report += _rewrite_roadmap_file(forest_roadmap_path(layout), old, new)
-        report += _rewrite_roadmap_file(doc_roadmap_path(layout, article), old, new)
-        result = _check_result(layout, schema)
-        if not result.ok:
-            raise _MvAbort("check went red after the move:\n    "
-                           + "\n    ".join(f"✗ {e}" for e in result.errors[:20]))
-    except (_MvAbort, Exception) as exc:  # noqa: BLE001 — 任何失敗都要回滾
-        if moved and dst.exists() and not src.exists():
-            shutil.move(str(dst), str(src))
-        _restore(snapshots)
-        _remove_created_dirs(created_dirs)
-        sys.stderr.write(f"docspec: mv aborted (no partial effect): {exc}\n")
-        return 1
-
-    print(f"mv: \"{old}\" -> \"{new}\" (folder moved; references rewritten; check green)")
-    if report:
-        for c in report:
-            print(f"  {c}")
-    else:
-        print("  (no path-keyed references pointed at the moved subtree)")
-    print(f"  reminder: run `docspec render {article} --rebaseline` — the fingerprint ledger is "
-          "keyed by section path and is NOT hand-edited; rebaseline regenerates it for the new "
-          "paths (prose is preserved). Identity (concept.id) is unchanged.")
-    return 0
+    return _run_store_section_mode(layout, schema, old, new)
 
 
 # ── 節模式（store backend）────────────────────────────────────────────────

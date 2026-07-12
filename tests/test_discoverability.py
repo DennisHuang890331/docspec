@@ -47,8 +47,8 @@ def test_ready_batch_all_green_graduates_whole_article(make_project, write_leaf,
                    decisions=_dec(f"d-{cid}"), develop="<!-- drained -->")
     monkeypatch.chdir(home.parent)
     assert ready_cmd.run(["g"]) == 0
-    assert not (home / "corpus" / "g" / "a" / "develop.md").exists()
-    assert not (home / "corpus" / "g" / "b" / "develop.md").exists()
+    assert not (home / "work" / "g" / "a" / "develop.md").exists()
+    assert not (home / "work" / "g" / "b" / "develop.md").exists()
 
 
 def test_ready_batch_failing_section_skipped_no_rollback(make_project, write_leaf,
@@ -62,8 +62,8 @@ def test_ready_batch_failing_section_skipped_no_rollback(make_project, write_lea
     monkeypatch.chdir(home.parent)
     assert ready_cmd.run(["g"]) == 1
     out = capsys.readouterr().out
-    assert not (home / "corpus" / "g" / "a" / "develop.md").exists()   # 兄弟照畢業
-    assert (home / "corpus" / "g" / "b" / "develop.md").is_file()      # 失敗節留著
+    assert not (home / "work" / "g" / "a" / "develop.md").exists()   # 兄弟照畢業
+    assert (home / "work" / "g" / "b" / "develop.md").is_file()      # 失敗節留著
     assert "✓ g/a" in out
     assert "✗ g/b" in out and "unrouted substantive content" in out
 
@@ -200,10 +200,7 @@ def _titled_group_corpus(home, write_leaf):
                                             "concept": "x"})
     write_leaf(home, "demo/guide/setup", concept={"id": "cs", "title": "安裝", "order": 1,
                                                   "concept": "y"})
-    gdir = home / "corpus" / "demo" / "guide"
-    (gdir / "group.yaml").write_text(
-        yaml.safe_dump({"title": "操作指南", "order": 2}, allow_unicode=True),
-        encoding="utf-8")
+    write_leaf.group(home, "demo/guide", title="操作指南", order=2)
 
 
 def test_status_group_node_with_localized_title(make_project, write_leaf, monkeypatch, capsys):

@@ -941,8 +941,9 @@ def title_numbering_prefix(title: object) -> str | None:
 
 
 def _lint_title_prefix(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
-    """V20：concept.yaml / group.yaml 的 title 以大綱編號起頭 → WARN（指向 `docspec tidy`）。"""
-    import yaml
+    """V20：concept / group 記錄的 title 以大綱編號起頭 → WARN（指向 `docspec tidy`）。
+    ★store-only：group title 由 store 記錄枚舉（非散檔 group.yaml）。"""
+    from dspx.engine import store as _store
     findings: list[Finding] = []
 
     def _flag(where: str, title: str, pref: str) -> None:
@@ -956,18 +957,11 @@ def _lint_title_prefix(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
         if pref:
             _flag(f"{leaf.section}/concept.yaml", title, pref)
 
-    if layout.corpus_dir.is_dir():
-        for gy in sorted(layout.corpus_dir.rglob("group.yaml")):
-            if layout.is_archived_path(gy.parent):
-                continue
-            try:
-                data = yaml.safe_load(gy.read_text(encoding="utf-8"))
-            except yaml.YAMLError:
-                continue                      # 壞檔由 check ⑩ fail-loud；lint 不重複吵
-            if not isinstance(data, dict):
-                continue
-            title = data.get("title")
+    for art in _store.store_articles(layout):
+        art_obj = _store.cached_article(layout, art)
+        for rec in (art_obj.group_records() if art_obj is not None else []):
+            title = (rec.group or {}).get("title")
             pref = title_numbering_prefix(title)
             if pref:
-                _flag(f"{layout.section_id(gy.parent)}/group.yaml", title, pref)
+                _flag(f"{rec.path}/group.yaml", title, pref)
     return findings

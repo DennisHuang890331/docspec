@@ -158,9 +158,7 @@ def test_two_flavor_staleness(make_project, write_leaf, monkeypatch):
 
     assert sync_of("doc/sec/a") == "synced"
     # 改父節 brief（子節自己的檔沒動）→ 子節 stale-inherited
-    sec_concept = home / "corpus" / "doc" / "sec" / "concept.yaml"
-    sec_concept.write_text(
-        sec_concept.read_text(encoding="utf-8").replace("受眾: X", "受眾: Y"), encoding="utf-8")
+    write_leaf.edit_replace(home, "doc/sec", "受眾: X", "受眾: Y")
     assert sync_of("doc/sec/a") == "stale-inherited"
     assert sync_of("doc/sec") == "stale-own"   # 父節自己的源變了＝對它自己是 stale-own
 
@@ -224,7 +222,7 @@ def test_no_root_uses_article_group_yaml_title(make_project, write_leaf, monkeyp
     from dspx.commands.deliverable import render as render_cmd
     home = make_project()
     write_leaf(home, "guide/intro", concept={"id": "c1", "title": "簡介", "order": 1})
-    (home / "corpus" / "guide" / "group.yaml").write_text("title: 系統概念\n", encoding="utf-8")
+    write_leaf.group(home, "guide", title='系統概念')
     monkeypatch.chdir(home.parent)
     render_cmd.run(["guide"])
     text = (home.parent / "docs" / "guide" / "_latest.md").read_text(encoding="utf-8")
@@ -235,7 +233,7 @@ def test_group_node_uses_localized_group_yaml_title(make_project, write_leaf, mo
     """② 分組節點放 group.yaml → 標題在地化（治中文文件冒英文 slug 標題）。"""
     home = make_project()
     write_leaf(home, "g/howto/s3", concept={"id": "c1", "title": "S3 後端", "order": 1})
-    (home / "corpus" / "g" / "howto" / "group.yaml").write_text("title: 操作指南\n", encoding="utf-8")
+    write_leaf.group(home, "g/howto", title='操作指南')
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
     text = _latest(home).read_text(encoding="utf-8")
@@ -259,8 +257,7 @@ def test_group_node_sorts_by_group_yaml_order(make_project, write_leaf, monkeypa
     write_leaf(home, "g/intro", concept={"id": "c1", "title": "簡介", "order": 1})
     write_leaf(home, "g/methods/a", concept={"id": "c2", "title": "方法A", "order": 1})
     write_leaf(home, "g/results", concept={"id": "c3", "title": "結果", "order": 4})
-    (home / "corpus" / "g" / "methods" / "group.yaml").write_text(
-        "title: 方法\norder: 3.0\n", encoding="utf-8")
+    write_leaf.group(home, "g/methods", title='方法', order=3.0)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
     text = _latest(home).read_text(encoding="utf-8")
@@ -273,7 +270,7 @@ def test_group_node_without_order_keeps_default(make_project, write_leaf, monkey
     home = make_project()
     write_leaf(home, "g/intro", concept={"id": "c1", "title": "簡介", "order": 1})
     write_leaf(home, "g/methods/a", concept={"id": "c2", "title": "方法A", "order": 1})
-    (home / "corpus" / "g" / "methods" / "group.yaml").write_text("title: 方法\n", encoding="utf-8")
+    write_leaf.group(home, "g/methods", title='方法')
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
     text = _latest(home).read_text(encoding="utf-8")
@@ -294,8 +291,7 @@ def test_render_output_locked_byte_for_byte(make_project, write_leaf, monkeypatc
     write_leaf(home, "g/methods/analysis", concept={"id": "c-ma", "title": "分析", "order": 2})
     write_leaf(home, "g/methods/survey", concept={"id": "c-ms", "title": "調查", "order": 1})
     write_leaf(home, "g/annex-b", concept={"id": "c-ab", "title": "附錄B", "order": 99})
-    (home / "corpus" / "g" / "methods" / "group.yaml").write_text(
-        "title: 方法\norder: 3.0\n", encoding="utf-8")
+    write_leaf.group(home, "g/methods", title='方法', order=3.0)
     monkeypatch.chdir(home.parent)
     assert render_cmd.run(["g"]) == 0
     latest = _latest(home)
@@ -441,8 +437,7 @@ def test_f2_source_change_without_prose_rewrite_keeps_stale_signal(
     own_before = read_ledger(Layout(home), "g")["g/intro"]["own"]
 
     # 改 intro 自己的源（concept），但散文一個字沒動
-    cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
-    cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（修訂）"), "utf-8")
+    write_leaf.edit_replace(home, "g/intro", "title: 概覽", "title: 概覽（修訂）")
     assert _sync_of(home, "g", "g/intro") == "stale-own"     # 源改 → 該重寫
 
     # 關鍵：再 render（散文仍未重寫）→ 信號 MUST 存活、own 指紋 MUST 凍住
@@ -462,8 +457,7 @@ def test_f2_prose_rewrite_advances_fingerprints(make_project, write_leaf, monkey
     latest.write_text(
         latest.read_text("utf-8").replace("## 1. 概覽\n", "## 1. 概覽\n\n舊散文。\n"), "utf-8")
     render_cmd.run(["g"])
-    cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
-    cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（修訂）"), "utf-8")
+    write_leaf.edit_replace(home, "g/intro", "title: 概覽", "title: 概覽（修訂）")
     assert _sync_of(home, "g", "g/intro") == "stale-own"
     own_stale = read_ledger(Layout(home), "g")["g/intro"]["own"]
 
@@ -491,8 +485,7 @@ def test_f5_ack_clears_stale_inherited(make_project, write_leaf, monkeypatch):
     assert _sync_of(home, "doc", "doc/sec/a") == "synced"
 
     # 改父 brief → 子節 stale-inherited
-    sec = home / "corpus" / "doc" / "sec" / "concept.yaml"
-    sec.write_text(sec.read_text("utf-8").replace("受眾: X", "受眾: Y"), "utf-8")
+    write_leaf.edit_replace(home, "doc/sec", "受眾: X", "受眾: Y")
     assert _sync_of(home, "doc", "doc/sec/a") == "stale-inherited"
     # 普通 render（不重寫散文）→ F2 沿用舊 anc → 仍卡 stale-inherited
     render_cmd.run(["doc"])
@@ -510,8 +503,7 @@ def test_f5_ack_refused_on_stale_own(make_project, write_leaf, monkeypatch, caps
     latest = _latest(home)
     latest.write_text(latest.read_text("utf-8").replace("## 1. 概覽\n", "## 1. 概覽\n\n內文。\n"), "utf-8")
     render_cmd.run(["g"])
-    cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
-    cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（改）"), "utf-8")
+    write_leaf.edit_replace(home, "g/intro", "title: 概覽", "title: 概覽（改）")
     assert _sync_of(home, "g", "g/intro") == "stale-own"
     capsys.readouterr()
     render_cmd.run(["g", "--ack", "g/intro"])          # 嘗試 ack
@@ -578,8 +570,7 @@ def test_cjk_cover_hint_silent_with_group_title(make_project, write_leaf, monkey
     """7.2b：group.yaml title 在 → 無提示、封面在地化。"""
     home = make_project()
     write_leaf(home, "art/x", concept={"id": "c1", "title": "節", "order": 1})
-    (home / "corpus" / "art" / "group.yaml").write_text(
-        yaml.safe_dump({"title": "在地化標題"}, allow_unicode=True), encoding="utf-8")
+    write_leaf.group(home, "art", title='在地化標題')
     monkeypatch.chdir(home.parent)
     render_cmd.run(["art"])
     latest = home.parent / "docs" / "art" / "_latest.md"
@@ -635,17 +626,19 @@ def test_numbering_injected_into_headings(make_project, write_leaf, monkeypatch)
     home = make_project()
     write_leaf(home, "g/intro", concept={"id": "c1", "title": "簡介", "order": 1})
     write_leaf(home, "g/methods/a", concept={"id": "c2", "title": "方法A", "order": 1})
-    (home / "corpus" / "g" / "methods" / "group.yaml").write_text(
-        "title: 方法\norder: 2\n", encoding="utf-8")
+    write_leaf.group(home, "g/methods", title='方法', order=2)
     monkeypatch.chdir(home.parent)
     assert render_cmd.run(["g"]) == 0
     text = _latest(home).read_text(encoding="utf-8")
     assert "## 1. 簡介" in text          # 頂層 arabic：尾綴一點
     assert "## 2. 方法" in text          # 分組節點同步編號
     assert "### 2.1 方法A" in text       # 子節：父前綴 + .序（無尾點）
-    # corpus title 欄不含章號
-    cpt = (home / "corpus" / "g" / "intro" / "concept.yaml").read_text("utf-8")
-    assert "title: 簡介" in cpt and "1." not in cpt.split("title:", 1)[1].split("\n", 1)[0]
+    # corpus title 欄不含章號（★store-only：由 store 記錄取 title）
+    from dspx.engine import store as _store
+    from dspx.engine.layout import Layout
+    title = _store.load_article(_store.store_path(Layout(home), "g"), verify=False) \
+        .record_by_path("g/intro").concept["title"]
+    assert title == "簡介" and "1." not in title
 
 
 def test_f2_reorder_renumbers_without_staleness(make_project, write_leaf, monkeypatch):
@@ -660,10 +653,8 @@ def test_f2_reorder_renumbers_without_staleness(make_project, write_leaf, monkey
     home = make_project()
     write_leaf(home, "g/alpha/x", concept={"id": "cx", "title": "X 節", "order": 1})
     write_leaf(home, "g/beta/y", concept={"id": "cy", "title": "Y 節", "order": 1})
-    (home / "corpus" / "g" / "alpha" / "group.yaml").write_text(
-        "title: 甲群\norder: 1\n", encoding="utf-8")
-    (home / "corpus" / "g" / "beta" / "group.yaml").write_text(
-        "title: 乙群\norder: 2\n", encoding="utf-8")
+    write_leaf.group(home, "g/alpha", title='甲群', order=1)
+    write_leaf.group(home, "g/beta", title='乙群', order=2)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
     latest = _latest(home)
@@ -677,10 +668,8 @@ def test_f2_reorder_renumbers_without_staleness(make_project, write_leaf, monkey
     ledger_before = read_ledger(Layout(home), "g")
 
     # 調換分組 order（甲↔乙）：只動 group.yaml、不碰 leaf concept
-    (home / "corpus" / "g" / "alpha" / "group.yaml").write_text(
-        "title: 甲群\norder: 2\n", encoding="utf-8")
-    (home / "corpus" / "g" / "beta" / "group.yaml").write_text(
-        "title: 乙群\norder: 1\n", encoding="utf-8")
+    write_leaf.group(home, "g/alpha", title='甲群', order=2)
+    write_leaf.group(home, "g/beta", title='乙群', order=1)
     render_cmd.run(["g"])
     after = latest.read_text("utf-8")
 
@@ -707,8 +696,7 @@ def test_export09_denumber_recognizes_injected_forms(make_project, write_leaf, m
     home = make_project()
     write_leaf(home, "g/intro", concept={"id": "c1", "title": "簡介", "order": 1})
     write_leaf(home, "g/methods/a", concept={"id": "c2", "title": "方法A", "order": 1})
-    (home / "corpus" / "g" / "methods" / "group.yaml").write_text(
-        "title: 方法\norder: 2\n", encoding="utf-8")
+    write_leaf.group(home, "g/methods", title='方法', order=2)
     write_leaf(home, "g/annex", concept={"id": "c3", "title": "附錄一", "order": 3,
                                          "numbering": "appendix"})
     write_leaf(home, "g/annex/detail", concept={"id": "c4", "title": "細節", "order": 1})
@@ -740,8 +728,7 @@ def test_numbering_single_source_render_matches_topology(make_project, write_lea
                                          "concept": "界定"})
     write_leaf(home, "g/methods/a", concept={"id": "c2", "title": "方法A", "order": 1,
                                              "concept": "方法"})
-    (home / "corpus" / "g" / "methods" / "group.yaml").write_text(
-        "title: 方法\norder: 2\n", encoding="utf-8")
+    write_leaf.group(home, "g/methods", title='方法', order=2)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
     layout = Layout(home)

@@ -46,12 +46,18 @@ def _leaf_dir(home, section):
     "entries:\n  - id: a\nentries:\n  - id: b\n",    # 重複頂層 key
 ])
 def test_broken_decisions_still_fails_loud(make_project, write_leaf, broken):
-    """壞檔（頂層型別錯／誤名 key／重複 key）＝載入即 raise，與現行逐字相同。"""
+    """壞檔（頂層型別錯／誤名 key／重複 key）＝載入即 raise。★store-only：散檔 decisions 的
+    載入契約由遷移橋（`store.load_tree_leaves`，migrate 用）保留、走同一 `_entries` 載入器。"""
+    from dspx.engine import store as _store
     home = make_project()
-    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
-    (_leaf_dir(home, "g/x") / "decisions.yaml").write_text(broken, encoding="utf-8")
+    d = _leaf_dir(home, "g/x")
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "concept.yaml").write_text(
+        yaml.safe_dump({"id": "c1", "title": "X", "order": 1, "status": "draft",
+                        "concept": "x", "brief": {}}, allow_unicode=True), encoding="utf-8")
+    (d / "decisions.yaml").write_text(broken, encoding="utf-8")
     with pytest.raises(ModelError):
-        load_project(Layout(home))
+        _store.load_tree_leaves(Layout(home))
 
 
 def test_concept_only_loads_with_empty_decisions(make_project, write_leaf):
@@ -85,7 +91,7 @@ def test_ready_graduates_without_decisions(make_project, write_leaf, monkeypatch
                develop="<!-- drained -->")
     monkeypatch.chdir(home.parent)
     assert ready_cmd.run(["g/x"]) == 0
-    assert not (home / "corpus" / "g" / "x" / "develop.md").exists()
+    assert not (home / "work" / "g" / "x" / "develop.md").exists()
 
 
 def test_ready_missing_concept_still_refused(make_project, monkeypatch, capsys):
@@ -93,9 +99,10 @@ def test_ready_missing_concept_still_refused(make_project, monkeypatch, capsys):
     from dspx.commands.corpus import new as new_cmd
     home = make_project()
     monkeypatch.chdir(home.parent)
-    new_cmd.run(["g/a"])                              # 只有 develop.md
+    new_cmd.run(["g/a"])                              # 只有 develop.md（work/）
     assert ready_cmd.run(["g/a"]) == 1
-    assert "missing concept.yaml" in capsys.readouterr().err
+    # ★store-only：未結晶＝無 store 記錄／無 concept
+    assert "not crystallized" in capsys.readouterr().err
 
 
 # ── Task 1.4：`entries: []` 空殼 ⟺ 缺檔（行為等價）───────────────────────────────
@@ -191,11 +198,9 @@ def test_deps_two_hop_fires_for_downstream_realizes(make_project, write_leaf, mo
     consumer = next(lf for lf in leaves if lf.section == "spec/down")
     fp_with_successor = deps_fingerprint(consumer, decision_index(leaves))
     assert fp_with_successor != ""
-    # 把 A 改回活決策（無接替）→ 二跳信號改變 → 指紋不同
-    (home / "corpus" / "spec" / "up" / "decisions.yaml").write_text(
-        yaml.safe_dump({"entries": [
-            {"id": "A", "statement": "採方案A", "status": "accepted", "kind": "normative"}]},
-            allow_unicode=True, sort_keys=False), encoding="utf-8")
+    # 把 A 改回活決策（無接替）→ 二跳信號改變 → 指紋不同 ★store-only：改 store 記錄 decisions
+    write_leaf.edit(home, "spec/up", decisions=[
+        {"id": "A", "statement": "採方案A", "status": "accepted", "kind": "normative"}])
     leaves2 = load_project(Layout(home))
     consumer2 = next(lf for lf in leaves2 if lf.section == "spec/down")
     assert deps_fingerprint(consumer2, decision_index(leaves2)) != fp_with_successor

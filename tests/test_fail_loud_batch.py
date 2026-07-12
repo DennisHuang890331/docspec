@@ -137,17 +137,11 @@ def test_read_ledger_warning_no_longer_claims_next_render_fixes(make_project, ca
 
 # ── 2.1 group.yaml 壞檔 stderr 警告（fallback 行為維持） ─────────────
 
+@pytest.mark.skip(reason="★store-only 殘留：render 對散檔 group.yaml『壞檔警告』路徑已死——"
+                         "group 是 store 記錄，型別壞在 check ⑩ 硬閘（見 test_check_group_types_in_store），"
+                         "render 端只 humanize fallback、無檔可警告。")
 def test_group_yaml_malformed_warns_not_silent(make_project, write_leaf, monkeypatch, capsys):
-    home = make_project()
-    write_leaf(home, "guide/part/intro", concept={"id": "c1", "title": "簡介", "order": 1})
-    gdir = home / "corpus" / "guide" / "part"
-    (gdir / "group.yaml").write_text("title: [unclosed\n", encoding="utf-8")
-    monkeypatch.chdir(home.parent)
-    assert render_cmd.run(["guide"]) == 0        # 不擋 render
-    err = capsys.readouterr().err
-    assert "group.yaml" in err and "malformed" in err            # 指名該檔
-    text = Layout(home).docs_latest("guide").read_text(encoding="utf-8")
-    assert "## 1. Part" in text                  # 標題 fallback＝humanize slug 維持（含章號）
+    pass
 
 
 # ── 2.2 check 的 group.yaml 輕量驗證 ────────────────────────────────
@@ -160,15 +154,12 @@ def _check_errors(home, write_leaf) -> list[str]:
     return run_check(load_project(layout), load_schema(None), layout).errors
 
 
-def test_check_group_yaml_parse_and_types(make_project, write_leaf):
+def test_check_group_types_in_store(make_project, write_leaf):
+    """★store-only：group 記錄型別壞（title 非字串／order 非數值）→ check ⑩ 硬閘。
+    （散檔 group.yaml『YAML parse failed』路徑已死——store 記錄的 YAML 壞在 store 整檔載入。）"""
     home = make_project()
     write_leaf(home, "g/part/x", concept={"id": "c1", "title": "X", "order": 1})
-    gdir = home / "corpus" / "g" / "part"
-    (gdir / "group.yaml").write_text("title: [unclosed\n", encoding="utf-8")
-    errs = _check_errors(home, write_leaf)
-    assert any("g/part/group.yaml" in e and "parse failed" in e for e in errs)
-
-    (gdir / "group.yaml").write_text("title:\n  - 不是字串\norder: 二\n", encoding="utf-8")
+    write_leaf.group(home, "g/part", title=["不是字串"], order="二")   # 型別壞的 group 記錄
     errs = _check_errors(home, write_leaf)
     assert any("title must be a non-empty string" in e for e in errs)
     assert any("order must be a number" in e for e in errs)
@@ -177,9 +168,7 @@ def test_check_group_yaml_parse_and_types(make_project, write_leaf):
 def test_check_group_order_collision_with_sibling(make_project, write_leaf):
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 2})
-    gdir = home / "corpus" / "g" / "part"
-    gdir.mkdir(parents=True)
-    (gdir / "group.yaml").write_text("title: 第一部\norder: 2\n", encoding="utf-8")
+    write_leaf.group(home, "g/part", title="第一部", order=2)   # ★store-only：group 記錄
     write_leaf(home, "g/part/y", concept={"id": "c2", "title": "Y", "order": 1})
     errs = _check_errors(home, write_leaf)
     assert any("collides with sibling" in e and "g/x" in e for e in errs)
@@ -190,8 +179,7 @@ def test_check_group_yaml_valid_is_green(make_project, write_leaf):
     write_leaf(home, "g/part/x", concept={"id": "c1", "title": "X", "order": 1},
                decisions=[{"id": "d1", "kind": "normative", "status": "accepted",
                            "statement": "s"}])
-    (home / "corpus" / "g" / "part" / "group.yaml").write_text(
-        "title: 第一部\norder: 1\n", encoding="utf-8")
+    write_leaf.group(home, "g/part", title='第一部', order=1)
     assert not [e for e in _check_errors(home, write_leaf) if "group.yaml" in e]
 
 
@@ -204,8 +192,7 @@ def test_group_title_change_raises_skeleton_stale_signal(make_project, write_lea
     write_leaf(home, "a/part/x", concept={"id": "c1", "title": "X", "order": 1},
                decisions=[{"id": "d1", "kind": "normative", "status": "accepted",
                            "statement": "s"}])
-    gy = home / "corpus" / "a" / "part" / "group.yaml"
-    gy.write_text("title: 第一章\norder: 1\n", encoding="utf-8")
+    write_leaf.group(home, "a/part", title="第一章", order=1)   # ★store-only：group 記錄
     monkeypatch.chdir(home.parent)
     assert render_cmd.run(["a"]) == 0
     capsys.readouterr()                          # 清掉 render 輸出
@@ -215,7 +202,7 @@ def test_group_title_change_raises_skeleton_stale_signal(make_project, write_lea
     assert json.loads(capsys.readouterr().out)["skeletonStale"] == []
 
     # 改 title → 有信號（人類輸出也提示需 render）
-    gy.write_text("title: 改名的一章\norder: 1\n", encoding="utf-8")
+    write_leaf.group(home, "a/part", title="改名的一章", order=1)
     assert status_cmd.run(["--json"]) == 0
     assert json.loads(capsys.readouterr().out)["skeletonStale"] == ["a"]
     assert status_cmd.run([]) == 0
@@ -280,21 +267,24 @@ def _check_warnings(home) -> list[str]:
 
 
 def test_hygiene_conflict_copies_warn(make_project, write_leaf):
+    """★store-only：Drive 衝突副本偵測改打 store 檔本身（`a (1).yaml`）與 `.tmp.drive` 暫存、
+    以及 corpus 下任何無活標記的雜散資料夾。"""
     home = make_project()
-    leaf = write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
-    (leaf / "concept (1).yaml").write_text("id: c1\n", encoding="utf-8")
-    (leaf / "material.md.tmp.drive007").write_text("tmp", encoding="utf-8")
-    (home / "corpus" / "a" / "scope (1)").mkdir()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    (home / "corpus" / "a (1).yaml").write_text("format: 1\n", encoding="utf-8")   # store 檔衝突副本
+    (home / "corpus" / "a.yaml.tmp.drive007").write_text("tmp", encoding="utf-8")
+    (home / "corpus" / "scope (1)").mkdir()               # 雜散夾（衝突副本形）
     warns = _check_warnings(home)
-    assert any("concept (1).yaml" in w and "sync-conflict copy" in w for w in warns)
-    assert any("material.md.tmp.drive007" in w for w in warns)
+    assert any("a (1).yaml" in w and "sync-conflict copy" in w for w in warns)
+    assert any("a.yaml.tmp.drive007" in w for w in warns)
     assert any("scope (1)" in w and "folder" in w for w in warns)
 
 
 def test_hygiene_dead_folder_warns(make_project, write_leaf):
+    """★store-only：corpus 下無活標記（concept/develop/group）的雜散資料夾＝死資料夾。"""
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
-    dead = home / "corpus" / "a" / "concpet-typo"        # 拼錯字的死資料夾
+    dead = home / "corpus" / "concpet-typo"               # 拼錯字的死資料夾
     dead.mkdir()
     (dead / "material.md").write_text("- 只有素材\n", encoding="utf-8")
     warns = _check_warnings(home)
@@ -302,15 +292,9 @@ def test_hygiene_dead_folder_warns(make_project, write_leaf):
 
 
 def test_hygiene_no_false_positives(make_project, write_leaf):
+    """★store-only：乾淨 store corpus（只有 `<article>.yaml` 檔＋隱形 _archive/）→ 零 WARN。"""
     home = make_project()
-    leaf = write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
-    (leaf / "assets").mkdir()
-    (leaf / "assets" / "fig.png").write_bytes(b"png")     # 慣例 assets 夾＝非死資料夾
-    dev = home / "corpus" / "a" / "wip"
-    dev.mkdir()
-    (dev / "develop.md").write_text("施工中\n", encoding="utf-8")   # develop-only 不誤傷
-    parent_only = home / "corpus" / "a"                   # 有有效後代的中繼夾不誤傷
-    assert parent_only.is_dir()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     archive = home / "corpus" / "_archive" / "old (1)"    # 隱形區不掃
     archive.mkdir(parents=True)
     assert _check_warnings(home) == []
@@ -331,7 +315,9 @@ def test_retire_rejects_id_collision_with_archive(make_project, write_leaf,
     assert rs_cmd.run(["a/x"]) == 1              # 拒絕
     err = capsys.readouterr().err
     assert "c1" in err and "_archive" in err     # 指出撞號 id 與封存位置
-    assert (home / "corpus" / "a" / "x").is_dir()          # 沒被搬走
+    from dspx.engine import store as _store       # ★store-only：a/x 記錄沒被抽走
+    assert _store.load_article(_store.store_path(Layout(home), "a"), verify=False) \
+        .record_by_path("a/x") is not None
     # 換新 id 就放行
     write_leaf(home, "a/x", concept={"id": "c1b", "title": "X2", "order": 1})
     (home / "corpus" / "_archive" / "a__x").rename(
@@ -346,6 +332,7 @@ def test_retire_warns_on_audit_and_roadmap_back_references(make_project, write_l
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     write_leaf(home, "a/keep", concept={"id": "c9", "title": "K", "order": 9})
+    (home / "corpus" / "a").mkdir(parents=True, exist_ok=True)   # ★store-only：per-doc 檔夾另建
     (home / "corpus" / "a" / "audit.yaml").write_text(yaml.safe_dump({"findings": [
         {"id": "F1", "face": "logic", "severity": "med", "status": "open",
          "targets": ["a/x"], "finding": "指著待退節"},
@@ -359,7 +346,9 @@ def test_retire_warns_on_audit_and_roadmap_back_references(make_project, write_l
     err = capsys.readouterr().err
     assert "F1" in err and "r1" in err           # 逐條列出將變死的引用
     assert "r2" not in err                        # 沒指著待退子樹的不列
-    assert not (home / "corpus" / "a" / "x").exists()      # 退役完成
+    from dspx.engine import store as _store       # ★store-only：a/x 記錄已抽走（退役完成）
+    assert _store.load_article(_store.store_path(Layout(home), "a"), verify=False) \
+        .record_by_path("a/x") is None
 
 
 # ── 5.3 整篇退役搬遷交付檔＋帳本 ────────────────────────────────────

@@ -104,9 +104,8 @@ def test_impact_stale_upstream_matches_real_restale(make_project, write_leaf, mo
     assert predicted == {"b/impl"}
 
     # 真改 a/rules 的 active 決策 statement → 重算全節 sync，收集 stale-upstream
-    dec = home / "corpus" / "a" / "rules" / "decisions.yaml"
-    dec.write_text(dec.read_text(encoding="utf-8").replace("頂層四態。", "頂層五態。"),
-                   encoding="utf-8")
+    # ★store-only：改 store 記錄的 decisions，非散檔 decisions.yaml
+    write_leaf.edit_replace(home, "a/rules", "頂層四態。", "頂層五態。", category="decisions")
     layout = Layout(home)
     leaves = load_project(layout)
     by = {lf.section: lf for lf in leaves}

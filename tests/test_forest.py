@@ -40,9 +40,11 @@ def _two_tree_governed(make_project, write_leaf):
 # ── 單向：父不存子，反向只由 show --impact（descendants）算 ──
 def test_single_direction_parent_stores_no_child(make_project, write_leaf, monkeypatch, capsys):
     home = _two_tree_governed(make_project, write_leaf)
-    # t1 自己的 concept 沒有任何指向 t2 的欄位（父不存子）
-    t1_raw = yaml.safe_load(
-        (home / "corpus" / "t1" / "concept.yaml").read_text(encoding="utf-8"))
+    # t1 自己的 concept 沒有任何指向 t2 的欄位（父不存子）★store-only：由 store 記錄取
+    from dspx.engine import store as _store
+    from dspx.engine.layout import Layout
+    t1_raw = _store.load_article(_store.store_path(Layout(home), "t1"), verify=False) \
+        .record_by_path("t1").concept
     assert "governed-by" not in t1_raw
     assert all("c-t2" not in str(v) and "t2" != v for v in t1_raw.values())
 
@@ -179,7 +181,7 @@ def test_governed_by_adds_no_semantic_gate(make_project, write_leaf, monkeypatch
     monkeypatch.chdir(home.parent)
     from dspx.commands.corpus import ready as ready_cmd
     assert ready_cmd.run(["t2"]) == 0
-    assert not (home / "corpus" / "t2" / "develop.md").exists()
+    assert not (home / "work" / "t2" / "develop.md").exists()
 
 
 # ── change `multi-document-governance-robustness`：治理感知 staleness + 守門 + 投影 ──
@@ -382,7 +384,7 @@ def test_conceptless_root_listed_with_group_title(make_project, write_leaf):
     write_leaf(home, "wip/part", concept={"id": "c-wp", "title": "部件", "order": 1,
                                           "status": "draft", "concept": "部件主旨",
                                           "governed-by": ["c-t1"]})
-    (home / "corpus" / "wip" / "group.yaml").write_text("title: 施工中文件\n", encoding="utf-8")
+    write_leaf.group(home, "wip", title='施工中文件')
     f = forest_view(_leaves(home), Layout(home))
     docs = {d["article"]: d for d in f["documents"]}
     assert "wip" in docs                                          # 不蒸發
@@ -461,7 +463,7 @@ def test_develop_forest_map_prints_uncrystallized_note_and_cycle_warning(
     write_leaf(home, "wip/part", concept={"id": "c-wp", "title": "部件", "order": 1,
                                           "status": "draft", "concept": "部件主旨",
                                           "governed-by": ["c-t3"]})
-    (home / "corpus" / "wip" / "group.yaml").write_text("title: 施工中文件\n", encoding="utf-8")
+    write_leaf.group(home, "wip", title='施工中文件')
     monkeypatch.chdir(home.parent)
     from dspx.commands.projection import instructions as instr
     assert instr.run(["develop", "t3"]) == 0

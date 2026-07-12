@@ -1,22 +1,20 @@
-"""check ⑩：group.yaml 輕量驗證（corpus-fail-loud-batch）。
+"""check ⑩：group 記錄輕量驗證（corpus-fail-loud-batch；★store-only）。
 
-group.yaml＝分組節點的可選在地化標題/排序（render 讀 title/order）。壞檔曾實測讓中文
-標題**靜默**降級成英文 slug——這裡把「可解析、title 是字串、order 是數值、order 不與
-同層兄弟撞號」入 check 硬閘（皆機械可判、非語義）。
+group＝分組節點的可選在地化標題/排序（render 讀 title/order），住 `corpus/<article>.yaml`
+store 記錄的 `kind: group` 條目。這裡把「title 是字串、order 是數值、order 不與同層兄弟
+撞號」入 check 硬閘（皆機械可判、非語義）——store 記錄由 put/tidy/write 產出，型別仍可能
+被建構端寫壞（如 title 給 list），故保留型別驗證。
 """
 
 from __future__ import annotations
 
-import yaml
-
-GROUP_FILE = "group.yaml"
+GROUP_FILE = "group.yaml"   # get/put/報訊息的檔名慣例（store 記錄非實體檔）
 
 
 def _validate_groups(layout, leaves: list) -> list[str]:
-    """驗證 corpus 內全部（非封存）group.yaml；回傳錯誤字串清單。"""
+    """驗證全 store 篇的 group 記錄（title/order 型別＋同層 order 撞號）；回傳錯誤字串清單。"""
+    from dspx.engine import store as _store
     errors: list[str] = []
-    if not layout.corpus_dir.is_dir():
-        return errors
 
     # 同層兄弟的已宣告 order（撞號比對面）：leaf 的 concept.order。
     leaf_order: dict[str, float] = {
@@ -26,32 +24,21 @@ def _validate_groups(layout, leaves: list) -> list[str]:
     }
 
     group_order: dict[str, float] = {}   # group section -> 宣告的 order
-    for gy in sorted(layout.corpus_dir.rglob(GROUP_FILE)):
-        if layout.is_archived_path(gy.parent):
-            continue
-        sec = layout.section_id(gy.parent)
-        where = f"corpus/{sec}/{GROUP_FILE}"
-        try:
-            data = yaml.safe_load(gy.read_text(encoding="utf-8"))
-        except yaml.YAMLError as exc:
-            mark = getattr(exc, "problem_mark", None)
-            position = f" (line {mark.line + 1})" if mark is not None else ""
-            errors.append(f"{where}: YAML parse failed{position}")
-            continue
-        if data is None:
-            continue
-        if not isinstance(data, dict):
-            errors.append(f"{where}: top level must be a mapping (title:/order:)")
-            continue
-        title = data.get("title")
-        if title is not None and (not isinstance(title, str) or not title.strip()):
-            errors.append(f"{where}: title must be a non-empty string, got {title!r}")
-        order = data.get("order")
-        if order is not None:
-            if isinstance(order, bool) or not isinstance(order, (int, float)):
-                errors.append(f"{where}: order must be a number, got {order!r}")
-            else:
-                group_order[sec] = float(order)
+    for art in _store.store_articles(layout):
+        art_obj = _store.cached_article(layout, art)
+        for rec in (art_obj.group_records() if art_obj is not None else []):
+            sec = rec.path
+            where = f"corpus/{sec}/{GROUP_FILE}"
+            meta = rec.group or {}
+            title = meta.get("title")
+            if title is not None and (not isinstance(title, str) or not title.strip()):
+                errors.append(f"{where}: title must be a non-empty string, got {title!r}")
+            order = meta.get("order")
+            if order is not None:
+                if isinstance(order, bool) or not isinstance(order, (int, float)):
+                    errors.append(f"{where}: order must be a number, got {order!r}")
+                else:
+                    group_order[sec] = float(order)
 
     # order 撞號：group 宣告的 order vs 同層兄弟（leaf concept.order 或另一 group.yaml order）。
     def _parent(sec: str) -> str:

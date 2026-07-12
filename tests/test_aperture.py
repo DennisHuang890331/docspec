@@ -338,8 +338,7 @@ def _ordered_group_corpus(home, write_leaf):
     write_leaf(home, "art/annex-b/ground", concept={"id": "c-bg", "title": "地面", "order": 1,
                                                     "concept": "附錄內容"})
     (home / "corpus" / "art" / "annex-b").mkdir(parents=True, exist_ok=True)
-    (home / "corpus" / "art" / "annex-b" / "group.yaml").write_text(
-        "title: 附錄B\norder: 99\n", encoding="utf-8")
+    write_leaf.group(home, "art/annex-b", title='附錄B', order=99)
 
 
 def test_document_map_follows_shared_outline_order_with_groups(make_project, write_leaf,

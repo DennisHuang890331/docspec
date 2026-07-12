@@ -49,18 +49,17 @@ def _docs_hashes(layout: Layout, article: str) -> dict[str, str]:
 
 
 def develop_only_sections(layout: Layout, leaf_sections: set[str]) -> list[str]:
-    """已建 `develop.md` 但尚未結晶成 concept（＝非 leaf）的章節 id；排序、排除封存區。
-    `status` 與 `list` 共用此 model-liveness 判準——否則 develop-only 節在 status 可見、
-    在 list 卻消失（甚至 list 誤報「Corpus is empty」）。"""
+    """已建 `develop.md` 但尚未結晶成 concept（＝非 leaf）的章節 id；排序、排除已是 leaf 者。
+    ★store-only：develop.md 住 `docspec/work/<section>/`（結晶前工作台，不進 store），此處掃 work/。
+    `status` 與 `list` 共用此 model-liveness 判準——否則 develop-only 節在 status 可見、在 list 卻消失。"""
     out: list[str] = []
-    if layout.corpus_dir.is_dir():
-        for dev in sorted(layout.corpus_dir.rglob("develop.md")):
-            if layout.is_archived_path(dev.parent):
-                continue                       # 封存區（_archive/）對引擎隱形
-            sec = layout.section_id(dev.parent)
-            if sec not in leaf_sections:
+    work_root = layout.planning_home / "work"
+    if work_root.is_dir():
+        for dev in sorted(work_root.rglob("develop.md")):
+            sec = dev.parent.relative_to(work_root).as_posix()
+            if sec and sec not in leaf_sections:
                 out.append(sec)
-    return out
+    return sorted(out)
 
 
 # style 子軸 → 對人輸出的載體名（診斷指名哪個 doctrine 載體動了；標籤仍統一 stale-style）
@@ -241,11 +240,10 @@ def run(argv: list[str]) -> int:
             continue
         if args.section and sec != args.section:
             continue
-        devdir = layout.section_dir(sec)
         rows.append({
             "section": sec, "state": "developing", "sync": "uncrystallized",
             "files": {"concept": False, "decisions": False,
-                      "material": (devdir / "material.md").is_file(),
+                      "material": False,   # ★store-only：develop-only 尚無 store 記錄/material
                       "develop": True, "history": False, "draft": False},
             "drifted": False,
         })

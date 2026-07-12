@@ -71,21 +71,23 @@ def _to_lf(path):
 
 def test_source_hash_crlf_lf_equal(make_project, write_leaf):
     """1.1：同內容 CRLF/LF 位元組 → own 指紋相等；孤 `\\r`（非 CRLF）不正規化。"""
+    from dspx.engine import store as _store
     home = make_project()
-    leaf_dir = write_leaf(home, "g/intro", concept={"id": "c1", "title": "概覽", "order": 1},
-                          material="來源甲。\n第二行。\n")
-    leaves = load_project(Layout(home))
-    lf_hash = leaves[0].source_hash()
+    write_leaf(home, "g/intro", concept={"id": "c1", "title": "概覽", "order": 1},
+               material="來源甲。\n第二行。\n")
+    layout = Layout(home)
+    lf_hash = load_project(layout)[0].source_hash()
 
-    for f in ("concept.yaml", "material.md"):
-        _to_crlf(leaf_dir / f)
-    crlf_hash = load_project(Layout(home))[0].source_hash()
+    # ★store-only：corpus 是單一 store 檔——模擬 autocrlf 檢出＝整檔換行改 CRLF；
+    # 解析後結構（concept）與 material 文字（_normalize_newlines）皆免疫 → own 指紋不變。
+    sp = _store.store_path(layout, "g")
+    _to_crlf(sp)
+    crlf_hash = load_project(layout)[0].source_hash()
     assert crlf_hash == lf_hash                       # CRLF/LF 指紋相同
-
-    # 孤 \r（老 Mac 格式）＝內容差異，不正規化
-    mat = leaf_dir / "material.md"
-    mat.write_bytes(mat.read_bytes().replace(b"\r\n", b"\r"))
-    assert load_project(Layout(home))[0].source_hash() != lf_hash
+    _to_lf(sp)
+    # 孤 \r（老 Mac 格式）＝內容差異，不正規化：改 store 記錄的 material 帶孤 \r
+    write_leaf.edit(home, "g/intro", material="來源甲。\r第二行。\r")
+    assert load_project(layout)[0].source_hash() != lf_hash
 
 
 def test_content_hash_crlf_lf_equal(tmp_path):
@@ -118,21 +120,24 @@ def test_engine_writes_lf_only(make_project, write_leaf, monkeypatch):
 
 def test_crlf_worktree_to_lf_worktree_no_false_stale(make_project, write_leaf, monkeypatch):
     """1.4 整合：CRLF worktree render 入帳 → 全檔換行改 LF（模擬 LF 檢出）→ 全 synced、零漂移。"""
-    from dspx.engine.render import detect_drift
+    from dspx.engine import store as _store
+    from dspx.engine.render import detect_drift  # noqa: F401
     home = make_project()
     (home / "writing-guide.md").write_text("# Guide\n規則一。\n", encoding="utf-8")
-    leaf_dir = write_leaf(home, "g/intro", concept={"id": "c1", "title": "概覽", "order": 1},
-                          material="來源甲。\n")
-    # 模擬 autocrlf=true 檢出：corpus＋doctrine 全 CRLF
-    for f in (leaf_dir / "concept.yaml", leaf_dir / "material.md", home / "writing-guide.md"):
-        _to_crlf(f)
+    write_leaf(home, "g/intro", concept={"id": "c1", "title": "概覽", "order": 1},
+               material="來源甲。\n")
+    layout = Layout(home)
+    sp = _store.store_path(layout, "g")
     monkeypatch.chdir(home.parent)
     assert render_cmd.run(["g"]) == 0
     _write_prose(home, "g", "概覽", "限流保護後端。")
     assert _sync_of(home, "g", "g/intro") == "synced"
+    # ★store-only：模擬 autocrlf 檢出＝store 檔＋doctrine＋_latest 全 CRLF → 仍全 synced
+    for f in (sp, home / "writing-guide.md", _latest(home)):
+        _to_crlf(f)
+    assert _sync_of(home, "g", "g/intro") == "synced"
     # 換行全轉 LF（fresh clone／macOS worktree）；帳本入版控跨 worktree 不動
-    for f in (leaf_dir / "concept.yaml", leaf_dir / "material.md",
-              home / "writing-guide.md", _latest(home)):
+    for f in (sp, home / "writing-guide.md", _latest(home)):
         _to_lf(f)
     assert _sync_of(home, "g", "g/intro") == "synced"           # 無假 stale
     assert detect_drift(Layout(home), "g") == []                 # 零漂移
@@ -156,10 +161,20 @@ def _supersede_chain_project(make_project, write_leaf, monkeypatch):
     return home
 
 
+def _set_store_decisions(home, section, entries):
+    """★store-only：設某節 store 記錄的 decisions（取代舊的直接寫 decisions.yaml）。"""
+    from dspx.engine import store as _store
+    from dspx.engine.layout import Layout
+    from dspx.engine.schema import load_schema
+    layout = Layout(home)
+    art = _store.load_article(_store.store_path(layout, section.split("/", 1)[0]), verify=False)
+    art.record_by_path(section).decisions = list(entries)
+    art.revision += 1
+    _store.save_article(layout, art, load_schema())
+
+
 def _set_upstream_decisions(home, entries):
-    (home / "corpus" / "u" / "root" / "decisions.yaml").write_text(
-        yaml.safe_dump({"entries": entries}, allow_unicode=True, sort_keys=False),
-        encoding="utf-8")
+    _set_store_decisions(home, "u/root", entries)
 
 
 def test_second_hop_supersession_restales_consumer(make_project, write_leaf, monkeypatch):
@@ -335,9 +350,7 @@ def _norm_project(make_project, write_leaf, monkeypatch):
 
 
 def _set_root_decisions(home, entries):
-    (home / "corpus" / "g" / "decisions.yaml").write_text(
-        yaml.safe_dump({"entries": entries}, allow_unicode=True, sort_keys=False),
-        encoding="utf-8")
+    _set_store_decisions(home, "g", entries)
 
 
 def test_ancestor_normative_rewrite_restales_descendants(make_project, write_leaf, monkeypatch):
@@ -370,8 +383,7 @@ def test_ack_clears_stale_norm_and_is_refused_on_stale_own(
     # own 同時變 → stale-own 優先、ack 拒
     _set_root_decisions(home, [{"id": "N1", "statement": "改第二次",
                                 "status": "accepted", "kind": "normative"}])
-    cpt = home / "corpus" / "g" / "sub" / "concept.yaml"
-    cpt.write_text(cpt.read_text("utf-8").replace("title: 細則", "title: 細則（改）"), "utf-8")
+    write_leaf.edit_replace(home, "g/sub", "title: 細則", "title: 細則（改）")
     assert _sync_of(home, "g", "g/sub") == "stale-own"
     capsys.readouterr()
     render_cmd.run(["g", "--ack", "g/sub"])
@@ -394,11 +406,9 @@ def test_norm_fingerprint_covers_governed_by_ancestors(make_project, write_leaf)
     governed_fp = ancestor_normative_fingerprint("t/leaf", by)
     assert governed_fp != ""                                     # 跨樹治理父的 ruling 入帳
     assert ancestor_normative_fingerprint("t/free", by) == ""    # 穩定空值
-    # 治理父改寫 ruling → 被治理節指紋變
-    (home / "corpus" / "p" / "decisions.yaml").write_text(
-        yaml.safe_dump({"entries": [{"id": "NP", "statement": "跨樹規矩（修訂）",
-                                     "status": "accepted", "kind": "normative"}]},
-                       allow_unicode=True, sort_keys=False), encoding="utf-8")
+    # 治理父改寫 ruling → 被治理節指紋變 ★store-only：改 store 記錄 decisions
+    _set_store_decisions(home, "p", [{"id": "NP", "statement": "跨樹規矩（修訂）",
+                                      "status": "accepted", "kind": "normative"}])
     leaves2 = load_project(Layout(home))
     by2 = {lf.section: lf for lf in leaves2}
     assert ancestor_normative_fingerprint("t/leaf", by2) != governed_fp
@@ -453,11 +463,9 @@ def test_leaf_order_change_is_not_stale_own(make_project, write_leaf, monkeypatc
     _write_prose(home, "g", "乙", "乙的散文。")
     assert _sync_of(home, "g", "g/a") == "synced"
     assert _sync_of(home, "g", "g/b") == "synced"
-    # 對調兩節 order 值（甲←→乙）：只動位置元資料，內容欄一字不改
-    ca = home / "corpus" / "g" / "a" / "concept.yaml"
-    cb = home / "corpus" / "g" / "b" / "concept.yaml"
-    ca.write_text(ca.read_text("utf-8").replace("order: 1", "order: 2"), "utf-8")
-    cb.write_text(cb.read_text("utf-8").replace("order: 2", "order: 1"), "utf-8")
+    # 對調兩節 order 值（甲←→乙）：只動位置元資料，內容欄一字不改 ★store-only：改 store 記錄
+    write_leaf.edit(home, "g/a", concept={"order": 2})
+    write_leaf.edit(home, "g/b", concept={"order": 1})
     # 兩節皆維持 synced——order 不在 own 指紋（不誤標 stale-own）
     assert _sync_of(home, "g", "g/a") == "synced"
     assert _sync_of(home, "g", "g/b") == "synced"
@@ -474,9 +482,8 @@ def test_concept_content_change_still_stale_own(make_project, write_leaf, monkey
     """反面守門：排除 order 沒把該髒的內容欄一起吞掉——改 concept 內容欄仍 stale-own。
     title（渲進標題＝內容）與 concept 一句話（aperture 錨）都保留在 own 指紋內。"""
     home = _baseline(make_project, write_leaf, monkeypatch)   # g/intro synced（有散文）
-    cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
-    # 改 title＝內容欄（保留在 own 指紋）→ stale-own
-    cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（修訂）"), "utf-8")
+    # 改 title＝內容欄（保留在 own 指紋）→ stale-own ★store-only：改 store 記錄
+    write_leaf.edit_replace(home, "g/intro", "title: 概覽", "title: 概覽（修訂）")
     assert _sync_of(home, "g", "g/intro") == "stale-own"
 
 
@@ -527,8 +534,9 @@ def test_rebaseline_migrates_v1_to_v2_in_one_shot(make_project, write_leaf, monk
     assert _sync_of(home, "g", "g/intro") == "synced"
     rec = read_ledger(Layout(home), "g")["g/intro"]
     assert set(rec) >= {"own", "anc", "deps", "norm", "style", "prose"}
-    # v2 語義抽驗：CRLF 免疫（concept 轉 CRLF 仍 synced）＋ definition-only 零擾動
-    _to_crlf(home / "corpus" / "g" / "intro" / "concept.yaml")
+    # v2 語義抽驗：CRLF 免疫（★store-only：store 檔轉 CRLF 仍 synced）＋ definition-only 零擾動
+    from dspx.engine import store as _store
+    _to_crlf(_store.store_path(Layout(home), "g"))
     assert _sync_of(home, "g", "g/intro") == "synced"
     t = dict(_TERM); t["definition"] = "另一句定義。"
     _glossary_write(home, [t])
@@ -563,8 +571,8 @@ def test_ack_own_keeps_norm_so_masked_stale_norm_surfaces(
     # （見 test_leaf_order_change_is_not_stale_own）。
     _set_root_decisions(home, [{"id": "N1", "statement": "全文禁用被動語態與展望語",
                                 "status": "accepted", "kind": "normative"}])
-    cpt = home / "corpus" / "g" / "sub" / "concept.yaml"
-    cpt.write_text(cpt.read_text("utf-8") + 'sources: ["Author\'s design"]\n', "utf-8")
+    # ★store-only：加 sources 欄（own 指紋內容欄）→ stale-own
+    write_leaf.edit(home, "g/sub", concept={"sources": ["Author's design"]})
     assert _sync_of(home, "g", "g/sub") == "stale-own"
     # ack-own（結構接線類變更）：own/deps 蓋現值、norm 沿用舊值 → stale-norm 浮出
     assert render_cmd.run(["g", "--ack-own", "g/sub", "--reason", "sources provenance note only"]) == 0

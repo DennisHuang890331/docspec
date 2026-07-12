@@ -69,8 +69,7 @@ def test_ack_own_equals_perturb_revert_dance(tmp_path, write_leaf, monkeypatch):
         render_cmd.run(["g"])
         assert _sync_of(home, "g", "g/intro") == "synced"
         # 結構接線類源變更（散文合法不需改）
-        cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
-        cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（改）"), "utf-8")
+        write_leaf.edit_replace(home, "g/intro", "title: 概覽", "title: 概覽（改）")
         assert _sync_of(home, "g", "g/intro") == "stale-own"
         if flow == "ack-own":
             assert render_cmd.run(["g", "--ack-own", "g/intro", "--reason", "接線變更"]) == 0
@@ -138,10 +137,8 @@ def test_masked_stale_inherited_surfaces_after_ack_own(tmp_path, write_leaf, mon
     render_cmd.run(["doc"])
     assert _sync_of(home, "doc", "doc/sec/a") == "synced"
     # 父 brief（anc 軸）＋子自身 concept（own 軸）同時變 → own precedence 遮蔽 anc
-    sec = home / "corpus" / "doc" / "sec" / "concept.yaml"
-    sec.write_text(sec.read_text("utf-8").replace("受眾: X", "受眾: Y"), "utf-8")
-    child = home / "corpus" / "doc" / "sec" / "a" / "concept.yaml"
-    child.write_text(child.read_text("utf-8").replace("title: A", "title: A（改）"), "utf-8")
+    write_leaf.edit_replace(home, "doc/sec", "受眾: X", "受眾: Y")
+    write_leaf.edit_replace(home, "doc/sec/a", "title: A", "title: A（改）")
     assert _sync_of(home, "doc", "doc/sec/a") == "stale-own"
     # ack-own → own/deps 蓋現值、anc 沿用舊值 → 被遮蔽的 stale-inherited 浮出
     assert render_cmd.run(["doc", "--ack-own", "doc/sec/a", "--reason", "標題重編號"]) == 0
@@ -158,10 +155,8 @@ def test_ack_and_ack_own_compose_in_one_render(tmp_path, write_leaf, monkeypatch
     render_cmd.run(["doc"])
     _write_prose(home, "doc", "### 1.1 A", "子散文。")
     render_cmd.run(["doc"])
-    sec = home / "corpus" / "doc" / "sec" / "concept.yaml"
-    sec.write_text(sec.read_text("utf-8").replace("受眾: X", "受眾: Y"), "utf-8")
-    child = home / "corpus" / "doc" / "sec" / "a" / "concept.yaml"
-    child.write_text(child.read_text("utf-8").replace("title: A", "title: A（改）"), "utf-8")
+    write_leaf.edit_replace(home, "doc/sec", "受眾: X", "受眾: Y")
+    write_leaf.edit_replace(home, "doc/sec/a", "title: A", "title: A（改）")
     assert _sync_of(home, "doc", "doc/sec/a") == "stale-own"
     assert render_cmd.run(["doc", "--ack-own", "doc/sec/a", "--ack", "doc/sec/a",
                            "--reason", "接線＋祖先皆已對齊"]) == 0
@@ -175,8 +170,7 @@ def test_ack_alone_still_refused_on_stale_own(tmp_path, write_leaf, monkeypatch,
     render_cmd.run(["g"])
     _write_prose(home, "g", "## 1. 概覽", "內文。")
     render_cmd.run(["g"])
-    cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
-    cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（改）"), "utf-8")
+    write_leaf.edit_replace(home, "g/intro", "title: 概覽", "title: 概覽（改）")
     capsys.readouterr()
     assert render_cmd.run(["g", "--ack", "g/intro"]) == 0
     assert _sync_of(home, "g", "g/intro") == "stale-own"             # 沒被吞
@@ -192,8 +186,7 @@ def test_ack_own_stdout_carries_heavier_accountability_note(tmp_path, write_leaf
     render_cmd.run(["g"])
     _write_prose(home, "g", "## 1. 概覽", "內文。")
     render_cmd.run(["g"])
-    cpt = home / "corpus" / "g" / "intro" / "concept.yaml"
-    cpt.write_text(cpt.read_text("utf-8").replace("title: 概覽", "title: 概覽（改）"), "utf-8")
+    write_leaf.edit_replace(home, "g/intro", "title: 概覽", "title: 概覽（改）")
     capsys.readouterr()
     assert render_cmd.run(["g", "--ack-own", "g/intro", "--reason", "接線"]) == 0
     out = capsys.readouterr().out
@@ -283,8 +276,7 @@ def test_journal_appends_per_verdict_with_full_schema(tmp_path, write_leaf, monk
     _write_prose(home, "doc", "### 1.1 A", "子散文。")
     render_cmd.run(["doc"])
     # 父 brief 變 → sec 自己 stale-own、sec/a stale-inherited
-    sec = home / "corpus" / "doc" / "sec" / "concept.yaml"
-    sec.write_text(sec.read_text("utf-8").replace("受眾: X", "受眾: Y"), "utf-8")
+    write_leaf.edit_replace(home, "doc/sec", "受眾: X", "受眾: Y")
     own_before = read_ledger(Layout(home), "doc")["doc/sec"]["own"]
     assert render_cmd.run(["doc", "--ack-own", "doc/sec", "--ack", "doc/sec/a",
                            "--reason", "接線對齊"]) == 0
@@ -325,8 +317,7 @@ def test_journal_ack_reason_optional(tmp_path, write_leaf, monkeypatch):
     render_cmd.run(["doc"])
     _write_prose(home, "doc", "### 1.1 A", "子散文。")
     render_cmd.run(["doc"])
-    sec = home / "corpus" / "doc" / "sec" / "concept.yaml"
-    sec.write_text(sec.read_text("utf-8").replace("受眾: X", "受眾: Y"), "utf-8")
+    write_leaf.edit_replace(home, "doc/sec", "受眾: X", "受眾: Y")
     assert render_cmd.run(["doc", "--ack", "doc/sec/a"]) == 0        # 無 reason、行為不變
     assert _sync_of(home, "doc", "doc/sec/a") == "synced"
     j = _read_journal(home, "doc")

@@ -1,26 +1,25 @@
-"""docspec tidy — 確定性、冪等的 corpus 遷移指令（contract-slimming）。
+"""docspec tidy — 確定性、冪等的 corpus 遷移指令（contract-slimming；★store-only）。
 
-四個機械動作，依序執行（`--dry-run` 先看完整清單、零寫入）：
-  1. **刪空殼 decisions.yaml**：`entries: []`／空 mapping／空檔＝契約層非法空殼 → 刪檔逐一列出。
-     壞檔（頂層 list、誤名 key）不是空殼——loader 本就 fail-loud，tidy 不碰。
-  2. **剝逐字重複 brief 欄**：與「最近提供該欄的祖先」strip 後 byte 等值的子欄 → 刪欄改繼承。
+三個機械動作，依序執行（`--dry-run` 先看完整清單、零寫入）——全部對 `corpus/<article>.yaml`
+store 記錄操作，不再碰散檔：
+  1. **剝逐字重複 brief 欄**：與「最近提供該欄的祖先」strip 後 byte 等值的子欄 → 刪欄改繼承。
      判定原語＝`dspx.engine.lint.brief_dup_fields`（與 lint V19 單一權威，不另寫副本）；改寫過的
-     特化（哪怕一字之差）永不觸發。article root 永不剝（hierarchy check 要求 root 信封完整；
-     root 無祖先、本就不會命中——雙保險）。
-  3. **剝 title 阿拉伯式章號前綴**：concept.yaml／group.yaml 的 title 以 `6.`／`6.1`／`6、`
-     等阿拉伯式編號起頭（判定＝lint `_TITLE_ARABIC_PREFIX_RE`，與 V20 同源）→ 剝除**完整**
-     層級前綴（`6.1 概觀`→`概觀`，不是 `1 概觀`）。附錄字母式（`A.`／`附錄 A`）v1 不動（D7：
-     等 agent 補 `numbering: appendix`）。整值只是編號的 title 不動（剝了變空）、報告跳過。
-  4. **資料夾改名為交付語言 title slug**（最後跑）：leaf／有 authored title 的 group，其資料夾
-     名 ≠（剝章號後）title 的檔名安全 slug → **逐項呼叫 `docspec mv` 交易原語**（marker／
-     audit／roadmap 同步重寫、自驗 check、失敗零半套——tidy 不土製改名邏輯）。article root
-     明確排除（交付檔名/凍結/journal 綁 article 名）。同層 slug 撞名＝兩者都拒改、報告衝突。
-     每做完一項即重載模型重算剩餘清單（父層改名不會失效子路徑）。
+     特化（哪怕一字之差）永不觸發。article root 永不剝（hierarchy check 要求 root 信封完整）。
+  2. **剝 title 阿拉伯式章號前綴**：concept／group 記錄的 title 以 `6.`／`6.1`／`6、` 等阿拉伯式
+     編號起頭（判定＝lint `_TITLE_ARABIC_PREFIX_RE`，與 V20 同源）→ 剝除**完整**層級前綴
+     （`6.1 概觀`→`概觀`）。附錄字母式（`A.`／`附錄 A`）v1 不動（D7）。整值只是編號的 title 不動。
+  3. **記錄 path 改名為交付語言 title slug**（最後跑）：leaf／有 authored title 的 group，其路徑
+     末段 ≠（剝章號後）title 的檔名安全 slug → **逐項呼叫 `docspec mv` 交易原語**（marker／
+     audit／roadmap 同步重寫、自驗 check、失敗零半套）。article root 明確排除。同層 slug 撞名＝
+     兩者都拒改、報告衝突。每做完一項即重載模型重算剩餘清單。
 
-紅 check 政策：mv 以 check 自驗、要求起跑綠。check 紅時 tidy 照做動作 1–3（不經 mv），
+（舊的「刪空殼 decisions.yaml」動作已隨 store 化消滅：store canonical serializer 天然不落
+`decisions: []` 空殼，無檔可刪。）
+
+紅 check 政策：mv 以 check 自驗、要求起跑綠。check 紅時 tidy 照做動作 1–2（就地改 store），
 **整批改名跳過**並列出本會執行的清單，提示先修 check 再重跑。
 
-實跑有變更後收尾印「逐篇 `docspec render <article> --rebaseline`」提示（own 軸輸入檔集合變了；
+實跑有變更後收尾印「逐篇 `docspec render <article> --rebaseline`」提示（own 軸輸入變了；
 rebaseline 吸收、散文保留）——tidy 自己**永不** render、永不寫帳本。冪等：跑第二次＝零動作。
 """
 
@@ -30,86 +29,20 @@ import argparse
 import re
 import sys
 
-import yaml
-
 from dspx.commands.corpus import mv as mv_cmd
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
 from dspx.commands.corpus.new import _ILLEGAL_CHARS, _segment_error
 from dspx.engine.lint import _TITLE_ARABIC_PREFIX_RE, brief_dup_fields
 
 NAME = "tidy"
-HELP = ("deterministic, idempotent corpus migration: delete empty-shell decisions.yaml, strip "
-        "verbatim-duplicate brief fields, strip arabic outline-numbering prefixes from titles, "
-        "and rename leaf/group folders to delivery-language title slugs (via the mv transaction)")
+HELP = ("deterministic, idempotent corpus migration (store-native): strip verbatim-duplicate "
+        "brief fields, strip arabic outline-numbering prefixes from titles, and rename leaf/group "
+        "record paths to delivery-language title slugs (via the mv transaction)")
 
 # 剝除用：**完整**層級阿拉伯前綴（`6.` `6.1` `6.1.2` `6、` `６．１` 含尾隨編號標點與空白）。
-# 觸發與否由 lint 的 `_TITLE_ARABIC_PREFIX_RE`（單一權威）決定；此 regex 只負責剝乾淨——
-# 只用第一段 `^[0-9]+[.、．。]` 剝 `6.1 概觀` 會剩 `1 概觀`（錯），故 dotted 段一併吃掉。
 _ARABIC_STRIP_RE = re.compile(r"^\s*[0-9０-９]+(?:[.．][0-9０-９]+)*[.、．。]?\s*")
 
 _SLUG_MAX_LEN = 80
-
-_HISTORY_GUIDANCE = (
-    "live-tree history.yaml is no longer part of the contract; dead decisions fold back into "
-    "decisions.yaml marked status: superseded — not moved automatically. Migrate the entries by "
-    "hand (or re-crystallize), then delete the file.")
-
-
-# ── 動作 1：空殼 decisions.yaml 判定 ────────────────────────────────────────
-
-def _is_shell_decisions(path) -> bool:
-    """空殼＝空/純空白檔、空 mapping、或只有 falsy `entries`（`entries: []`/`entries:`）。
-    壞檔（parse 失敗、頂層非 mapping、有其他 key）不是空殼——留給 loader fail-loud。"""
-    try:
-        text = path.read_text(encoding="utf-8")
-    except OSError:
-        return False
-    if not text.strip():
-        return True
-    try:
-        data = yaml.safe_load(text)
-    except yaml.YAMLError:
-        return False
-    if data is None:                       # 只有註解＝無資料＝空殼
-        return True
-    if isinstance(data, dict):
-        if not data:
-            return True
-        if set(data.keys()) == {"entries"} and not data["entries"]:
-            return True
-    return False
-
-
-# ── 動作 2/3：concept.yaml / group.yaml 改寫（保留其餘 key，不排序）─────────
-
-def _rewrite_yaml(path, data: dict) -> None:
-    path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
-                    encoding="utf-8", newline="\n")
-
-
-def _strip_brief_fields(concept_path, fields: list[str]) -> None:
-    data = yaml.safe_load(concept_path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        return
-    brief = data.get("brief")
-    if not isinstance(brief, dict):
-        return
-    changed = False
-    for f in fields:
-        if f in brief:
-            del brief[f]
-            changed = True
-    if changed:
-        if not brief:                      # brief 空了＝整塊省略（＝繼承；schema brief 可選）
-            del data["brief"]
-        _rewrite_yaml(concept_path, data)
-
-
-def _set_title(path, new_title: str) -> None:
-    data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    if isinstance(data, dict):
-        data["title"] = new_title
-        _rewrite_yaml(path, data)
 
 
 def _strip_title(title: object) -> tuple[str | None, str | None]:
@@ -122,7 +55,7 @@ def _strip_title(title: object) -> tuple[str | None, str | None]:
     return stripped, None
 
 
-# ── 動作 4：title → 檔名安全 slug（複用 new 的路徑段防呆做最終驗證）─────────
+# ── 動作 3：title → 檔名安全 slug（複用 new 的路徑段防呆做最終驗證）─────────
 
 def _slugify(title: str) -> tuple[str | None, str | None]:
     """title →（slug, None）或（None, 拒絕原因）。剝 `/` 與 path 非法字元/控制字元、
@@ -140,21 +73,14 @@ def _slugify(title: str) -> tuple[str | None, str | None]:
     return s, None
 
 
-def _group_files(layout) -> list[tuple[object, str, dict]]:
-    """活樹 group.yaml 清單：(path, section, parsed dict)。壞檔略過（check ⑩ fail-loud 管）。"""
-    out: list[tuple[object, str, dict]] = []
-    if not layout.corpus_dir.is_dir():
-        return out
-    for gy in sorted(layout.corpus_dir.rglob("group.yaml")):
-        if layout.is_archived_path(gy.parent):
-            continue
-        try:
-            data = yaml.safe_load(gy.read_text(encoding="utf-8"))
-        except (yaml.YAMLError, OSError):
-            continue
-        if not isinstance(data, dict):
-            continue
-        out.append((gy, layout.section_id(gy.parent), data))
+def _group_records(layout) -> list[tuple[str, str, dict]]:
+    """全 store 篇的 group 記錄：(article, section, meta dict)。★store-only：由記錄枚舉。"""
+    from dspx.engine import store as _store
+    out: list[tuple[str, str, dict]] = []
+    for art in _store.store_articles(layout):
+        art_obj = _store.cached_article(layout, art)
+        for rec in (art_obj.group_records() if art_obj is not None else []):
+            out.append((art, rec.path, dict(rec.group or {})))
     return out
 
 
@@ -181,10 +107,9 @@ def _cand_from_title(section: str, title: object,
 def _compute_renames(layout) -> tuple[list[tuple[str, str]],
                                       list[tuple[list[str], str, str]],
                                       list[tuple[str, str]]]:
-    """從現行磁碟狀態算改名清單：(valid, conflicts, skips)。
+    """從現行 store 狀態算改名清單：(valid, conflicts, skips)。
     valid=(old, new)；conflicts=([olds], new, 原因)；skips=(section, 原因)。
-    article root（section 無 `/`）一律排除。slug 以「剝章號後的 title」為基準
-    （dry-run 時動作 3 尚未落盤、實跑時已剝＝再剝是 no-op，兩態一致）。"""
+    article root（section 無 `/`）一律排除。slug 以「剝章號後的 title」為基準。"""
     from dspx.engine.model import load_project
     leaves = load_project(layout)
     raw: list[tuple[str, str]] = []
@@ -195,12 +120,13 @@ def _compute_renames(layout) -> tuple[list[tuple[str, str]],
             continue                       # article root 排除（v1 mv 範圍）
         _cand_from_title(leaf.section, (leaf.concept or {}).get("title"), raw, skips)
 
-    for gy, section, data in _group_files(layout):
-        if (gy.parent / "concept.yaml").is_file():
-            continue                       # leaf 的 title 以 concept.yaml 為準
+    leaf_sections = {leaf.section for leaf in leaves}
+    for _art, section, meta in _group_records(layout):
+        if section in leaf_sections:
+            continue                       # leaf 的 title 以 concept 為準
         if "/" not in section:
-            continue                       # article root group.yaml 排除
-        _cand_from_title(section, data.get("title"), raw, skips)
+            continue                       # article root group 排除
+        _cand_from_title(section, meta.get("title"), raw, skips)
 
     by_target: dict[str, list[str]] = {}
     for old, new in raw:
@@ -208,29 +134,111 @@ def _compute_renames(layout) -> tuple[list[tuple[str, str]],
 
     valid: list[tuple[str, str]] = []
     conflicts: list[tuple[list[str], str, str]] = []
+    existing = leaf_sections | {s for _a, s, _m in _group_records(layout)}
     for new, olds in sorted(by_target.items()):
         if len(olds) > 1:                  # 同層撞名：兩者都拒、交人改 title
             conflicts.append((sorted(olds), new,
                               "multiple sections slug to the same folder name"))
             continue
         old = olds[0]
-        dst = layout.section_dir(new)
-        if dst.exists():
-            src = layout.section_dir(old)
-            same = False
-            try:
-                same = src.exists() and dst.samefile(src)
-            except OSError:
-                same = False
-            if same:                       # 大小寫不敏感 FS：只差大小寫＝同資料夾，跳過
-                skips.append((old, f'rename to "{new}" differs only by letter case from the '
-                                   "current folder name; skipped"))
-            else:
-                conflicts.append(([old], new, "target folder already exists"))
+        if new in existing:
+            conflicts.append(([old], new, "target section already exists"))
             continue
         valid.append((old, new))
     valid.sort()
     return valid, conflicts, skips
+
+
+# ── store 就地改寫（brief 剝欄 / title 剝前綴）：批次每篇一讀一寫 ──────────────
+
+def _apply_inplace_edits(layout, leaves, dry: bool, tag: str) -> tuple[int, set[str]]:
+    """動作 1（brief 剝欄）＋動作 2（title 剝前綴）：對 store 記錄就地改寫。
+    每篇 Article 只 load 一次、改完 save 一次（Drive 檔案系統一讀一寫紀律）。回 (actions, articles)。"""
+    from dspx.engine import store as _store
+    from dspx.engine.model import _concept_by_id
+
+    actions = 0
+    touched_articles: set[str] = set()
+
+    # 每篇載入可變 Article（非 cached，避免共享快取被改）
+    arts: dict[str, object] = {}
+    for art in _store.store_articles(layout):
+        arts[art] = _store.load_article(_store.store_path(layout, art), verify=False)
+    dirty: set[str] = set()
+
+    by_section = {lf.section: lf for lf in leaves}
+    concept_by_id = _concept_by_id(by_section)
+
+    # 動作 1：剝逐字重複 brief 欄
+    for leaf in leaves:
+        if "/" not in leaf.section:
+            continue                       # article root 信封永不剝
+        fields = brief_dup_fields(leaf, by_section, concept_by_id)
+        if not fields:
+            continue
+        for f in fields:
+            print(f"{tag}: strip verbatim-duplicate brief field: {leaf.section}/concept.yaml "
+                  f"brief.{f} (byte-identical to the nearest ancestor supplying it; "
+                  "deleting = inherit)")
+        actions += len(fields)
+        touched_articles.add(leaf.article)
+        if not dry:
+            rec = arts[leaf.article].record_by_path(leaf.section)
+            if rec is not None and isinstance(rec.concept, dict):
+                brief = rec.concept.get("brief")
+                if isinstance(brief, dict):
+                    for f in fields:
+                        brief.pop(f, None)
+                    if not brief:
+                        rec.concept.pop("brief", None)
+                    dirty.add(leaf.article)
+
+    # 動作 2：剝 title 阿拉伯式章號前綴（concept 記錄）
+    for leaf in leaves:
+        title = (leaf.concept or {}).get("title")
+        new_title, skip = _strip_title(title)
+        if skip:
+            print(f"{tag}: skip title strip: {leaf.section}/concept.yaml title {title!r} — {skip}")
+            continue
+        if new_title is None:
+            continue
+        print(f'{tag}: strip numbering prefix: {leaf.section}/concept.yaml title '
+              f'"{title}" -> "{new_title}"')
+        actions += 1
+        touched_articles.add(leaf.article)
+        if not dry:
+            rec = arts[leaf.article].record_by_path(leaf.section)
+            if rec is not None and isinstance(rec.concept, dict):
+                rec.concept["title"] = new_title
+                dirty.add(leaf.article)
+
+    # 動作 2：剝 title 阿拉伯式章號前綴（group 記錄）
+    for art, section, meta in _group_records(layout):
+        title = meta.get("title")
+        new_title, skip = _strip_title(title)
+        if skip:
+            print(f"{tag}: skip title strip: {section}/group.yaml title {title!r} — {skip}")
+            continue
+        if new_title is None:
+            continue
+        print(f'{tag}: strip numbering prefix: {section}/group.yaml title '
+              f'"{title}" -> "{new_title}"')
+        actions += 1
+        touched_articles.add(art)
+        if not dry:
+            rec = arts[art].record_by_path(section)
+            if rec is not None and rec.kind == "group" and isinstance(rec.group, dict):
+                rec.group["title"] = new_title
+                dirty.add(art)
+
+    # 每篇 save 一次
+    if not dry:
+        from dspx.engine.schema import load_schema
+        sch = load_schema()
+        for art in sorted(dirty):
+            _store.save_article(layout, arts[art], sch)
+
+    return actions, touched_articles
 
 
 # ── 主流程 ──────────────────────────────────────────────────────────────────
@@ -239,8 +247,8 @@ def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec tidy", description=HELP)
     parser.add_argument(
         "--dry-run", action="store_true", dest="dry_run",
-        help="print the complete action list (deletes / field strips / prefix strips / renames, "
-             "plus conflicts and skips) without touching any file")
+        help="print the complete action list (field strips / prefix strips / renames, "
+             "plus conflicts and skips) without touching any store file")
     args = parser.parse_args(argv)
 
     try:
@@ -252,76 +260,12 @@ def run(argv: list[str]) -> int:
 
     dry = args.dry_run
     tag = "tidy --dry-run" if dry else "tidy"
-    actions = 0
-    articles: set[str] = set()
     hard_fail = False
 
-    # ── 1. 刪空殼 decisions.yaml ──────────────────────────────────────────
-    for leaf in leaves:
-        p = leaf.dir / "decisions.yaml"
-        if p.is_file() and _is_shell_decisions(p):
-            print(f"{tag}: delete empty-shell decisions.yaml: {leaf.section}/decisions.yaml")
-            if not dry:
-                p.unlink()
-            actions += 1
-            articles.add(leaf.article)
+    # ── 1–2. brief 剝欄 ＋ title 剝前綴（store 就地改寫；批次每篇一讀一寫）──
+    actions, articles = _apply_inplace_edits(layout, leaves, dry, tag)
 
-    # ── 2. 剝逐字重複 brief 欄（判定＝lint brief_dup_fields，單一權威）────
-    from dspx.engine.model import _concept_by_id
-    by_section = {lf.section: lf for lf in leaves}
-    concept_by_id = _concept_by_id(by_section)
-    for leaf in leaves:
-        if "/" not in leaf.section:
-            continue                       # article root 信封永不剝（hierarchy 要求 root 完整）
-        fields = brief_dup_fields(leaf, by_section, concept_by_id)
-        if not fields:
-            continue
-        for f in fields:
-            print(f"{tag}: strip verbatim-duplicate brief field: {leaf.section}/concept.yaml "
-                  f"brief.{f} (byte-identical to the nearest ancestor supplying it; "
-                  "deleting = inherit)")
-        if not dry:
-            _strip_brief_fields(leaf.dir / "concept.yaml", fields)
-        actions += len(fields)
-        articles.add(leaf.article)
-
-    # ── 3. 剝 title 阿拉伯式章號前綴（concept.yaml ＋ 活樹 group.yaml）────
-    for leaf in leaves:
-        title = (leaf.concept or {}).get("title")
-        new_title, skip = _strip_title(title)
-        if skip:
-            print(f"{tag}: skip title strip: {leaf.section}/concept.yaml title {title!r} — {skip}")
-            continue
-        if new_title is None:
-            continue
-        print(f'{tag}: strip numbering prefix: {leaf.section}/concept.yaml title '
-              f'"{title}" -> "{new_title}"')
-        if not dry:
-            _set_title(leaf.dir / "concept.yaml", new_title)
-        actions += 1
-        articles.add(leaf.article)
-
-    for gy, section, data in _group_files(layout):
-        title = data.get("title")
-        new_title, skip = _strip_title(title)
-        if skip:
-            print(f"{tag}: skip title strip: {section}/group.yaml title {title!r} — {skip}")
-            continue
-        if new_title is None:
-            continue
-        print(f'{tag}: strip numbering prefix: {section}/group.yaml title '
-              f'"{title}" -> "{new_title}"')
-        if not dry:
-            _set_title(gy, new_title)
-        actions += 1
-        articles.add(section.split("/", 1)[0])
-
-    # ── 4. live 樹 history.yaml 偵測（只報告、不動檔、不計入動作）─────────
-    for leaf in leaves:
-        if (leaf.dir / "history.yaml").is_file():
-            print(f"{tag}: NOTE {leaf.section}/history.yaml — {_HISTORY_GUIDANCE}")
-
-    # ── 5. 資料夾改名（最後跑；逐項呼叫 mv 交易原語，做一項重算一次）──────
+    # ── 3. 記錄 path 改名（最後跑；逐項呼叫 mv 交易原語，做一項重算一次）──────
     conflicts: list[tuple[list[str], str, str]] = []
     skips: list[tuple[str, str]] = []
     if dry:
@@ -336,10 +280,9 @@ def run(argv: list[str]) -> int:
         valid, conflicts, skips = _compute_renames(layout)
         valid = [c for c in valid if c not in failed]
         if valid:
-            # mv 以 check 自驗、要求起跑綠：紅 check ＝ 整批改名跳過（動作 1–3 已照做）。
             pre = mv_cmd._check_result(layout, schema)
             if not pre.ok:
-                print(f"{tag}: SKIPPED all folder renames — `docspec check` is not green, and "
+                print(f"{tag}: SKIPPED all record renames — `docspec check` is not green, and "
                       "renames run through the mv transaction which self-verifies with check. "
                       "Fix the check errors, then re-run `docspec tidy`. Would have renamed:")
                 for old, new in valid:
@@ -359,7 +302,6 @@ def run(argv: list[str]) -> int:
                                  "with no partial effect); continuing with the rest.\n")
                 failed.add((old, new))
                 hard_fail = True
-            # 重載重算：父層改名後子路徑全變，剩餘清單以磁碟現況為準。
             valid, conflicts, skips = _compute_renames(layout)
             valid = [c for c in valid if c not in failed]
 
@@ -378,6 +320,6 @@ def run(argv: list[str]) -> int:
         print(f"{tag}: {actions} action(s) applied.")
         for art in sorted(articles):
             print(f"  reminder: run `docspec render {art} --rebaseline` — the own-axis input "
-                  "set of its sections changed; rebaseline absorbs it (prose preserved). "
+                  "of its sections changed; rebaseline absorbs it (prose preserved). "
                   "tidy never renders or writes ledgers itself.")
     return 1 if hard_fail else 0

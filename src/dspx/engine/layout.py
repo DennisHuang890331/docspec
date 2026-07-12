@@ -256,7 +256,10 @@ class Layout:
             if art and art not in seen:
                 seen.append(art)
         if self.corpus_dir.is_dir():
+            import re as _re
+            conflict = _re.compile(r".* \(\d+\)$")   # Drive 衝突副本 `<stem> (N).yaml` 隱形
             for p in sorted(self.corpus_dir.glob("*.yaml")):
-                if p.is_file() and not p.name.startswith("_") and p.stem not in seen:
+                if (p.is_file() and not p.name.startswith("_") and p.stem not in seen
+                        and not conflict.match(p.stem) and ".tmp.drive" not in p.name.lower()):
                     seen.append(p.stem)
         return seen

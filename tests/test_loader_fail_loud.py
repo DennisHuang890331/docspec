@@ -123,16 +123,19 @@ def test_read_ledger_malformed_frontmatter_fallback_warns(make_project, capsys):
 # ── cli 把 domain 錯誤包成友善訊息（非 traceback） ──────────────────
 
 def test_cli_wraps_domain_error_friendly(make_project, write_leaf, monkeypatch, capsys):
+    """★store-only：CLI 把 corpus 領域錯（此處＝store 檔被手改破封條）包成友善一行、非 traceback。
+    （舊的散檔 decisions.yaml 誤名頂層 key 錯誤路徑已死——store 不用 `entries` 容器；載入錯
+    改由 store 整檔封條/解析把關。）"""
     from dspx import cli
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
-    # 把 decisions.yaml 寫成誤名頂層 key → load 時 ModelError
-    (home / "corpus" / "a" / "x" / "decisions.yaml").write_text(
-        yaml.safe_dump({"decisions": [{"id": "d1", "kind": "normative",
-                                       "status": "accepted", "statement": "x"}]}),
-        encoding="utf-8")
+    # 手改 store 檔 body（破 integrity 封條）→ load 時 StoreError（ModelError 子類）
+    sp = home / "corpus" / "a.yaml"
+    sp.write_text(sp.read_text(encoding="utf-8").replace("title: X", "title: TAMPERED"),
+                  encoding="utf-8")
     monkeypatch.chdir(home.parent)
     rc = cli.main(["check"])
     assert rc == 1                                   # 非零、但不是 traceback
     err = capsys.readouterr().err
-    assert "docspec:" in err and "entries" in err    # 友善一行訊息＋hint
+    assert "docspec:" in err and "integrity" in err  # 友善一行訊息＋指路 fsck
+    assert "Traceback" not in err

@@ -20,12 +20,12 @@ from dspx.engine.layout import Layout
 from dspx.engine.schema import load_schema
 
 
-def _project(make_project, write_leaf, monkeypatch=None, backend="tree"):
+def _project(make_project, write_leaf, monkeypatch=None, backend="store"):
     """root g（含 normative 決策 dec-1）＋ g/intro（realizes dec-1）＋ g/usage；三節皆寫散文並
     render 記 synced 基準。回傳 planning home。
 
-    backend="store"：建完散檔後 `store migrate g` 收成一篇一檔（★E 雙 backend 參數化——同一批
-    change 工作流測試在 tree 與 store 都跑）。own 軸 v5 backend-neutral ⇒ 遷移後帳本仍 synced。"""
+    ★store-only：write_leaf 一律建 `corpus/g.yaml` store（散檔 backend 已退場）。`backend` 參數
+    保留相容既有雙 backend 參數化測試——兩值皆走 store（migrate 已不需要，語料本就是 store）。"""
     home = make_project()
     write_leaf(home, "g", concept={"id": "sec-root", "title": "Guide", "order": 1,
                                    "status": "stable",
@@ -35,11 +35,9 @@ def _project(make_project, write_leaf, monkeypatch=None, backend="tree"):
     write_leaf(home, "g/intro", concept={"id": "sec-intro", "title": "Intro", "order": 1,
                                          "realizes": ["dec-1"]})
     write_leaf(home, "g/usage", concept={"id": "sec-usage", "title": "Usage", "order": 2})
-    if backend == "store":
-        assert monkeypatch is not None, "store backend needs monkeypatch to chdir for migrate"
+    if monkeypatch is not None:
         monkeypatch.chdir(home.parent)
-        assert store_cmd.run(["migrate", "g"]) == 0
-        assert st.article_has_store(Layout(home, "per-article"), "g")
+    assert st.article_has_store(Layout(home, "per-article"), "g")
     return home
 
 
@@ -85,6 +83,35 @@ def _render_baseline(home, monkeypatch):
 def _load_change(home, cid):
     layout = Layout(home, "per-article")
     return chg.load_change(layout, cid), layout
+
+
+# ── ★store-only staging helpers（取代舊的散檔 staging_target/concept.yaml 直改）──
+
+def _store_rec_concept(home, section):
+    """正式 store 該節 concept dict（旁節 byte 不變＝記錄深等值的實體）。"""
+    layout = Layout(home, "per-article")
+    art = st.load_article(st.store_path(layout, section.split("/", 1)[0]), verify=False)
+    return art.record_by_path(section).concept
+
+
+def _edit_staging_concept(home, cid, section, **fields):
+    """改 change 的 partial store staging 內某節 concept 欄（取代舊的直改 staging concept.yaml）。"""
+    layout = Layout(home, "per-article")
+    change = chg.load_change(layout, cid)
+    chg.stage_section(change, layout, section)   # 確保 staging 有此記錄（深拷貝正式）
+    staging = chg._load_staging_article(change.dir, section.split("/", 1)[0])
+    staging.record_by_path(section).concept.update(fields)
+    chg._save_staging_article(change.dir, staging)
+
+
+def _third_party_edit_official(home, section, **concept_fields):
+    """第三方零開單直改正式 store 某節（fork 守門測試用）。"""
+    layout = Layout(home, "per-article")
+    art = st.load_article(st.store_path(layout, section.split("/", 1)[0]), verify=False)
+    art.record_by_path(section).concept.update(concept_fields)
+    art.revision += 1
+    st.save_article(layout, art, load_schema())
+    st._ARTICLE_CACHE.clear()
 
 
 def _status_map(home, cid):
@@ -141,13 +168,9 @@ def test_g2_preview_seeded_only_changed_section_stale(make_project, write_leaf, 
     # 開單、**只**改一節 g/intro 的決策（改源 → 該節須重寫散文）
     change_cmd.run(["new", "chg-x", "--publish", "advisory"])
     change_cmd.run(["add-target", "chg-x", "sec-intro", "--action", "revise"])
-    # 改 staging 副本的 realizes-源：把 g/intro 的 concept 改一下（源變）
+    # 改 staging 副本的 realizes-源：把 g/intro 的 concept 改一下（源變）★store-only：改 staging 記錄
+    _edit_staging_concept(home, "chg-x", "g/intro", concept="changed framing")
     change = chg.load_change(layout, "chg-x")
-    staged_intro = chg.staging_target(change.dir, layout, layout.section_dir("g/intro"))
-    cpath = staged_intro / "concept.yaml"
-    cdata = yaml.safe_load(cpath.read_text(encoding="utf-8"))
-    cdata["concept"] = "changed framing"
-    cpath.write_text(yaml.safe_dump(cdata, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
     render_cmd.run(["g", "--change", "chg-x"])
     pv = chg.preview_dir(change.dir) / "g_latest.md"
@@ -276,8 +299,8 @@ def test_p0_bystander_survives_when_parent_root_staged(make_project, write_leaf,
     _render_baseline(home, monkeypatch)
     layout = Layout(home, "per-article")
 
-    # 旁節 g/usage 的收案前狀態（corpus 源 + 交付物散文）
-    usage_concept_before = (home / "corpus" / "g" / "usage" / "concept.yaml").read_bytes()
+    # 旁節 g/usage 的收案前狀態（store 記錄 + 交付物散文）★store-only
+    usage_concept_before = _store_rec_concept(home, "g/usage")
     latest_before = _latest(home).read_text(encoding="utf-8")
     assert "Usage details here." in latest_before
     leaves_before = _leaf_count(home)
@@ -298,8 +321,8 @@ def test_p0_bystander_survives_when_parent_root_staged(make_project, write_leaf,
 
     assert change_cmd.run(["archive", "chg-x"]) == 0
 
-    # ★旁節 g/usage 逐 byte 存活（corpus）＋交付物散文仍在＋leaf 計數不減
-    assert (home / "corpus" / "g" / "usage" / "concept.yaml").read_bytes() == usage_concept_before
+    # ★旁節 g/usage 逐記錄存活（store）＋交付物散文仍在＋leaf 計數不減
+    assert _store_rec_concept(home, "g/usage") == usage_concept_before
     final = _latest(home).read_text(encoding="utf-8")
     assert "Usage details here." in final
     assert _leaf_count(home) == leaves_before
@@ -311,7 +334,7 @@ def test_p0_bystander_survives_when_only_leaf_staged(make_project, write_leaf, m
     """★P0（8.1）A/B 對照：只 enlist 一個子葉 g/intro（父/根不進暫存），旁節 g/usage 仍存活。"""
     home = _project(make_project, write_leaf)
     _render_baseline(home, monkeypatch)
-    usage_before = (home / "corpus" / "g" / "usage" / "concept.yaml").read_bytes()
+    usage_before = _store_rec_concept(home, "g/usage")
     leaves_before = _leaf_count(home)
 
     change_cmd.run(["new", "chg-x", "--publish", "advisory"])
@@ -321,7 +344,7 @@ def test_p0_bystander_survives_when_only_leaf_staged(make_project, write_leaf, m
     render_cmd.run(["g", "--change", "chg-x"])
     assert change_cmd.run(["archive", "chg-x"]) == 0
 
-    assert (home / "corpus" / "g" / "usage" / "concept.yaml").read_bytes() == usage_before
+    assert _store_rec_concept(home, "g/usage") == usage_before
     assert "Usage details here." in _latest(home).read_text(encoding="utf-8")
     assert _leaf_count(home) == leaves_before
 
@@ -410,20 +433,18 @@ def test_abandon_zero_change(make_project, write_leaf, monkeypatch):
     _render_baseline(home, monkeypatch)
     layout = Layout(home, "per-article")
     official_before = _latest(home).read_text(encoding="utf-8")
-    corpus_before = (home / "corpus" / "g" / "intro" / "concept.yaml").read_text(encoding="utf-8")
+    corpus_before = _store_rec_concept(home, "g/intro")
 
     change_cmd.run(["new", "chg-x", "--publish", "advisory"])
     change_cmd.run(["add-target", "chg-x", "sec-intro", "--action", "revise"])
-    # 動 staging 副本
-    change = chg.load_change(layout, "chg-x")
-    sp = chg.staging_target(change.dir, layout, layout.section_dir("g/intro")) / "concept.yaml"
-    sp.write_text(sp.read_text(encoding="utf-8") + "\n# scribble\n", encoding="utf-8")
+    # 動 staging 副本（★store-only：改 partial store staging 記錄）
+    _edit_staging_concept(home, "chg-x", "g/intro", concept="scribbled framing")
 
     assert change_cmd.run(["archive", "chg-x", "--abandon", "--reason", "wrong direction"]) == 0
     assert chg.change_state(layout, "chg-x") == "abandoned"
     # 正式面零 byte 變化
     assert _latest(home).read_text(encoding="utf-8") == official_before
-    assert (home / "corpus" / "g" / "intro" / "concept.yaml").read_text(encoding="utf-8") == corpus_before
+    assert _store_rec_concept(home, "g/intro") == corpus_before
     # reason 入 change.yaml
     ac = chg.load_change(layout, "chg-x")
     assert ac.abandoned and ac.abandoned["reason"] == "wrong direction"
@@ -450,9 +471,8 @@ def test_fork_drift_guard(make_project, write_leaf, monkeypatch, capsys):
     _rewrite_preview_prose(home, "chg-x", "g/intro", "imperial now.")
     render_cmd.run(["g", "--change", "chg-x"])
 
-    # 第三方零開單直改正式 corpus 的同節 concept（fork hash 就失配）
-    off = home / "corpus" / "g" / "intro" / "concept.yaml"
-    off.write_text(off.read_text(encoding="utf-8") + "\n# third-party edit\n", encoding="utf-8")
+    # 第三方零開單直改正式 store 的同節 concept（fork hash 就失配）★store-only
+    _third_party_edit_official(home, "g/intro", concept="third-party edit framing")
 
     rc = change_cmd.run(["archive", "chg-x"])
     assert rc == 1

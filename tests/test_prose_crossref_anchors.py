@@ -101,8 +101,7 @@ def test_reorder_updates_number_but_referencing_section_stays_synced(
     prose_before = prose_hash("詳見 <!--@sec-c-->§3<!--@--> 的說明。")
 
     # 重排：把 c 的 order 提前到 1.5（甲之後、乙之前）→ c 變第 2 章
-    cc = home / "corpus" / "g" / "c" / "concept.yaml"
-    cc.write_text(cc.read_text("utf-8").replace("order: 3", "order: 1.5"), "utf-8")
+    write_leaf.edit_replace(home, "g/c", "order: 3", "order: 1.5")
     assert render_cmd.run(["g"]) == 0
 
     # 顯示號碼真的變了：§3 → §2
@@ -298,10 +297,8 @@ def test_publish_snapshot_has_no_binding_comments(make_project, write_leaf, monk
     # 補齊晉升所需欄位（concept/brief）讓 publish 過閘
     for sec, cid, title, order in [("g/a", "sec-a", "甲", 1), ("g/b", "sec-b", "乙", 2),
                                    ("g/c", "sec-c", "丙", 3)]:
-        cy = home / "corpus" / "g" / sec.split("/")[-1] / "concept.yaml"
-        data = yaml.safe_load(cy.read_text("utf-8"))
-        data.update({"concept": "real", "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
-        cy.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), "utf-8")
+        write_leaf.edit(home, sec, concept={"concept": "real"},
+                        brief={"audience": "a", "depth": "d", "breadth": "b"})
     _put_prose(home, "g", "g/a", "詳見 <!--@sec-c--><!--@--> 的說明。")
     _put_prose(home, "g", "g/b", "乙散文。")
     _put_prose(home, "g", "g/c", "丙散文。")

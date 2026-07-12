@@ -13,8 +13,11 @@ from dspx.engine.schema import load_schema
 
 
 def _doc_audit(home, article):
-    """per-doc audit 路徑＝corpus/<article>/audit.yaml。"""
-    return home / "corpus" / article / "audit.yaml"
+    """per-doc audit 路徑＝corpus/<article>/audit.yaml。★store-only：store 是 corpus/<article>.yaml
+    檔，corpus/<article>/ 夾不再由 write_leaf 順帶建出——測試直寫前先建夾（引擎 save() 亦自建）。"""
+    p = home / "corpus" / article / "audit.yaml"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    return p
 
 
 def _forest_audit(home):
@@ -312,14 +315,12 @@ def test_check_valid_audit_passes(make_project, write_leaf):
     assert res.ok, res.errors
 
 
-def test_check_catches_missing_required_concept_field(make_project):
-    """欄位級驗證：concept 缺必填（如 concept 一句話）→ check 抓。"""
+def test_check_catches_missing_required_concept_field(make_project, write_leaf):
+    """欄位級驗證：concept 缺必填（如 concept 一句話）→ check 抓。★store-only：建 store 記錄後
+    刪掉必填 `concept` 欄。"""
     home = make_project()
-    leaf = home / "corpus" / "a" / "x"
-    leaf.mkdir(parents=True)
-    leaf.joinpath("concept.yaml").write_text(
-        yaml.safe_dump({"id": "c1", "title": "X", "order": 1}, allow_unicode=True),
-        encoding="utf-8")
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    write_leaf.edit(home, "a/x", concept_del=["concept"])
     layout = Layout(home)
     res = run_check(load_project(layout), load_schema(), layout=layout)
     assert not res.ok
@@ -459,6 +460,7 @@ def test_check_accepts_promoted_to_roadmap_id(make_project, write_leaf):
     """finding 晉升為一條 roadmap entry（而非直接開 change）→ promoted-to 命中該 roadmap id 亦健康。"""
     home = make_project()
     write_leaf(home, "a", concept=_root("ca", "A"))
+    (home / "corpus" / "a").mkdir(parents=True, exist_ok=True)
     (home / "corpus" / "a" / "roadmap.yaml").write_text(
         yaml.safe_dump({"entries": [{"id": "r1", "kind": "task", "title": "t",
                                      "what": "w", "target": "a"}]},

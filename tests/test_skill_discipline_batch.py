@@ -36,13 +36,13 @@ def test_reopen_rebuilds_develop_from_concept(make_project, write_leaf, monkeypa
     write_leaf(home, "g/intro",
                concept={"id": "c-fixed-99", "title": "概覽標題", "order": 7, "concept": "real"},
                decisions=[{"id": "d1", "kind": "normative", "status": "accepted", "statement": "s"}])
-    leaf = home / "corpus" / "g" / "intro"
-    assert (leaf / "concept.yaml").is_file()
-    assert not (leaf / "develop.md").exists()
+    # ★store-only：concept 在 store 記錄、develop.md 在 work/
+    work = home / "work" / "g" / "intro"
+    assert not (work / "develop.md").exists()
     monkeypatch.chdir(home.parent)
 
     assert new_cmd.run(["g/intro", "--reopen"]) == 0
-    body = (leaf / "develop.md").read_text(encoding="utf-8")
+    body = (work / "develop.md").read_text(encoding="utf-8")
     assert "c-fixed-99" in body          # id 從 concept.yaml 讀，非 _stable_id 路徑重算
     assert "概覽標題" in body             # title 取 concept 現值
     assert "order: 7" in body            # order 取 concept 現值，非同層資料夾數重算
@@ -62,7 +62,7 @@ def test_reopen_refuses_when_develop_already_open(make_project, write_leaf, monk
                concept={"id": "c1", "title": "X", "order": 1, "concept": "real"},
                decisions=[{"id": "d1", "kind": "normative", "status": "accepted", "statement": "s"}],
                develop="## still thinking\nkeep this")
-    leaf = home / "corpus" / "g" / "intro"
+    leaf = home / "work" / "g" / "intro"   # ★store-only：develop.md 住 work/
     before = (leaf / "develop.md").read_bytes()
     monkeypatch.chdir(home.parent)
     capsys.readouterr()
@@ -95,7 +95,7 @@ def test_plain_new_on_crystallized_missing_develop_points_at_reopen(
     assert new_cmd.run(["g/intro"]) == 2
     err = capsys.readouterr().err
     assert "--reopen" in err
-    assert not (home / "corpus" / "g" / "intro" / "develop.md").exists()   # 不覆寫
+    assert not (home / "work" / "g" / "intro" / "develop.md").exists()   # 不覆寫
 
 
 def test_plain_new_overwrite_message_unchanged_when_develop_present(

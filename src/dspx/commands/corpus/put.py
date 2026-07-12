@@ -14,9 +14,7 @@ concept 照收（該節停在 developing）。本 change backend 仍寫現行散
 from __future__ import annotations
 
 import argparse
-import os
 import sys
-import tempfile
 from pathlib import Path
 
 import yaml
@@ -30,6 +28,7 @@ from dspx.engine.model import Leaf, ModelError, _DupCheckLoader, _entries
 NAME = "put"
 HELP = "the single validated write gate: validate then atomically write a section's concept/decisions/material"
 
+# category → get/put 匯出檔名慣例（store block 的暫存檔名；store-only 後不再是磁碟散檔）。
 _CATEGORIES = {
     "concept": "concept.yaml",
     "decisions": "decisions.yaml",
@@ -55,28 +54,6 @@ def _parse_yaml_text(text: str, where: str):
         raise ModelError(f"{where}: YAML parse failed{position}") from exc
 
 
-def _safe_dict(path: Path) -> dict | None:
-    """容錯讀現行 concept.yaml（壞／缺 → None）；供建 candidate 的非目標欄。"""
-    if not path.is_file():
-        return None
-    try:
-        raw = _parse_yaml_text(path.read_text(encoding="utf-8"), str(path))
-    except ModelError:
-        return None
-    return raw if isinstance(raw, dict) else None
-
-
-def _safe_entries(path: Path) -> list[dict]:
-    """容錯讀現行 decisions/history entries（壞／缺 → []）；供建 candidate 的非目標欄。"""
-    if not path.is_file():
-        return []
-    try:
-        raw = _parse_yaml_text(path.read_text(encoding="utf-8"), str(path))
-        return _entries(raw, path)
-    except ModelError:
-        return []
-
-
 def _leaf_ids_with_section(leaf: Leaf) -> list[tuple[str, str]]:
     """一節宣告的全部 id（concept ∪ decisions ∪ history）配上它的 section。"""
     out: list[tuple[str, str]] = []
@@ -93,40 +70,6 @@ def _leaf_ids_with_section(leaf: Leaf) -> list[tuple[str, str]]:
 
 def _candidate_ids_ordered(leaf: Leaf) -> list[str]:
     return [iid for iid, _sec in _leaf_ids_with_section(leaf)]
-
-
-def _build_candidate(sec_dir: Path, section: str, category: str, parsed) -> Leaf:
-    """從某節資料夾（正式或 staging）建 candidate leaf、把目標分類換成 parsed 後的新內容
-    （其餘欄容錯沿用該資料夾現行檔）。sec_dir 由呼叫端解析（routing：staging 副本／否則正式）。"""
-    d = sec_dir
-    concept = _safe_dict(d / "concept.yaml")
-    decisions = _safe_entries(d / "decisions.yaml")
-    history = _safe_entries(d / "history.yaml")
-    has_material = (d / "material.md").is_file()
-    if category == "concept":
-        concept = parsed
-    elif category == "decisions":
-        decisions = parsed          # already validated as entries list
-    elif category == "material":
-        has_material = True
-    return Leaf(section=section, dir=d, concept=concept, decisions=decisions, history=history,
-                has_material=has_material,
-                has_develop=(d / "develop.md").is_file(),
-                has_history=(d / "history.yaml").is_file())
-
-
-def _other_leaves(layout, section: str) -> list[Leaf]:
-    """全專案除本節外的活節（供 id 唯一／relation 存在的宇宙）；壞的別節盡力略過。"""
-    from dspx.engine.model import load_leaf
-    out: list[Leaf] = []
-    for leaf_dir in layout.leaf_dirs():
-        if layout.section_id(leaf_dir) == section:
-            continue
-        try:
-            out.append(load_leaf(layout, leaf_dir))
-        except ModelError:
-            continue
-    return out
 
 
 def _structural_errors(schema, section: str, category: str,
@@ -178,22 +121,6 @@ def _structural_errors(schema, section: str, category: str,
     return errs
 
 
-def _atomic_write(path: Path, text: str) -> None:
-    """原子寫：tmp 同目錄 + os.replace（同分割區 rename 原子）；失敗清 tmp、原檔不動。"""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".put-", suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
-            f.write(text)
-        os.replace(tmp, path)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
-
-
 def _read_source(source: str) -> str:
     if source == "-":
         return sys.stdin.read()
@@ -218,7 +145,11 @@ def _put_store(layout, schema, args, section: str, text: str, change) -> int:
         others = [lf for lf in chg.load_union(layout, change) if lf.section != section]
     else:
         from dspx.engine.model import load_project
-        art_obj = _store.load_article(_store.store_path(layout, article), verify=True)
+        # first-write：該篇尚無 store 檔（首個 crystallize 的節）→ 起一份空 Article、寫入後即生檔。
+        if _store.article_has_store(layout, article):
+            art_obj = _store.load_article(_store.store_path(layout, article), verify=True)
+        else:
+            art_obj = _store.Article(name=article, revision=0, records=[])
         others = [lf for lf in load_project(layout) if lf.section != section]
     rec = art_obj.record_by_path(section)
     if rec is None:
@@ -350,87 +281,5 @@ def run(argv: list[str]) -> int:
         sys.stderr.write(f"docspec: {exc}\n")
         return 2
 
-    # ── backend 路由：store 篇寫進 store 記錄（正式或 staging partial store），非散檔 ──
-    from dspx.engine import store as store_mod
-    if store_mod.article_has_store(layout, layout.article_of(section)):
-        return _put_store(layout, schema, args, section, text, change)
-
-    filename = _CATEGORIES[args.category]
-    if change is not None:
-        # 進 staging 前先 copy-on-write 該節（既有暫存機制；官方 byte 不動）
-        chg.stage_section(change, layout, section)
-        sec_dir = chg.staging_target(change.dir, layout, layout.section_dir(section))
-    else:
-        sec_dir = layout.section_dir(section)
-    path = sec_dir / filename
-    first_write = not path.is_file()
-
-    # ── 解析 + 形狀（壞 YAML / 壞形狀 fail-loud、原檔不動）────────────────────
-    parsed: object
-    write_text = text
-    stamped = False
-    try:
-        if args.category == "concept":
-            raw = _parse_yaml_text(text, str(path))
-            if raw is not None and not isinstance(raw, dict):
-                raise ModelError(f"{path}: concept top level must be a mapping")
-            parsed = raw if isinstance(raw, dict) else {}
-            # 首寫 concept：帶入 id/order（取代 agent 手寫）
-            if first_write:
-                if not parsed.get("id"):
-                    parsed["id"] = _stable_id(section)
-                    stamped = True
-                if parsed.get("order") is None:
-                    parsed["order"] = _next_order(layout, section)
-                    stamped = True
-        elif args.category == "decisions":
-            raw = _parse_yaml_text(text, str(path))
-            parsed = _entries(raw, path)     # {entries: [dicts]} 或 fail-loud
-        else:  # material
-            parsed = None
-    except ModelError as exc:
-        sys.stderr.write(f"docspec: put rejected (no write): {exc}\n")
-        return 1
-
-    # ── 結構驗證（拒收判準）；通過才寫 ─────────────────────────────────────
-    candidate = _build_candidate(sec_dir, section, args.category,
-                                 parsed if args.category != "material" else None)
-    # id 唯一／relation 目標的宇宙：routing 時用 union（staging 優先，含同單其他 staged 節），
-    # 否則正式散檔——確保驗證管線對 staging 寫入同樣過閘、且看見同單的暫存真相。
-    if change is not None:
-        others = [lf for lf in chg.load_union(layout, change) if lf.section != section]
-    else:
-        others = _other_leaves(layout, section)
-    errs = _structural_errors(schema, section, args.category, candidate, others)
-    if errs:
-        sys.stderr.write(f"docspec: put rejected — {len(errs)} structural error(s), "
-                         f"{filename} left unchanged (no partial write):\n")
-        for e in errs:
-            sys.stderr.write(f"    ✗ {e}\n")
-        return 1
-
-    if stamped:
-        # 首寫且注入了 id/order → 以結構化內容重渲（id/order 置前，其餘照舊）
-        ordered: dict = {"id": parsed["id"]}
-        if "title" in parsed:
-            ordered["title"] = parsed["title"]
-        ordered["order"] = parsed["order"]
-        for k, v in parsed.items():
-            if k not in ordered:
-                ordered[k] = v
-        write_text = yaml.safe_dump(ordered, allow_unicode=True, sort_keys=False)
-
-    _atomic_write(path, write_text)
-
-    verb = "created" if first_write else "updated"
-    where = f" into change \"{change.id}\" staging" if change is not None else ""
-    print(f"put: {verb} {section}/{filename}{where} (validated: field check + duplicate-id + "
-          "relation-target + enum)")
-    if stamped:
-        print(f"  stamped id: {parsed['id']}  order: {parsed['order']} (first write of concept)")
-    if change is not None:
-        print("  official corpus file is byte-frozen (changes land at archive); "
-              f"next: docspec render --change {change.id}  then  docspec change status {change.id}.")
-    else:
-        print("  next: docspec status / docspec check picks up staleness; render to project prose.")
-    return 0
+    # ★store-only：寫進 store 記錄（正式或 change 的 partial store staging），非散檔。
+    return _put_store(layout, schema, args, section, text, change)

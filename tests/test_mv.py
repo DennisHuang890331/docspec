@@ -21,6 +21,13 @@ def _leaf(write_leaf, home, section, *, cid, title="X", order=1):
         "brief": {"audience": "a", "depth": "d", "breadth": "b", "forbidden": ["f"]}})
 
 
+def _store_sections(home, article):
+    """★store-only：某篇 store 的全部 section 路徑集合（mv 後驗記錄搬移，取代驗資料夾）。"""
+    from dspx.engine import store as _store
+    art = _store.load_article(_store.store_path(Layout(home), article), verify=False)
+    return {r.path for r in art.records}
+
+
 def _render(home: Path, monkeypatch, article) -> Layout:
     monkeypatch.chdir(home.parent)
     render_cmd.run([article])
@@ -63,8 +70,8 @@ def test_mv_leaf_rewrites_marker_and_preserves_prose(make_project, write_leaf, m
     assert rc == 0
 
     # 資料夾改名
-    assert not (home / "corpus" / "sc" / "safety" / "protective-zone").exists()
-    assert (home / "corpus" / "sc" / "safety" / "防撞防護區域安全機能" / "concept.yaml").is_file()
+    assert "sc/safety/protective-zone" not in _store_sections(home, "sc")
+    assert "sc/safety/防撞防護區域安全機能" in _store_sections(home, "sc")
 
     # _latest marker 重寫為新路徑、散文原樣保留
     latest = layout.docs_latest("sc").read_text(encoding="utf-8")
@@ -87,6 +94,7 @@ def test_mv_rewrites_audit_and_roadmap_targets(make_project, write_leaf, monkeyp
     # per-article audit + roadmap 指向舊路徑（含 #anchor 與 concept-id target）
     from dspx.reports.audit import doc_audit_path
     from dspx.reports.roadmap import doc_roadmap_path
+    (home / "corpus" / "sc").mkdir(parents=True, exist_ok=True)   # ★store-only：per-doc 檔夾另建
     doc_audit_path(layout, "sc").write_text(yaml.safe_dump({"findings": [
         {"id": "F1", "face": "logic", "severity": "low", "status": "open",
          "finding": "x", "targets": ["sc/safety/zone#seg", "c2"], "suggestion": ""},
@@ -117,9 +125,9 @@ def test_mv_group_subtree_remaps_descendants(make_project, write_leaf, monkeypat
     # 改整個 group `sc/safety` → `sc/安全`
     assert mv_cmd.run(["sc/safety", "sc/安全"]) == 0
 
-    assert (home / "corpus" / "sc" / "安全" / "zone-a" / "concept.yaml").is_file()
-    assert (home / "corpus" / "sc" / "安全" / "zone-b" / "concept.yaml").is_file()
-    assert not (home / "corpus" / "sc" / "safety").exists()
+    assert "sc/安全/zone-a" in _store_sections(home, "sc")
+    assert "sc/安全/zone-b" in _store_sections(home, "sc")
+    assert "sc/safety" not in _store_sections(home, "sc")
 
     latest = layout.docs_latest("sc").read_text(encoding="utf-8")
     assert "<!-- dspx:section sc/安全/zone-a -->" in latest
@@ -139,7 +147,7 @@ def test_mv_aborts_when_destination_exists(make_project, write_leaf, monkeypatch
     rc = mv_cmd.run(["sc/a", "sc/b"])   # 目標已存在
     assert rc == 1
     # 零半套：原資料夾仍在、目標仍是原本的 b、_latest 未動
-    assert (home / "corpus" / "sc" / "a" / "concept.yaml").is_file()
+    assert "sc/a" in _store_sections(home, "sc")
     assert layout.docs_latest("sc").read_text(encoding="utf-8") == before
 
 
@@ -175,8 +183,8 @@ def test_mv_rollback_on_check_failure(make_project, write_leaf, monkeypatch):
     rc = mv_cmd.run(["sc/a", "sc/新"])
     assert rc == 1
     # 回滾：資料夾回原位、目標不存在、_latest 還原
-    assert (home / "corpus" / "sc" / "a" / "concept.yaml").is_file()
-    assert not (home / "corpus" / "sc" / "新").exists()
+    assert "sc/a" in _store_sections(home, "sc")
+    assert "sc/新" not in _store_sections(home, "sc")
     assert layout.docs_latest("sc").read_text(encoding="utf-8") == before_latest
 
 
@@ -187,7 +195,7 @@ def test_mv_refuses_article_root(make_project, write_leaf, monkeypatch):
     monkeypatch.chdir(home.parent)
     rc = mv_cmd.run(["sc", "control"])
     assert rc == 1
-    assert (home / "corpus" / "sc" / "a" / "concept.yaml").is_file()
+    assert "sc/a" in _store_sections(home, "sc")
 
 
 def test_mv_refuses_cross_article(make_project, write_leaf, monkeypatch):
@@ -199,7 +207,7 @@ def test_mv_refuses_cross_article(make_project, write_leaf, monkeypatch):
     monkeypatch.chdir(home.parent)
     rc = mv_cmd.run(["sc/a", "other/a"])
     assert rc == 1
-    assert (home / "corpus" / "sc" / "a" / "concept.yaml").is_file()
+    assert "sc/a" in _store_sections(home, "sc")
 
 
 def test_mv_refuses_unknown_section(make_project, write_leaf, monkeypatch):
@@ -217,7 +225,7 @@ def test_mv_refuses_illegal_destination(make_project, write_leaf, monkeypatch):
     monkeypatch.chdir(home.parent)
     # `_` 前綴段＝引擎隱形保留，validate_section_path 拒收
     assert mv_cmd.run(["sc/a", "sc/_hidden"]) == 2
-    assert (home / "corpus" / "sc" / "a" / "concept.yaml").is_file()
+    assert "sc/a" in _store_sections(home, "sc")
 
 
 # ── asset 模式 ─────────────────────────────────────────────────────────────
