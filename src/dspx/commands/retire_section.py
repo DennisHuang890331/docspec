@@ -161,6 +161,18 @@ def run(argv: list[str]) -> int:
         return exc.exit_code
 
     section = args.section.strip("/")
+
+    # ── 誠實邊界：store 篇的結構化退場（抽記錄→封存包）＝Phase-C 後續（未落地）。指路散檔逃生口。──
+    from dspx import store as _store
+    if _store.article_has_store(layout, layout.article_of(section)):
+        sys.stderr.write(
+            f"docspec: retire-section does not yet operate on store-backed article "
+            f"\"{layout.article_of(section)}\" (corpus/{layout.article_of(section)}.yaml). Use "
+            f"`docspec store dump {layout.article_of(section)} <DIR>`, retire in the scattered "
+            "export, then `docspec store load` — the structured record-retire is a Phase-C "
+            "follow-up.\n")
+        return 1
+
     src = layout.section_dir(section)
     if not src.is_dir() or not (
         (src / "concept.yaml").is_file() or (src / "develop.md").is_file()

@@ -40,6 +40,55 @@ def _skeleton(schema, artifact_id: str) -> str:
     return ""
 
 
+def _get_store(layout, schema, args, section: str, change) -> int:
+    """store 篇 get：從記錄（change staging 優先、正式 store 補底）吐某分類；缺＝schema 空骨架。"""
+    import yaml
+
+    from dspx import store as _store
+    _filename, artifact_id = _CATEGORIES[args.category]
+    article = layout.article_of(section)
+    rec = None
+    origin = ""
+    if change is not None:
+        staging = chg._load_staging_article(change.dir, article)
+        staged_rec = staging.record_by_path(section) if staging is not None else None
+        if staged_rec is not None and staged_rec.kind == "leaf":
+            rec = staged_rec
+            origin = f" (change \"{change.id}\" staging)"
+    if rec is None:
+        art = _store.load_article(_store.store_path(layout, article), verify=True)
+        rec = art.record_by_path(section)
+
+    have = False
+    if rec is not None and rec.kind == "leaf":
+        if args.category == "concept" and rec.concept:
+            content = yaml.safe_dump(rec.concept, allow_unicode=True, sort_keys=False)
+            have = True
+        elif args.category == "decisions" and rec.decisions:
+            content = yaml.safe_dump({"entries": rec.decisions}, allow_unicode=True, sort_keys=False)
+            have = True
+        elif args.category == "material" and rec.material is not None:
+            content = rec.material
+            have = True
+        else:
+            content = _skeleton(schema, artifact_id)
+    else:
+        content = _skeleton(schema, artifact_id)
+
+    if args.out:
+        from pathlib import Path
+        out_path = Path(args.out)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(content, encoding="utf-8", newline="\n")
+        src = "store record" if have else "empty schema skeleton (no content yet)"
+        print(f"get: {args.section} {args.category} -> {out_path} ({src}){origin}")
+    else:
+        sys.stdout.write(content)
+        if content and not content.endswith("\n"):
+            sys.stdout.write("\n")
+    return 0
+
+
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec get", description=HELP)
     parser.add_argument("section", help="leaf section path (relative to corpus/)")
@@ -76,6 +125,11 @@ def run(argv: list[str]) -> int:
         except chg.ChangeError as exc:
             sys.stderr.write(f"docspec: {exc}\n")
             return 2
+
+    # ── backend 路由：store 篇由記錄吐內容（staging 優先、正式補底），非散檔 ──
+    from dspx import store as store_mod
+    if store_mod.article_has_store(layout, layout.article_of(section)):
+        return _get_store(layout, schema, args, section, change)
 
     filename, artifact_id = _CATEGORIES[args.category]
     if change is not None:

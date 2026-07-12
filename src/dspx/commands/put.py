@@ -203,6 +203,108 @@ def _read_source(source: str) -> str:
     return p.read_text(encoding="utf-8")
 
 
+def _put_store(layout, schema, args, section: str, text: str, change) -> int:
+    """store 篇 put：把分類寫進正式 store 記錄（無 --change）或 change 的 partial store staging 記錄
+    （有 --change，official byte 凍結）。同一驗證管線（欄位 check＋重複 id＋relation 目標＋enum）；
+    通過才 canonical dump 原子寫。first-write concept 帶入 id/order（取代 agent 手寫）。"""
+    from dspx import store as _store
+    category = args.category
+    article = layout.article_of(section)
+
+    # 取目標 Article（staging 或正式）＋ id 唯一/relation 宇宙（others）
+    if change is not None:
+        chg.stage_section(change, layout, section)   # 確保 partial store 有此記錄（深拷貝／pending）
+        art_obj = chg._load_staging_article(change.dir, article)
+        others = [lf for lf in chg.load_union(layout, change) if lf.section != section]
+    else:
+        from dspx.model import load_project
+        art_obj = _store.load_article(_store.store_path(layout, article), verify=True)
+        others = [lf for lf in load_project(layout) if lf.section != section]
+    rec = art_obj.record_by_path(section)
+    if rec is None:
+        rec = _store.SectionRecord(path=section, kind="leaf")
+        art_obj.records.append(rec)
+
+    had = (bool(rec.concept) if category == "concept"
+           else bool(rec.decisions) if category == "decisions"
+           else rec.material is not None)
+    stamp_first = category == "concept" and not (rec.concept and rec.concept.get("id"))
+
+    # ── 解析 + 形狀（壞 YAML／壞形狀 fail-loud、記錄不動）──
+    parsed: object
+    stamped = False
+    try:
+        if category == "concept":
+            raw = _parse_yaml_text(text, section)
+            if raw is not None and not isinstance(raw, dict):
+                raise ModelError(f"{section}: concept top level must be a mapping")
+            parsed = raw if isinstance(raw, dict) else {}
+            if stamp_first:
+                if not parsed.get("id"):
+                    parsed["id"] = _stable_id(section)
+                    stamped = True
+                if parsed.get("order") is None:
+                    parsed["order"] = _next_order(layout, section)
+                    stamped = True
+        elif category == "decisions":
+            raw = _parse_yaml_text(text, section)
+            parsed = _entries(raw, Path(section))
+        else:  # material（存原文；序列化時正規化換行）
+            parsed = text
+    except ModelError as exc:
+        sys.stderr.write(f"docspec: put rejected (no write): {exc}\n")
+        return 1
+
+    # ── 建 candidate leaf（目標分類換新內容，其餘沿用記錄現值）→ 結構驗證 ──
+    concept, decisions, material = rec.concept, list(rec.decisions), rec.material
+    has_material = rec.material is not None
+    if category == "concept":
+        concept = parsed
+    elif category == "decisions":
+        decisions = parsed
+    else:
+        material, has_material = parsed, True
+    candidate = Leaf(section=section, dir=layout.section_dir(section), concept=concept,
+                     decisions=decisions, history=list(rec.history), has_material=has_material,
+                     has_develop=_store.work_develop(layout, section).is_file(),
+                     has_history=bool(rec.history), material=material)
+    errs = _structural_errors(schema, section, category, candidate, others)
+    if errs:
+        sys.stderr.write(f"docspec: put rejected — {len(errs)} structural error(s), the store record "
+                         f"for {section}/{category} is left unchanged (no partial write):\n")
+        for e in errs:
+            sys.stderr.write(f"    ✗ {e}\n")
+        return 1
+
+    # ── 通過 → 套用到記錄、canonical dump 原子寫（staging 或正式）──
+    if category == "concept":
+        rec.concept = parsed
+    elif category == "decisions":
+        rec.decisions = parsed
+    else:
+        rec.material = parsed
+    rec.kind = "leaf"
+
+    if change is not None:
+        chg._save_staging_article(change.dir, art_obj, schema)
+    else:
+        art_obj.revision += 1
+        _store.save_article(layout, art_obj, schema)
+
+    verb = "created" if not had else "updated"
+    where = f" into change \"{change.id}\" staging" if change is not None else ""
+    print(f"put: {verb} {section}/{category} in store{where} (validated: field check + "
+          "duplicate-id + relation-target + enum)")
+    if stamped:
+        print(f"  stamped id: {parsed['id']}  order: {parsed['order']} (first write of concept)")
+    if change is not None:
+        print("  official store is byte-frozen (changes land at archive); "
+              f"next: docspec render --change {change.id}  then  docspec change status {change.id}.")
+    else:
+        print("  next: docspec status / docspec check picks up staleness; render to project prose.")
+    return 0
+
+
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec put", description=HELP)
     parser.add_argument("section", help="leaf section path (relative to corpus/)")
@@ -247,6 +349,11 @@ def run(argv: list[str]) -> int:
     except chg.ChangeError as exc:
         sys.stderr.write(f"docspec: {exc}\n")
         return 2
+
+    # ── backend 路由：store 篇寫進 store 記錄（正式或 staging partial store），非散檔 ──
+    from dspx import store as store_mod
+    if store_mod.article_has_store(layout, layout.article_of(section)):
+        return _put_store(layout, schema, args, section, text, change)
 
     filename = _CATEGORIES[args.category]
     if change is not None:

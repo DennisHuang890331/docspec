@@ -236,6 +236,18 @@ def _run_section_mode(layout, schema, old_arg: str, new_arg: str) -> int:
         sys.stderr.write("docspec: source and destination are identical (nothing to move)\n")
         return 2
 
+    # ── 誠實邊界：store 篇的結構化記錄搬移＝Phase-C 後續（未落地）。不靜默走檔案粒度 mv（會對
+    #    store 篇無效／撞 phantom 夾）；指路 store dump ↔ load 的散檔逃生口。 ──
+    from dspx import store as _store
+    for art in {layout.article_of(old), layout.article_of(new)}:
+        if _store.article_has_store(layout, art):
+            sys.stderr.write(
+                f"docspec: mv does not yet operate on store-backed article \"{art}\" "
+                f"(corpus/{art}.yaml). Rename/move a store section via `docspec store dump {art} "
+                "<DIR>`, mv in the scattered export, then `docspec store load` — the structured "
+                "record-move is a Phase-C follow-up.\n")
+            return 1
+
     src = layout.section_dir(old)
     dst = layout.section_dir(new)
 

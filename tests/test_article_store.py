@@ -364,20 +364,6 @@ def test_hook_guard_allows_scattered_and_store_dir(monkeypatch):
     assert _run_guard(monkeypatch, {"tool_input": {"file_path": "docspec/corpus/_archive.yaml"}}) == 0
 
 
-# ── change 層邊界：store 篇不得走（尚未實作的）檔案粒度 staging（Phase C 守門）──
-
-def test_change_stage_refuses_store_article(make_project, monkeypatch):
-    import dspx.change as chg
-    home = make_project()
-    _wl(home, "g/intro", concept={"id": "c-in", "title": "簡介", "order": 1})
-    monkeypatch.chdir(home.parent)
-    assert store_cmd.run(["migrate", "g"]) == 0
-    layout = Layout(home)
-    with pytest.raises(chg.ChangeError) as exc:
-        chg.assert_stageable(layout, "g/intro")
-    assert "Phase C" in str(exc.value) and "store-backed" in str(exc.value)
-
-
 def _section_block(text: str, path: str) -> str:
     """從 canonical store 文字抽出某 `- path: <path>` 記錄到下個 `- path:`（或檔尾）的 byte 區塊。"""
     lines = text.split("\n")
@@ -393,3 +379,77 @@ def _section_block(text: str, path: str) -> str:
             end = j
             break
     return "\n".join(lines[start:end])
+
+
+# ── Phase-C 尾巴：生命週期指令 backend-neutral（store 篇也能走）───────────────────
+
+def test_store_new_ready_workbench_lifecycle(make_project, monkeypatch, tmp_path):
+    """store 篇的 develop 工作台 lifecycle：new→work/ 建 develop.md（不進 corpus）→ put concept
+    結晶進 store 記錄 → ready 刪 work/ 的 develop.md。簽章不變、backend 路由。"""
+    from dspx.commands import new as new_cmd
+    from dspx.commands import put as put_cmd
+    from dspx.commands import ready as ready_cmd
+    home = make_project()
+    _wl(home, "g", concept={"id": "c-root", "title": "根", "order": 1})
+    monkeypatch.chdir(home.parent)
+    assert store_cmd.run(["migrate", "g"]) == 0
+    layout = Layout(home)
+
+    # new g/newsec → develop.md 落在 work/（不建 corpus 散檔、不觸發 both-backend）
+    assert new_cmd.run(["g/newsec"]) == 0
+    assert st.work_develop(layout, "g/newsec").is_file()
+    assert not (home / "corpus" / "g" / "newsec").exists()
+    assert st.backend_of(layout, "g") == "store"
+
+    # 結晶：put concept（store-aware、無 --change → 進正式 store 記錄）
+    cpt = tmp_path / "c.yaml"
+    cpt.write_text("title: 新節\nstatus: draft\nconcept: 一句話說明\n", encoding="utf-8")
+    assert put_cmd.run(["g/newsec", "concept", str(cpt)]) == 0
+    art = st.load_article(st.store_path(layout, "g"))
+    rec = art.record_by_path("g/newsec")
+    assert rec is not None and rec.concept and rec.concept.get("id")
+
+    # ready → 完整性綠 + 榨乾 → 刪 work/ 的 develop.md（畢業）
+    assert ready_cmd.run(["g/newsec"]) == 0
+    assert not st.work_develop(layout, "g/newsec").is_file()
+
+
+def test_store_mv_and_retire_guarded(make_project, monkeypatch, capsys):
+    """mv/retire-section 對 store 篇＝誠實 fail-loud（結構化記錄搬移/退場為 Phase-C 後續），指路 store dump。"""
+    from dspx.commands import mv as mv_cmd
+    from dspx.commands import retire_section as retire_cmd
+    home = make_project()
+    _wl(home, "g", concept={"id": "c-root", "title": "根", "order": 1})
+    _wl(home, "g/intro", concept={"id": "c-in", "title": "簡介", "order": 2})
+    monkeypatch.chdir(home.parent)
+    assert store_cmd.run(["migrate", "g"]) == 0
+
+    assert mv_cmd.run(["g/intro", "g/preface"]) == 1
+    assert "store dump" in capsys.readouterr().err
+    assert retire_cmd.run(["g/intro"]) == 1
+    assert "store dump" in capsys.readouterr().err
+
+
+def test_store_get_put_roundtrip(make_project, monkeypatch, tmp_path, capsys):
+    """get/put 對 store 篇：get 從記錄吐內容（非空骨架）、put 寫回正式 store 記錄。"""
+    from dspx.commands import get as get_cmd
+    from dspx.commands import put as put_cmd
+    home = make_project()
+    _wl(home, "g/intro", concept={"id": "c-in", "title": "簡介", "order": 1},
+        material="原材料內容\n")
+    monkeypatch.chdir(home.parent)
+    assert store_cmd.run(["migrate", "g"]) == 0
+
+    capsys.readouterr()
+    assert get_cmd.run(["g/intro", "material"]) == 0
+    assert "原材料內容" in capsys.readouterr().out          # 從 store 記錄吐、非空骨架
+    capsys.readouterr()
+    assert get_cmd.run(["g/intro", "concept"]) == 0
+    assert "簡介" in capsys.readouterr().out
+
+    m = tmp_path / "m.md"
+    m.write_text("改後材料\n", encoding="utf-8")
+    assert put_cmd.run(["g/intro", "material", str(m)]) == 0
+    capsys.readouterr()
+    assert get_cmd.run(["g/intro", "material"]) == 0
+    assert "改後材料" in capsys.readouterr().out

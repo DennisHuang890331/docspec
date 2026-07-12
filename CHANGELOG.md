@@ -10,7 +10,7 @@ a minor bump.
 
 ## [Unreleased]
 
-### Added — one-file-per-article store backend (article-store-backend, stage 2: A/B/D)
+### Added — one-file-per-article store backend (article-store-backend, stage 2: A/B/C/D/E)
 
 - An article's corpus truth can now live in a single engine-owned `corpus/<article>.yaml` **store
   file** (a `format`/`article`/`revision`/`integrity` header plus a path-sorted flat `sections`
@@ -34,9 +34,29 @@ a minor bump.
 - `develop.md` moves out of the store to `docspec/work/<section-path>/develop.md` on migration
   (pre-crystallization workbench). Read-end sites (aperture material, lint material, status flags,
   render group titles/order) are now backend-neutral (they read the model, not the filesystem).
-- Not yet in this stage: the change-layer structured merge for store articles (Phase C) and
-  full dual-backend test parametrization (Phase E). Staging a store-backed section fails loud with
-  a pointer until Phase C lands; scattered articles are unaffected.
+- **Phase C — change-layer structured merge for store articles (done).** A store article can now go
+  through the full change workflow. A change's staging is a **partial store** `changes/<id>/staging/
+  <article>.yaml` holding only the staged section records; `docspec put --change` writes the
+  validated edit into it while the official store stays **byte-frozen**. Landing is a structured
+  **merge-by-section-id**: read the official store, swap ONLY the target record (whole record in,
+  `pending-create` promoted, `tombstone` removed), bump `revision`, canonically dump, atomic write.
+  The **P0 guarantee holds in its new form** — a non-target record is the same parsed object from
+  read to dump, so (serializer being idempotent and the store always a canonical product) every
+  non-target section's serialized block stays byte-for-byte identical across landing (pinned by a
+  byte-level regression test plus deep-equality). The fork-drift guard now works at
+  per-section-per-category granularity (`<article>#<path>#<category>` canonical-JSON hash). `stage_section`
+  / `unstage_section` / `load_union` / `land_corpus_section` / `section_concept_id` / `fork_drift`
+  are all backend-routed; `abandon` leaves the official store byte-unchanged with zero residue.
+- **Phase E — dual-backend test parametrization (done for the change workflow).** The change-event
+  helpers take a `backend` param; the archive-lands workflow runs on both `tree` and `store`, plus
+  store-only tests cover the landing P0 bystander-byte guarantee, the full new→put→render→archive
+  e2e, put-into-staging routing (official frozen), abandon zero-residue, and fork-drift.
+- **Lifecycle commands are backend-neutral for store articles.** `new` scaffolds `develop.md` into
+  `docspec/work/<section>/` (not the corpus) and `ready` graduates a store section by draining that
+  work-file; `put` (with or without `--change`) writes through the store record. Structured
+  record-move / record-retire for store (`mv` / `retire-section`) are an honest Phase-C follow-up:
+  they fail loud and point at the `store dump` ↔ `store load` scattered-file escape hatch rather than
+  silently no-op or corrupt.
 
 ### Fixed — `put` now routes into a change's staging instead of the frozen official corpus
 

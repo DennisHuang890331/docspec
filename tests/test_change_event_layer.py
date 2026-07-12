@@ -12,15 +12,20 @@ import pytest
 import yaml
 
 from dspx import change as chg
+from dspx import store as st
 from dspx.commands import change as change_cmd
 from dspx.commands import render as render_cmd
+from dspx.commands import store as store_cmd
 from dspx.layout import Layout
 from dspx.schema import load_schema
 
 
-def _project(make_project, write_leaf):
+def _project(make_project, write_leaf, monkeypatch=None, backend="tree"):
     """root g（含 normative 決策 dec-1）＋ g/intro（realizes dec-1）＋ g/usage；三節皆寫散文並
-    render 記 synced 基準。回傳 planning home。"""
+    render 記 synced 基準。回傳 planning home。
+
+    backend="store"：建完散檔後 `store migrate g` 收成一篇一檔（★E 雙 backend 參數化——同一批
+    change 工作流測試在 tree 與 store 都跑）。own 軸 v5 backend-neutral ⇒ 遷移後帳本仍 synced。"""
     home = make_project()
     write_leaf(home, "g", concept={"id": "sec-root", "title": "Guide", "order": 1,
                                    "status": "stable",
@@ -30,6 +35,11 @@ def _project(make_project, write_leaf):
     write_leaf(home, "g/intro", concept={"id": "sec-intro", "title": "Intro", "order": 1,
                                          "realizes": ["dec-1"]})
     write_leaf(home, "g/usage", concept={"id": "sec-usage", "title": "Usage", "order": 2})
+    if backend == "store":
+        assert monkeypatch is not None, "store backend needs monkeypatch to chdir for migrate"
+        monkeypatch.chdir(home.parent)
+        assert store_cmd.run(["migrate", "g"]) == 0
+        assert st.article_has_store(Layout(home, "per-article"), "g")
     return home
 
 
@@ -361,8 +371,10 @@ def test_85_archived_status_shows_terminal(make_project, write_leaf, monkeypatch
 
 # ── 收案 / 棄案 / fork 漂移 ────────────────────────────────────────
 
-def test_archive_lands_and_prunes(make_project, write_leaf, monkeypatch):
-    home = _project(make_project, write_leaf)
+@pytest.mark.parametrize("backend", ["tree", "store"])
+def test_archive_lands_and_prunes(make_project, write_leaf, monkeypatch, backend):
+    """★E 雙 backend：同一 revise→archive 工作流在散檔與 store 都綠（docs 落地判準 backend-無關）。"""
+    home = _project(make_project, write_leaf, monkeypatch, backend)
     _render_baseline(home, monkeypatch)
     layout = Layout(home, "per-article")
 
@@ -586,3 +598,151 @@ def test_check_rejects_bad_publish_and_action(make_project, write_leaf, monkeypa
     errs = chg.validate_change(change)
     assert any("publish" in e for e in errs)
     assert any("action" in e for e in errs)
+
+
+# ── ★C：store 篇 change 工作流（結構化 merge-by-section-id、P0 旁節 byte 不變）──────────
+
+def _store_block(text: str, path: str) -> str:
+    """從 canonical store 文字抽出某 `- path: <path>` 記錄到下個 `- path:`（或檔尾）的 byte 區塊。"""
+    lines = text.split("\n")
+    start = next((i for i, ln in enumerate(lines) if ln.strip() == f"- path: {path}"), None)
+    assert start is not None, f"path {path} not found in store text"
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        if lines[j].startswith("- path:"):
+            end = j
+            break
+    return "\n".join(lines[start:end])
+
+
+def test_store_change_e2e_landing_bystander_byte_identical(make_project, write_leaf,
+                                                           monkeypatch, tmp_path):
+    """★store 篇完整 change e2e ＋ landing P0：new→put 進 staging→render --change→rewrite→archive。
+    收案後正式 store 的**非 target 節序列化 block 逐 byte 相等**（＋旁節記錄深等值雙保險）、target
+    節記錄真換、official 於 staging 期 byte 凍結。這證明 change 層結構化 landing 真的保住旁節。"""
+    from dspx.commands import put as put_cmd
+    home = _project(make_project, write_leaf, monkeypatch, backend="store")
+    _render_baseline(home, monkeypatch)
+    layout = Layout(home, "per-article")
+    sp = st.store_path(layout, "g")
+
+    assert change_cmd.run(["new", "chg-x", "--publish", "advisory"]) == 0
+    assert change_cmd.run(["add-target", "chg-x", "sec-intro", "--action", "revise"]) == 0
+
+    # put material 進 staging → 改 target 記錄；★official store byte 凍結（寫入落在 staging partial store）
+    mat = tmp_path / "mat.md"
+    mat.write_text("## fact 改 {#m-x}\n- 新值 = 42\n", encoding="utf-8")
+    off_frozen = sp.read_text(encoding="utf-8")
+    assert put_cmd.run(["g/intro", "material", str(mat), "--change", "chg-x"]) == 0
+    assert sp.read_text(encoding="utf-8") == off_frozen, "put --change must not touch official store"
+
+    change = chg.load_change(layout, "chg-x")
+    staging = chg._load_staging_article(change.dir, "g")
+    assert staging is not None
+    srec = staging.record_by_path("g/intro")
+    assert srec is not None and srec.material and "新值 = 42" in srec.material
+
+    assert render_cmd.run(["g", "--change", "chg-x"]) == 0
+    _rewrite_preview_prose(home, "chg-x", "g/intro", "The intro now cites fact m-x.")
+    assert render_cmd.run(["g", "--change", "chg-x"]) == 0
+
+    # 收案前抽正式 store 旁節 block（g, g/usage）＋深等值基準
+    art_before = st.load_article(sp)
+    before_text = sp.read_text(encoding="utf-8")
+    bys_before = {p: _store_block(before_text, p) for p in ("g", "g/usage")}
+    tgt_before = _store_block(before_text, "g/intro")
+
+    assert change_cmd.run(["archive", "chg-x"]) == 0
+    assert chg.change_state(layout, "chg-x") == "archived"
+
+    # ★P0 byte 斷言：正式 store 旁節序列化 block 收案前後逐 byte 相等
+    after_text = sp.read_text(encoding="utf-8")
+    for p, blk in bys_before.items():
+        assert _store_block(after_text, p) == blk, f"bystander {p} store block changed on landing"
+    assert _store_block(after_text, "g/intro") != tgt_before, "target record must actually change"
+
+    # 深等值雙保險：旁節記錄逐分類相同；target material 落地為新值
+    art_after = st.load_article(sp)
+    for p in ("g", "g/usage"):
+        rb, ra = art_before.record_by_path(p), art_after.record_by_path(p)
+        assert rb.concept == ra.concept and rb.decisions == ra.decisions and rb.material == ra.material
+    assert "新值 = 42" in (art_after.record_by_path("g/intro").material or "")
+    # 交付面：新散文落地正式 _latest、旁節散文不動
+    final = _latest(home).read_text(encoding="utf-8")
+    assert "cites fact m-x" in final and "Usage details here." in final
+
+
+def test_store_put_routes_into_staging_official_frozen(make_project, write_leaf,
+                                                       monkeypatch, tmp_path):
+    """put <section> <cat> --change 對 store 篇：寫進 partial store staging、official store byte 凍結。"""
+    from dspx.commands import put as put_cmd
+    home = _project(make_project, write_leaf, monkeypatch, backend="store")
+    layout = Layout(home, "per-article")
+    sp = st.store_path(layout, "g")
+    off_before = sp.read_text(encoding="utf-8")
+
+    change_cmd.run(["new", "chg-x", "--publish", "advisory"])
+    change_cmd.run(["add-target", "chg-x", "sec-intro", "--action", "revise"])
+    dec = tmp_path / "d.yaml"
+    dec.write_text("entries:\n  - id: dec-i1\n    kind: rationale\n    statement: 因為如此\n",
+                   encoding="utf-8")
+    assert put_cmd.run(["g/intro", "decisions", str(dec), "--change", "chg-x"]) == 0
+    assert sp.read_text(encoding="utf-8") == off_before   # official 凍結
+    change = chg.load_change(layout, "chg-x")
+    srec = chg._load_staging_article(change.dir, "g").record_by_path("g/intro")
+    assert any(e.get("id") == "dec-i1" for e in srec.decisions)
+
+
+def test_store_abandon_zero_residue(make_project, write_leaf, monkeypatch, tmp_path):
+    """store 篇 abandon：official store byte 零變化、staging/preview 隨案卷搬走且無殘留。"""
+    from dspx.commands import put as put_cmd
+    home = _project(make_project, write_leaf, monkeypatch, backend="store")
+    _render_baseline(home, monkeypatch)
+    layout = Layout(home, "per-article")
+    sp = st.store_path(layout, "g")
+    off_before = sp.read_text(encoding="utf-8")
+
+    change_cmd.run(["new", "chg-x", "--publish", "advisory"])
+    change_cmd.run(["add-target", "chg-x", "sec-intro", "--action", "revise"])
+    mat = tmp_path / "m.md"
+    mat.write_text("改動內容\n", encoding="utf-8")
+    put_cmd.run(["g/intro", "material", str(mat), "--change", "chg-x"])
+    change = chg.load_change(layout, "chg-x")
+    assert chg.staging_store_path(change.dir, "g").is_file()
+
+    assert change_cmd.run(["archive", "chg-x", "--abandon", "--reason", "wrong path"]) == 0
+    assert chg.change_state(layout, "chg-x") == "abandoned"
+    assert sp.read_text(encoding="utf-8") == off_before        # ★official store 零 byte 變化
+    ab = chg.change_dir(layout, "chg-x", chg.STATE_ABANDONED)
+    assert not chg.staging_dir(ab).exists() and not chg.preview_dir(ab).exists()
+
+
+def test_store_fork_drift_guard(make_project, write_leaf, monkeypatch, tmp_path, capsys):
+    """store 篇 fork 守門：第三方零開單直改正式 store 同節分類 → fork hash 失配、archive 中止。"""
+    from dspx.commands import put as put_cmd
+    home = _project(make_project, write_leaf, monkeypatch, backend="store")
+    _render_baseline(home, monkeypatch)
+    layout = Layout(home, "per-article")
+
+    change_cmd.run(["new", "chg-x", "--publish", "advisory"])
+    change_cmd.run(["add-target", "chg-x", "sec-intro", "--action", "revise"])
+    mat = tmp_path / "m.md"
+    mat.write_text("改動內容\n", encoding="utf-8")
+    put_cmd.run(["g/intro", "material", str(mat), "--change", "chg-x"])
+    render_cmd.run(["g", "--change", "chg-x"])
+    _rewrite_preview_prose(home, "chg-x", "g/intro", "new prose here.")
+    render_cmd.run(["g", "--change", "chg-x"])
+
+    # 第三方零開單直改正式 store 的同節 material（fork 當下值以來變過）
+    off = st.load_article(st.store_path(layout, "g"), verify=False)
+    off.record_by_path("g/intro").material = "第三方直改的材料\n"
+    st.save_article(layout, off, load_schema())
+    st._ARTICLE_CACHE.clear()
+
+    rc = change_cmd.run(["archive", "chg-x"])
+    assert rc == 1
+    assert "drift" in capsys.readouterr().err.lower()
+    assert chg.change_state(layout, "chg-x") == "active"     # 未落地
+    # --override-drift 放行
+    assert change_cmd.run(["archive", "chg-x", "--override-drift"]) == 0
+    assert chg.change_state(layout, "chg-x") == "archived"

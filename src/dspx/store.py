@@ -149,6 +149,9 @@ class SectionRecord:
 
     def to_yaml_obj(self, schema) -> dict:
         """canonical 序列化用的 plain dict（鍵序決定性、None/空剔除）。"""
+        if self.kind == "tombstone":
+            # 暫存 partial store 的退場記號（landing 時從正式 store 移除該 path）。
+            return {"path": self.path, "kind": "tombstone"}
         if self.kind == "group":
             body: dict = {"path": self.path, "kind": "group"}
             meta = self.group or {}
@@ -216,7 +219,9 @@ def _hash_payload(article: Article) -> dict:
     封條＝假 integrity 不符。故 hash 走 json canonical（sort_keys），不走 YAML 序列化位元。"""
     recs: list[dict] = []
     for r in article.sorted_records():
-        if r.kind == "group":
+        if r.kind == "tombstone":
+            recs.append({"path": r.path, "kind": "tombstone"})
+        elif r.kind == "group":
             recs.append({"path": r.path, "kind": "group",
                          "group": {k: v for k, v in (r.group or {}).items() if v is not None}})
         else:
@@ -234,6 +239,28 @@ def _hash_payload(article: Article) -> dict:
 def _integrity_of(article: Article) -> str:
     """封條＝schema 無關內容 payload 的 sha256（全 64 碼；不截斷）。"""
     body = json.dumps(_hash_payload(article), sort_keys=True, ensure_ascii=False)
+    return "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
+
+
+# ── 分類粒度 hash（change 層 fork key `<article>#<path>#<category>` 用）───
+
+def record_category_payload(rec: SectionRecord, category: str):
+    """一節記錄某分類的 schema 無關 payload（concept dict／decisions list／material 文字）。"""
+    if category == CAT_CONCEPT:
+        return rec.concept
+    if category == CAT_DECISIONS:
+        return list(rec.decisions)
+    if category == CAT_MATERIAL:
+        return _normalize_material(rec.material) if rec.material is not None else None
+    return None
+
+
+def category_hash(rec: SectionRecord, category: str) -> str:
+    """某節某分類內容的 canonical JSON sha256（缺席＝`null` 的穩定 hash）。
+
+    change 層 fork 守門用逐節逐分類粒度（`<article>#<path>#<category>`），使第三方動同篇別節/
+    別分類不觸發本節本分類的漂移警報。"""
+    body = json.dumps(record_category_payload(rec, category), sort_keys=True, ensure_ascii=False)
     return "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
 
 
@@ -291,6 +318,9 @@ def article_from_dict(data: dict, path: Path, *, verify: bool = True) -> Article
         if not spath:
             raise StoreError(f"{path}: a section record is missing 'path'")
         kind = str(raw.get("kind") or "leaf")
+        if kind == "tombstone":
+            records.append(SectionRecord(path=spath, kind="tombstone"))
+            continue
         if kind == "group":
             meta = {k: raw.get(k) for k in ("title", "order", "numbering") if raw.get(k) is not None}
             records.append(SectionRecord(path=spath, kind="group", group=meta))
@@ -403,28 +433,29 @@ def work_develop(layout: Layout, section: str) -> Path:
 
 # ── store → Leaf（讀端窄腰；上層無感）─────────────────────────────────
 
-def leaves_from_article(layout: Layout, article: Article) -> list[Leaf]:
-    """一篇 store 的 leaf 記錄 → Leaf 清單（與散檔 load_leaf 逐欄等價）。
+def leaf_from_record(layout: Layout, rec: SectionRecord) -> Leaf:
+    """單一 leaf 記錄 → Leaf（與散檔 leaf_from_dir 逐欄等價）。
 
     develop.md 不在 store（住 work/）：has_develop 查 work/。history/material 直接由記錄餵。
     Leaf.dir 指向散檔會在的名目路徑（不存在＝讀檔式讀取者自然回退，材料改走 leaf.material）。
-    """
-    leaves: list[Leaf] = []
-    for rec in article.leaf_records():
-        section = rec.path
-        leaf = Leaf(
-            section=section,
-            dir=layout.section_dir(section),
-            concept=rec.concept,
-            decisions=list(rec.decisions),
-            history=list(rec.history),
-            has_material=rec.material is not None,
-            has_develop=work_develop(layout, section).is_file(),
-            has_history=bool(rec.history),
-            material=rec.material,
-        )
-        leaves.append(leaf)
-    return leaves
+    change 層 union view 逐節建 Leaf 亦走此（正式記錄與 staging overlay 記錄同構）。"""
+    section = rec.path
+    return Leaf(
+        section=section,
+        dir=layout.section_dir(section),
+        concept=rec.concept,
+        decisions=list(rec.decisions),
+        history=list(rec.history),
+        has_material=rec.material is not None,
+        has_develop=work_develop(layout, section).is_file(),
+        has_history=bool(rec.history),
+        material=rec.material,
+    )
+
+
+def leaves_from_article(layout: Layout, article: Article) -> list[Leaf]:
+    """一篇 store 的 leaf 記錄 → Leaf 清單（與散檔 load_leaf 逐欄等價）。"""
+    return [leaf_from_record(layout, rec) for rec in article.leaf_records()]
 
 
 def load_store_leaves(layout: Layout, article: str, *, verify: bool = True) -> list[Leaf]:
@@ -536,7 +567,11 @@ def atomic_write_store(path: Path, text: str) -> None:
         raise
 
 
+def save_article_to(path: Path, article: Article, schema) -> None:
+    """一篇 Article → canonical dump → 原子寫到指定路徑（官方 store 或 change staging 的 partial store）。"""
+    atomic_write_store(path, dump_article(article, schema))
+
+
 def save_article(layout: Layout, article: Article, schema) -> None:
     """一篇 Article → canonical dump → 原子寫 `corpus/<article>.yaml`（引擎獨占寫）。"""
-    text = dump_article(article, schema)
-    atomic_write_store(store_path(layout, article.name), text)
+    save_article_to(store_path(layout, article.name), article, schema)

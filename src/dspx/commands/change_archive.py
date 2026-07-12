@@ -69,9 +69,9 @@ def run_archive(layout, schema, change: "chg.Change", *, override_drift: bool = 
     done_steps: list[str] = []
     absorbed: list[tuple[str, str]] = []
     try:
-        # ③ corpus 章節結構化檔整檔搬進正式 corpus
+        # ③ corpus 章節落地正式 corpus（backend 路由：散檔整檔搬回／store 結構化 merge-by-id）
         for section in corpus_sections:
-            chg.land_corpus_section(layout, change, section)
+            chg.land_corpus_section(layout, change, section, schema)
         if corpus_sections:
             done_steps.append(f"landed {len(corpus_sections)} corpus section(s)")
 
