@@ -755,7 +755,7 @@ def test_numbering_single_source_render_matches_topology(make_project, write_lea
     assert f"### {labels['g/methods/a']} {by['g/methods/a'].title}" in text
     assert f"## {labels['g/methods']} 方法" in text
     # documentMap 的 number 欄同源
-    proj = project(layout, load_schema(), "draft", "g/intro", leaves, load_config(home))
+    proj = project(layout, load_schema(), "apply", "g/intro", leaves, load_config(home))
     dm = {r["section"]: r for r in proj.document_map}
     assert dm["g/intro"]["number"] == labels["g/intro"] == "1."
     assert dm["g/methods"]["number"] == labels["g/methods"] == "2."

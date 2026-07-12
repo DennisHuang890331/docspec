@@ -25,7 +25,7 @@ def test_draft_crops_concept_to_four_fields(make_project, write_leaf):
         "sources": ["s"], "realizes": ["d1"],
     }, decisions=[{"id": "d1", "kind": "normative", "status": "accepted", "statement": "規"}])
 
-    proj = _project(home, "draft", "a/x")
+    proj = _project(home, "apply", "a/x")
     concept_text = proj.reads["concept"]
     # 准投的四欄在
     assert "concept" in concept_text and "brief" in concept_text
@@ -44,7 +44,7 @@ def test_draft_decisions_statement_only(make_project, write_leaf):
                    {"id": "d2", "kind": "normative", "status": "deprecated",
                     "statement": "退場的"},
                ])
-    proj = _project(home, "draft", "a/x")
+    proj = _project(home, "apply", "a/x")
     dtext = proj.reads["decisions"]
     assert "活的規範" in dtext
     assert "祕密理由" not in dtext      # rationale 剝除
@@ -58,7 +58,7 @@ def test_draft_never_sees_develop_or_history(make_project, write_leaf):
                develop="# 機密草稿亂想",
                history=[{"id": "h1", "kind": "normative", "status": "superseded",
                          "statement": "墳場"}])
-    proj = _project(home, "draft", "a/x")
+    proj = _project(home, "apply", "a/x")
     assert "develop" not in proj.reads
     assert "history" not in proj.reads
 
@@ -76,8 +76,8 @@ def test_purpose_projected_to_develop_and_draft(make_project, write_leaf):
     home = make_project("language: zh-TW\ndocs_layout: per-article\npurpose: 把分散文件統一成一座森林\n")
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     assert _project(home, "develop", "a/x").project_purpose == "把分散文件統一成一座森林"
-    assert _project(home, "draft", "a/x").project_purpose == "把分散文件統一成一座森林"
-    assert _project(home, "edit", "a/x").project_purpose is None
+    assert _project(home, "apply", "a/x").project_purpose == "把分散文件統一成一座森林"
+    assert _project(home, "factcheck", "a/x").project_purpose is None
 
 
 def test_purpose_empty_not_projected(make_project, write_leaf):
@@ -92,7 +92,7 @@ def test_parent_brief_chain(make_project, write_leaf):
     write_leaf(home, "art", concept={"id": "root", "title": "Art", "order": 1,
                                      "concept": "整篇主旨", "brief": {"受眾": "讀者"}})
     write_leaf(home, "art/sec", concept={"id": "c1", "title": "Sec", "order": 1})
-    proj = _project(home, "draft", "art/sec")
+    proj = _project(home, "apply", "art/sec")
     assert proj.parent_briefs
     assert proj.parent_briefs[0]["section"] == "art"
     assert proj.parent_briefs[0]["concept"] == "整篇主旨"
@@ -108,7 +108,7 @@ def test_path_only_regression_governed_false(make_project, write_leaf):
                            "statement": "根規範"}])
     write_leaf(home, "art/sec", concept={"id": "c1", "title": "Sec", "order": 1})
     # draft 投影：只一個路徑父，governed False
-    proj = _project(home, "draft", "art/sec")
+    proj = _project(home, "apply", "art/sec")
     assert proj.parent_briefs == [{
         "section": "art", "concept": "整篇主旨",
         "brief": {"受眾": "讀者"}, "governed": False,
@@ -132,7 +132,7 @@ def test_cross_tree_governed_brief_and_normative(make_project, write_leaf):
     write_leaf(home, "t2", concept={"id": "c-t2", "title": "T2", "order": 1,
                                     "concept": "T2 主旨", "brief": {"範圍": "二"},
                                     "governed-by": ["c-t1"]})
-    proj = _project(home, "draft", "t2")
+    proj = _project(home, "apply", "t2")
     govs = [pb for pb in proj.parent_briefs if pb.get("governed")]
     assert any(pb["section"] == "t1" and pb["concept"] == "T1 主旨"
                and pb["brief"] == {"範圍": "一"} for pb in govs)
@@ -153,7 +153,7 @@ def test_transitive_governed_chain(make_project, write_leaf):
     write_leaf(home, "t3", concept={"id": "c-t3", "title": "T3", "order": 1,
                                     "concept": "T3 主旨", "brief": {},
                                     "governed-by": ["c-t2"]})
-    proj = _project(home, "draft", "t3")
+    proj = _project(home, "apply", "t3")
     secs = {pb["section"] for pb in proj.parent_briefs}
     assert "t2" in secs and "t1" in secs
     assert all(pb["governed"] is True for pb in proj.parent_briefs)
@@ -169,7 +169,7 @@ def test_cycle_safety_terminates(make_project, write_leaf):
                                     "concept": "T2", "brief": {},
                                     "governed-by": ["c-t1"]})
     # 不應無限迴圈；visited 自保
-    proj = _project(home, "draft", "t1")
+    proj = _project(home, "apply", "t1")
     secs = {pb["section"] for pb in proj.parent_briefs}
     assert secs == {"t2"}      # t1 自己不算祖先；t2 經 governed-by 進來一次
 
@@ -184,7 +184,7 @@ def test_glossary_injected_as_lean_index(make_project, write_leaf):
          "english": "Risk Monitoring Module", "definition": "監測異常的子系統。",
          "aliases_forbidden": ["安全監控系統"]},
     ]}, allow_unicode=True, sort_keys=False), encoding="utf-8")
-    for skill in ("draft", "edit", "factcheck"):
+    for skill in ("apply", "factcheck"):
         proj = _project(home, skill, "a/x")
         assert len(proj.glossary) == 1
         term = proj.glossary[0]
@@ -249,7 +249,7 @@ def test_develop_roadmap_carries_derive_flags(make_project, write_leaf):
 def test_non_develop_skills_have_no_roadmap(make_project, write_leaf):
     home = make_project()
     _roadmap_fixture(home, write_leaf)
-    for skill in ("draft", "edit", "factcheck"):
+    for skill in ("apply", "factcheck"):
         proj = _project(home, skill, "art")
         assert proj.roadmap is None
 
@@ -269,7 +269,7 @@ def test_draft_sees_image_assets_as_refs(make_project, write_leaf):
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     _add_asset(home, "a/x", "diagram.svg")
     _add_asset(home, "a/x", "photo.png")
-    proj = _project(home, "draft", "a/x")
+    proj = _project(home, "apply", "a/x")
     # 投的是 backend-neutral 引用路徑、依檔名排序
     assert proj.image_assets == ["assets/diagram.svg", "assets/photo.png"]
 
@@ -278,8 +278,8 @@ def test_image_assets_only_for_draft_and_edit(make_project, write_leaf):
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     _add_asset(home, "a/x", "d.png")
-    assert _project(home, "draft", "a/x").image_assets == ["assets/d.png"]
-    assert _project(home, "edit", "a/x").image_assets == ["assets/d.png"]
+    assert _project(home, "apply", "a/x").image_assets == ["assets/d.png"]
+    assert _project(home, "publish", "a/x").image_assets == []
     # factcheck/develop 不需要放圖 → 不投
     assert _project(home, "factcheck", "a/x").image_assets == []
     assert _project(home, "develop", "a/x").image_assets == []
@@ -288,7 +288,7 @@ def test_image_assets_only_for_draft_and_edit(make_project, write_leaf):
 def test_no_assets_dir_means_empty(make_project, write_leaf):
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
-    assert _project(home, "draft", "a/x").image_assets == []
+    assert _project(home, "apply", "a/x").image_assets == []
 
 
 def test_non_image_files_in_assets_ignored(make_project, write_leaf):
@@ -296,7 +296,7 @@ def test_non_image_files_in_assets_ignored(make_project, write_leaf):
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     _add_asset(home, "a/x", "keep.svg")
     _add_asset(home, "a/x", "notes.txt")   # 非圖片副檔名 → 忽略
-    assert _project(home, "draft", "a/x").image_assets == ["assets/keep.svg"]
+    assert _project(home, "apply", "a/x").image_assets == ["assets/keep.svg"]
 
 
 def test_draft_sees_document_map_in_order(make_project, write_leaf):
@@ -306,7 +306,7 @@ def test_draft_sees_document_map_in_order(make_project, write_leaf):
                                       "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
     write_leaf(home, "art/beta", concept={"id": "b", "title": "Beta", "order": 2, "concept": "界定 B"})
     write_leaf(home, "art/alpha", concept={"id": "a", "title": "Alpha", "order": 1, "concept": "界定 A"})
-    proj = _project(home, "draft", "art/alpha")
+    proj = _project(home, "apply", "art/alpha")
     secs = [n["section"] for n in proj.document_map]
     assert secs == ["art", "art/alpha", "art/beta"]   # 依 outline order
     by_sec = {n["section"]: n for n in proj.document_map}
@@ -321,7 +321,7 @@ def test_document_map_is_structure_only_no_sibling_prose(make_project, write_lea
                material="SIBLING_SECRET_PROSE 不該外洩",
                decisions=[{"id": "dx", "kind": "normative", "status": "accepted",
                            "statement": "SIBLING_DECISION_STMT"}])
-    proj = _project(home, "draft", "art")   # 從 root 看 map，含 sibling art/x
+    proj = _project(home, "apply", "art")   # 從 root 看 map，含 sibling art/x
     blob = repr(proj.document_map)
     assert "art/x" in blob and "X 角色" in blob          # 結構（role）在
     assert "SIBLING_SECRET_PROSE" not in blob            # 鄰節 material 不洩
@@ -348,7 +348,7 @@ def test_document_map_follows_shared_outline_order_with_groups(make_project, wri
     group 列存在（kind=group、在地化 title、group order、無 role）；leaf 列 additive 補 kind。"""
     home = make_project()
     _ordered_group_corpus(home, write_leaf)
-    proj = _project(home, "draft", "art/intro")
+    proj = _project(home, "apply", "art/intro")
     secs = [n["section"] for n in proj.document_map]
     # 字典序會是 annex-b 最前；outline 順序＝foreword(0.5) < intro(1) < 附錄B群(99)
     assert secs == ["art/foreword", "art/intro", "art/annex-b", "art/annex-b/ground"]
@@ -375,7 +375,7 @@ def test_document_map_groupless_project_unchanged_except_kind(make_project, writ
                                      "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
     write_leaf(home, "art/beta", concept={"id": "b", "title": "Beta", "order": 2, "concept": "界定 B"})
     write_leaf(home, "art/alpha", concept={"id": "a", "title": "Alpha", "order": 1, "concept": "界定 A"})
-    proj = _project(home, "draft", "art/alpha")
+    proj = _project(home, "apply", "art/alpha")
     assert [n["section"] for n in proj.document_map] == ["art", "art/alpha", "art/beta"]
     for n in proj.document_map:
         assert set(n) == {"section", "title", "order", "number", "role", "kind"}
@@ -389,7 +389,7 @@ def test_instructions_draft_prints_group_row_without_you_are_here(make_project, 
     _ordered_group_corpus(home, write_leaf)
     monkeypatch.chdir(home.parent)
     from dspx.commands import instructions as instr
-    assert instr.run(["draft", "art/annex-b/ground"]) == 0
+    assert instr.run(["apply", "art/annex-b/ground"]) == 0
     out = capsys.readouterr().out
     group_line = next(ln for ln in out.splitlines() if "[group]" in ln)
     assert "art/annex-b/" in group_line and "附錄B" in group_line
@@ -402,8 +402,8 @@ def test_document_map_only_for_draft(make_project, write_leaf):
     home = make_project()
     write_leaf(home, "art", concept={"id": "r", "title": "R", "order": 0, "concept": "總覽",
                                       "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
-    assert _project(home, "draft", "art").document_map != []
-    assert _project(home, "edit", "art").document_map == []
+    assert _project(home, "apply", "art").document_map != []
+    assert _project(home, "develop", "art").document_map == []
     assert _project(home, "factcheck", "art").document_map == []
 
 
@@ -463,7 +463,7 @@ def test_coherence_contract_factcheck_only(make_project, write_leaf):
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "f",
                                      "brief": {"audience": "a"}})
-    assert _project(home, "draft", "g/x").coherence_contract is None
+    assert _project(home, "apply", "g/x").coherence_contract is None
     assert _project(home, "factcheck", "g/x").coherence_contract is not None
 
 
@@ -510,7 +510,7 @@ def test_realized_superseded_decision_foregrounds_status_and_successor(make_proj
     assert r["superseded_by"] == "dec-new"
     assert r["successor_statement"] == "新真相"
     # both draft and factcheck see the realized block with the successor data
-    for skill in ("draft", "factcheck"):
+    for skill in ("apply", "factcheck"):
         realized = _project(home, skill, "a/user").realized
         assert realized and realized[0]["superseded_by"] == "dec-new"
 

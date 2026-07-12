@@ -52,7 +52,7 @@ def _skill_path(root: Path, tool: str, skill: Skill) -> Path:
 #   claude      : .claude/commands/dspx/<id>.md      → slash /dspx:<id>   (claude.ts)
 #   antigravity : .agent/workflows/<name>.md         → 原生 workflow      (antigravity.ts)
 #   codex       : $CODEX_HOME/prompts/dspx-<id>.md   → 全域 prompt        (codex.ts)
-# <id> ＝ skill 名去掉 dspx- 前綴（develop/draft/edit/factcheck/publish/release）。
+# <id> ＝ skill 名去掉 dspx- 前綴（develop/apply/factcheck/publish/release）。
 
 def _command_id(skill: Skill) -> str:
     return skill.name[len("dspx-"):] if skill.name.startswith("dspx-") else skill.name

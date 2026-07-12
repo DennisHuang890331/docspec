@@ -23,14 +23,14 @@ skills:
   develop:
     reads:  [concept, decisions, material, develop, history, history-md]
     writes: [concept, decisions, material, develop, history, history-md]
-  draft:
-    reads:  [concept, decisions, material]
-    writes: [material]
-  edit:
-    reads:  [docs, concept]    # concept is for narrative alignment (align this section + the parent-chain brief)
+  apply:
+    # single prose-to-source alignment skill (the former draft + edit), two modes:
+    #   rewrite (blind-render from the committed layer) + align (copy-prep / staleness alignment on docs).
+    # reads = union of both (concept/decisions/material for rewrite, docs for align); writes docs.
+    reads:  [concept, decisions, material, docs]
     writes: [docs]
   factcheck:
-    reads:  [concept, decisions, material, history, history-md, docs]   # NOT develop.md (live scratch; gone by ready/draft)
+    reads:  [concept, decisions, material, history, history-md, docs]   # NOT develop.md (live scratch; gone by ready/apply)
     writes: []
   publish:
     reads:  [concept, decisions, material]
@@ -46,7 +46,7 @@ skills:
 workflow:
   loop: >
     Writing is a rolling loop over one section tree (corpus/<article>/): develop (think + crystallize) ⇄
-    draft (blind render) ⇄ edit (copy-prep) ⇄ factcheck (red-team) — all dependency-free, any order, no forced sequence.
+    apply (rewrite = blind render / align = copy-prep) ⇄ factcheck (red-team) — all dependency-free, any order, no forced sequence.
     New = drill into an empty tree; revise = re-drill the affected subtree; same flow. docs/<article>/_latest is the projected deliverable.
   skills:
     - id: develop
@@ -87,20 +87,28 @@ workflow:
           the ancestor chain (an absent field = inherit; restating an ancestor value verbatim is lint-flagged).
         - Graduate with docspec ready <section> (a checked transaction; it drains then deletes develop.md).
       transaction: ready
-    - id: draft
-      summary: Writer. Blind-render prose into the section's slot in docs/_latest from the aperture projection.
+    - id: apply
+      summary: >-
+        Prose-to-source alignment (the single skill; former draft + edit), two engine-routed modes.
+        rewrite mode = blind-render a section into its slot in docs/_latest from the aperture; align
+        mode = copy-prep (line → copy → proofread) plus narrative/ruling/style alignment on
+        docs/_latest. Mode is picked from the change target action (create/revise/redraft → rewrite;
+        align/review → align) or, outside a change, the staleness type (stale-own/upstream/unwritten/
+        redraft → rewrite; stale-inherited/style/norm/drifted → align) — never an operator routing table.
       steps:
-        - Render only stale-own / not-yet-written sections; never read develop.md or history.
         - >-
-          A redraft-flagged section (marked via docspec stale / docspec redraft) surfaces as
-          ordinary stale-own — your pickup set is unchanged; your real rewrite clears the flag
-          on render.
-        - Honor the brief as a hard contract; lead with the payload.
-      transaction: render
-    - id: edit
-      summary: Copy-prep. Line → copy → proofread on docs/_latest; narrative-align stale-inherited sections.
-      steps:
-        - Route each check — deterministic → engine (lint/check); judgment → a clean-context subagent.
+          Pick the mode first (docspec status / docspec change status): inside a change the target
+          action decides (create/revise/redraft → rewrite, align/review → align); outside a change the
+          staleness type decides (stale-own/stale-upstream/unwritten/redraft → rewrite, stale-inherited/
+          stale-style/stale-norm/drifted → align). The engine routes; you do not read a who-picks-it-up table.
+        - >-
+          rewrite mode — render only stale-own / stale-upstream / not-yet-written sections (a
+          redraft-flagged section surfaces as ordinary stale-own; your rewrite clears the flag on
+          render); write from the committed layer, blind to siblings; never read develop.md or history;
+          honor the brief as a hard contract and lead with the payload.
+        - >-
+          align mode — route each check (deterministic → engine lint/check; judgment → a clean-context
+          subagent); touch only docs/_latest, never the outline or decisions.
         - >-
           Clear a staleness verdict with the matching verb — NEVER fabricate an edit (nor a
           perturb-render-revert dance) to force a re-stamp. Prose changed → plain docspec render.
@@ -112,10 +120,9 @@ workflow:
           structural wiring / metadata ONLY (realizes/governed-by re-wiring, order changes,
           sources: path moves, decided-in corrections, title renumbering) →
           render --ack-own <section> --reason <text>; a content-bearing change (must_cover,
-          breadth, a decision statement) → docspec stale / docspec redraft + draft, never ack-own.
+          breadth, a decision statement) → docspec stale / docspec redraft + rewrite mode, never ack-own.
           Every verdict is journaled — give a real --reason; after an ack-own a factcheck
           follow-up is expected (you attested the prose still implements CHANGED source).
-        - Touch only docs/_latest; never the outline or decisions.
       transaction: render
     - id: factcheck
       summary: Adversarial red-team. The only full reader; flags findings, never fixes.
@@ -144,7 +151,7 @@ workflow:
     - Semantic judgment → audit (factcheck), never an engine gate (audit itself can hallucinate).
     - Mechanical text edits are ENGINE transactions, never hand-typed occurrence-by-occurrence — a rename/move goes through `docspec mv` (atomic; rewrites the path-keyed prose markers + audit/roadmap targets, self-checks, rolls back on failure), punctuation width through `docspec normalize`, corpus hygiene / empty-shell + verbatim-brief + title-number cleanup through `docspec tidy`, a project-wide term substitution through `docspec rename-term` (prose-span only; identifiers/code/URLs byte-exact). Hand-editing these — or an ad-hoc find-replace script — is the drift/corruption class the real corpus died on (a 22-script replace run that poisoned `OCC_LIMIT_*` identifier codes); use the command or a script that calls it, never a blind sweep.
     - Pin line endings at the repo level — a .gitattributes with `*.md` / `*.yaml` / `*.yml` as `text eol=lf` (docspec init scaffolds it for new projects; EXISTING projects should add it themselves). The engine normalizes CRLF when fingerprinting and writes LF, but the repo pin is the third defense layer against git autocrlf rewriting checkouts.
-    - corpus/_archive/ = retired sections (decision history): engine-invisible in active work (status/check/draft never see it); query with docspec retired, drill with docspec show <id>. It is history — never touch it in current work (unlocked, by convention, like OpenSpec's changes/archive).
+    - corpus/_archive/ = retired sections (decision history): engine-invisible in active work (status/check/apply never see it); query with docspec retired, drill with docspec show <id>. It is history — never touch it in current work (unlocked, by convention, like OpenSpec's changes/archive).
     - Work that touches a NORMATIVE ruling or spans sections runs inside a CHANGE (docspec change new … --publish advisory|release-bound) — a staging draft branch: edits land in changes/<id>/staging/, official corpus/docs stay byte-frozen, render --change previews the union view, and `docspec change status` DERIVES per-target acceptance. Open it mid-develop (the moment you realize you're superseding a decision / rippling across documents), not as an upfront ceremony; the enlistment line is "touches a ruling?", not section count. The human's one gate is `docspec change archive` (running it = acceptance; "reject" = keep editing until the derivation goes green; abandon a dead end with --abandon, official never moved). NEVER hand-check off a task and NEVER author a progress/status/checkbox file — completeness is always derived; "tasks" names the derived view only.
     - Engine commands (docspec new/render/ready/check/status/stale/normalize/tidy/mv/rename-term/change …) are the agent's internal machinery — run them autonomously, never ask the human "should I run docspec X?", never narrate command invocations. The human interface is intent-in / deliverable-out (they read docs/, not corpus/ or the engine). This is a runtime-conversation discipline the engine cannot observe — it is doctrine and reviewer vigilance, NOT a mechanical gate; the projection must not claim enforcement it does not have.
     - Contradictory inherited writing requirements converging on ONE section (a tree-parent brief vs a cross-tree governor brief, or two sibling governors) → STOP and surface both sources verbatim to the human; never pick a winner yourself (no precedence order is defined — it is a semantic call). check/lint back you up with a WARN when the aperture ancestor set supplies one brief field from two sources with divergent values, but the stop-and-ask is yours.
@@ -210,12 +217,12 @@ project-files:
       terminology conventions / global no-go zones). The skeleton is canonical English, language-neutral (writing in English
       still produces a deliverable in any language); the "Project conventions" section is filled in the "deliverable language",
       and the deliverable language is a develop decision, not set at init.
-    reader: [draft, edit]      # draft follows it when blind-writing each section; edit uses it to check whole-document consistency line by line (already injected by aperture.py)
-    writer: [develop]          # only develop writes it (owns the skeleton + fills Project conventions); edit writes only docs,
+    reader: [apply]            # apply's rewrite mode follows it when blind-writing each section; align mode uses it to check whole-document consistency line by line (already injected by aperture.py)
+    writer: [develop]          # only develop writes it (owns the skeleton + fills Project conventions); apply writes only docs,
                                # and merely flags discovered global conventions for develop to extract (same as factcheck "flag, don't fix the source")
     when: >
       init seeds the English skeleton; develop fills Project conventions (including deliverable language, requirement-keyword
-      dictionary, banned opening phrases) when converging on the article-level tone — supersede, don't stack; edit/factcheck
+      dictionary, banned opening phrases) when converging on the article-level tone — supersede, don't stack; apply/factcheck
       flag new conventions discovered across the whole document for develop. Machine-checkable term identity → glossary.yaml, not here.
     fence: >
       Holds writing doctrine only. Term identity → glossary.yaml; versioning / layout / ops → config.yaml; section-level rules
@@ -230,7 +237,7 @@ project-files:
       english are **drill-down fields** — returned on demand via `docspec show <id>` only, not injected (saves tokens), and the
       agent writes per the definition (in its own words, don't clone; fidelity goes to factcheck, non-blocking). Plus lint Vg
       catches violations after the fact.
-    reader: [draft, edit, factcheck]   # all three get the lean index injected; drill down for definition/english on demand via show <id>
+    reader: [apply, factcheck]         # both get the lean index injected; drill down for definition/english on demand via show <id>
     writer: [develop]                  # develop adds terms while converging; structure validated by check (id unique / canonical required / bucket legal)
     when: >
       develop adds a term when it hits "one thing, many names" or wants to fix a canonical name (each entry requires id + canonical,
@@ -370,7 +377,7 @@ artifacts:
     instruction: instructions/concept.md
     requires: []
     aperture:
-      read:  [develop, draft, edit, factcheck, publish]
+      read:  [develop, apply, factcheck, publish]
       write: [develop]
       projects-into: docs
     closed: true                 # concept top-level keys are fully enumerated; unknown keys fail loud (check)
@@ -396,7 +403,7 @@ artifacts:
           breadth:  { type: string, required: false }
           forbidden: { type: list }
           layout:   { type: enum, values: [prose, table, list, diagram] }
-          kind:     { type: enum, values: [explain, how-to, reference, tutorial] }   # Diátaxis topic type — optional audit/draft hint, NOT a render gate; inherits down the tree
+          kind:     { type: enum, values: [explain, how-to, reference, tutorial] }   # Diátaxis topic type — optional audit/apply hint, NOT a render gate; inherits down the tree
       must_cover: { type: list,      required: false }
       sources:    { type: list,      required: false }
       realizes:   { type: "list[ref]", required: false, relation: realizes }
@@ -416,7 +423,7 @@ artifacts:
     instruction: instructions/decisions.md
     requires: []
     aperture:
-      read:  [develop, draft, edit, factcheck, publish]
+      read:  [develop, apply, factcheck, publish]
       write: [develop]
       projects-into: docs
     entries: true                       # this file has a { entries: [...] } structure; schema validates each entry
@@ -441,8 +448,8 @@ artifacts:
     instruction: instructions/material.md
     requires: []
     aperture:
-      read:  [draft, edit, factcheck]
-      write: [develop, draft]
+      read:  [apply, factcheck]
+      write: [develop, apply]
       projects-into: null
     block-grammar:
       heading: "## <類型>: <標題> {#m-<錨>}"
@@ -499,7 +506,7 @@ artifacts:
     generates: history.md
     kind: md
     description: >
-      Prose detail of retirements (**optional**; read by the develop/factcheck agents, never read by draft, not projected by publish).
+      Prose detail of retirements (**optional**; read by the develop/factcheck agents, never read by apply's rewrite mode, not projected by publish).
       Each section's heading = a clean `## <id>` (bare id, no title, not parsed), recording for that dead decision "why dropped / lost to
       whom / evidence". Corresponds by id to history.yaml (used by show); not hard-bound — given if found, an orphan section at most gets
       a lint reminder. Whole-section retirements are not written here (their detail = the archive folder).

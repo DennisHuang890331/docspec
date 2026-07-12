@@ -32,8 +32,8 @@ purpose:                      # overall goal of the whole forest/project, a sent
 _WRITING_GUIDE_BACKBONE = """\
 # Writing guide
 
-> Shared by the whole document. `draft` blind-renders each section against THIS file; `edit`
-> checks the whole document against it. Coherence comes from these rules, not from peeking at
+> Shared by the whole document. `apply` (rewrite mode) blind-renders each section against THIS file;
+> `apply` (align mode) checks the whole document against it. Coherence comes from these rules, not from peeking at
 > sibling sections.
 >
 > **SCOPE FENCE — writing doctrine only.** Term identity → `glossary.yaml`. Versioning / file

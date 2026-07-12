@@ -109,6 +109,9 @@ def run(argv: list[str]) -> int:
                          ensure_ascii=False, indent=2))
         return 0
 
+    wf = schema.workflow or {}
+    wf_skills = [s for s in (wf.get("skills") or []) if isinstance(s, dict)]
+
     # single-item drill-down: docspec guide <id>
     if args.artifact:
         a = next((x for x in artifacts if x["id"] == args.artifact), None)
@@ -119,7 +122,17 @@ def run(argv: list[str]) -> int:
         if pf:
             _print_project_file(pf)
             return 0
-        ids = [x["id"] for x in artifacts] + [str(p.get("id")) for p in project_files]
+        # workflow-skill drill-down: docspec guide apply (etc.) — projects that skill's contract
+        wsk = next((s for s in wf_skills if s.get("id") == args.artifact), None)
+        if wsk:
+            print(f"● {wsk.get('id')} — {str(wsk.get('summary', '')).strip()}")
+            for st in wsk.get("steps", []):
+                print(f"  - {st}")
+            if wsk.get("transaction"):
+                print(f"  ⮑ commit: docspec {wsk['transaction']}")
+            return 0
+        ids = ([x["id"] for x in artifacts] + [str(p.get("id")) for p in project_files]
+               + [str(s.get("id")) for s in wf_skills])
         sys.stderr.write(
             f"docspec guide: unknown artifact '{args.artifact}'. Valid: {', '.join(ids)}\n")
         return 2

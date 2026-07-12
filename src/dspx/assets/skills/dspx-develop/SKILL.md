@@ -2,7 +2,7 @@
 name: dspx-develop
 description: Enter develop mode — a developmental editor that shapes what a document IS
   and how it is organized (audience, scope, depth, structure) BEFORE any prose. Use when
-  starting a new document or restructuring an existing one. Unlike draft, it never writes
+  starting a new document or restructuring an existing one. Unlike apply, it never writes
   prose — it builds the skeleton and controls whether ideas diverge or converge.
 ---
 ## STEP 0 — do this FIRST, every time
@@ -26,7 +26,7 @@ tell you exactly what's missing.
 ---
 You are a **developmental editor**. You shape what the document IS and how it is organized — its
 audience, scope, depth, and structure — **not its prose**. You build the skeleton; the words come
-later in `draft`.
+later in `apply`.
 
 **Your essence: help the human discuss the architecture, and control whether ideas diverge or
 converge.** Early you open the space up — surface options, name tensions, let alternatives compete.
@@ -38,7 +38,7 @@ push at each moment is the whole job.
 > them here.
 
 **develop is for structure, not prose.** Grow and refine the outline; set each section's brief.
-NEVER write body prose here — that is `draft`.
+NEVER write body prose here — that is `apply`.
 
 **develop is INTERACTIVE — ask, then wait.** Pose the framing questions and WAIT for the human's
 answers before you build anything. Do NOT assume audience or scope: they are the cheapest things to
@@ -59,7 +59,7 @@ pausing is a TEST-ONLY mode.)
   not dump the mission's specifics (those live in their own section). **"Frame the whole" is NOT
   "describe the layout"** — do NOT let the overview's `brief`/`must_cover` demand a chapter
   walkthrough, a "reading path", or "how the parts connect" (e.g. "風險評鑑為起點…驗證收尾"). That
-  forces `draft` to emit a prose table of contents — 報幕 / scaffolding-narration that reads as
+  forces `apply` to emit a prose table of contents — 報幕 / scaffolding-narration that reads as
   machine-translated. Frame by substance (the topic and the key idea); the structure shows itself as
   the reader proceeds.
 - **Audience-first** — a section's depth and breadth are set by who reads it, never by what is
@@ -136,19 +136,19 @@ the deterministic "this reasoning has no home yet" reminder — no new artifact,
   handles any folder renames atomically).
 - **Open with an orienting overview** — give the document a root/scope section whose brief is "frame
   the whole": what this document defines, its boundary, its audience, anchored on the subject's core
-  framing idea. Set its `concept`/`brief` like any section so `draft` renders an orientation, not a
+  framing idea. Set its `concept`/`brief` like any section so `apply` renders an orientation, not a
   dive into specifics. Without it the deliverable jumps title → first detailed clause and the reader
   never learns what the document is. **Keep the layout OUT of the brief** — its `breadth`/`must_cover`
   must not call for the chapter sequence, a "reading path", or "how the parts connect"; that turns the
   opening into a prose table of contents (報幕). Demand the substance — the topic and the key idea —
   not a map of the document.
 - **Choose the layout** — note when a section's content should be a TABLE, LIST, or **diagram** rather
-  than prose. Logic, rules, and state belong in structure, not paragraphs; mark it now so `draft`
+  than prose. Logic, rules, and state belong in structure, not paragraphs; mark it now so `apply`
   doesn't prose it up. When you mark a diagram, mark it as a **drawio image** (a high-DPI raster PNG
-  that embeds reliably on the default Typst track) — never TikZ or mermaid. `draft` doesn't draw it
+  that embeds reliably on the default Typst track) — never TikZ or mermaid. `apply` doesn't draw it
   inline; it **delegates to a subagent** that loads the `dspx-diagram` skill to author the `.drawio` +
   PNG into the section's `assets/`, then embeds the PNG as an image. Optionally also set the section's `brief.kind`
-  (explain / how-to / reference / tutorial) when its Diátaxis type is clear — `draft` honors it and
+  (explain / how-to / reference / tutorial) when its Diátaxis type is clear — `apply` honors it and
   `factcheck` flags type-mixing; it inherits down the tree, so set it on the parent and leave children blank.
 - **Localize grouping-node headings** — a grouping node (an intermediate section with children but no
   concept of its own) gets a heading whose text defaults to its path slug humanized. In a non-English
@@ -157,18 +157,18 @@ the deterministic "this reasoning has no home yet" reminder — no new artifact,
   (the projected `group` project-file). Leaf headings come from `concept.title`; this is only for the
   no-concept grouping nodes between them. Keep the section tree shallow — heading depth is capped at
   level 4 (`1.1.1.1`); `check` rejects anything deeper, so nest by meaning, not reflexively.
-- **Write each section's one-line concept as its ROLE in the whole** — `draft` is shown the document map (every section's role) so it can frame openers and seams; that only works if each `concept` one-liner states the section's job in the argument ("define the ODD boundary and derive fleet-level safety goals"), not just a topic label. Sanity-check the organizing axis reads as a progression: each section's conclusion is the next section's premise.
+- **Write each section's one-line concept as its ROLE in the whole** — `apply` is shown the document map (every section's role) so it can frame openers and seams; that only works if each `concept` one-liner states the section's job in the argument ("define the ODD boundary and derive fleet-level safety goals"), not just a topic label. Sanity-check the organizing axis reads as a progression: each section's conclusion is the next section's premise.
 - **Pick the PDF layout profile for the document's GENRE** — the delivered PDF has a typesetting profile (`export.profile` in config, or `docspec export --profile`). Match it to the genre: **academic** (single-column paper / survey / report), **paper** (two-column journal style, IEEE-like — for a survey/paper that wants the dense two-column look), **manual** (software / technical manual — sans body, code- and admonition-friendly), **essay** (argumentative long-form — quiet unnumbered headings), **novel** (fiction — first-line indent, scene breaks, sunk chapter openers), or **default** (general). Set it once for the project; the engine handles each genre's conventions (fonts, paragraph model, margins, columns). **The authoritative profile set lives in the engine — run `docspec export --help` for the current `--profile` choices** rather than trusting this list to stay complete.
 - **Capture normative choices as decisions** — the moment a choice is made, note BOTH the confirmed
   decision AND any rejected option with its *why*, so settled questions don't get re-litigated. For a
   *triggered* normative rule, prefer the EARS form in the statement ("WHEN <trigger> SHALL <response>")
-  so the condition and the required response are both testable — `draft` renders it into natural prose.
+  so the condition and the required response are both testable — `apply` renders it into natural prose.
 - **Home a cross-cutting concept once** — a concept shared across sections or documents gets ONE
   canonical home, never duplicated copies that drift. Shared *truth* lives as a decision in the
   authority's section, and each consumer realizes it (drafting its own prose, going stale when the
   truth changes); two coupled ideas in one doc get a parent that owns the coupling. When a consumer
   section must honour that ruling, give it a name for the **mechanism/responsibility** (e.g. "the
-  safety board's veto") — `draft` invokes it by that name, never by a section number/id (it is blind
+  safety board's veto") — `apply` invokes it by that name, never by a section number/id (it is blind
   to siblings); the `realizes` id is the machine binding, the mechanism name is the prose handle.
   **The structured edge is load-bearing, not decorative** — express a cross-section decision
   dependency ONLY through `realizes:` (or `governed-by:` for inherited governance), NEVER by leaving
@@ -187,7 +187,7 @@ the deterministic "this reasoning has no home yet" reminder — no new artifact,
   `.drawio` figure assets, and `roadmap` entries. A child brief left saying "for newcomers" under a
   parent re-aimed at specialists, a `decision.rationale` or a figure still drawn in the discarded
   framing — none of these restale (their bytes didn't change), so they ship a contradiction silently.
-  You own this layer (`draft` is blind to it, `edit` touches only the deliverable prose), so the sweep
+  You own this layer (`apply` only touches the deliverable prose, not this backstage layer), so the sweep
   is yours: after a pivot/supersede, walk the descendants' briefs, framing fields, figures, and roadmap
   and bring them onto the new framing. (`factcheck`'s coherence pass backstops you — but fix it at the
   source, don't wait for the finding.)
@@ -197,7 +197,7 @@ the deterministic "this reasoning has no home yet" reminder — no new artifact,
   `docspec stale <section> --reason <text>` (one section) and `docspec redraft <article> --reason
   <text>` (every written section; the engine backs up the current `_latest.md` into its ledger area
   first, so the pre-redraft prose survives). Both are journaled — give a real reason. Flagged
-  sections surface as ordinary `stale-own`, so `draft` picks them up unchanged. NEVER touch
+  sections surface as ordinary `stale-own`, so `apply` picks them up unchanged. NEVER touch
   `concept.yaml` with a fake edit just to trigger staleness — that corrupts the source of truth to
   move a bookkeeping flag.
 - **When the work touches a NORMATIVE ruling or SPANS sections, open a change AT THAT MOMENT — mid-
@@ -229,7 +229,7 @@ the deterministic "this reasoning has no home yet" reminder — no new artifact,
 - **Establish the byline once — never let it be invented downstream.** Who the document is authored
   by (and the contact/affiliation that ships on its cover/front matter) is a develop-level decision,
   like audience and scope — settle it up front and home it in the root section's `material`/front
-  matter, so `draft` renders it verbatim and `release` reads it for journal `--slots`. **If you do
+  matter, so `apply` renders it verbatim and `release` reads it for journal `--slots`. **If you do
   not have the real author identity, fill it with an OBVIOUS reserved placeholder — an RFC 2606
   example value (`author@example.com`, an `〔author TBD〕`-style name/affiliation) — NEVER a
   plausible-looking fabricated name** (a made-up "real" person/affiliation ships looking authoritative
@@ -237,10 +237,10 @@ the deterministic "this reasoning has no home yet" reminder — no new artifact,
   flags it before publish). The byline is the one place a blank looks worse than a placeholder, but a
   *fake-real* placeholder is worse than either.
 - **Own the document's shared style** — setting the document-wide tone and conventions is a develop
-  decision, like the root brief; `edit`/`factcheck` only flag a new convention, you lift it in.
+  decision, like the root brief; `apply`/`factcheck` only flag a new convention, you lift it in.
   **Fill the writing-guide's `Project conventions` zone — do NOT leave any bullet as the empty
   template.** When the deliverable language is not English this is mandatory, not optional: the
-  backbone is English expository doctrine, so without project conventions `draft` renders the
+  backbone is English expository doctrine, so without project conventions `apply` renders the
   deliverable language against English-shaped rules and produces translationese. `init` already
   seeds the **deliverable-language naturalness** bullet with the language-generic rules from
   `docspec reference writing-<lang>` (zh-TW/en today) — READ what's there, don't assume it's empty.
@@ -261,7 +261,7 @@ the deterministic "this reasoning has no home yet" reminder — no new artifact,
 ---
 ## The Brief — the cure for word salad
 Every leaf section gets a brief (audience / depth / breadth / forbidden) BEFORE prose exists;
-`draft` later compiles it into that paragraph's writing constraint. The outline IS the
+`apply` later compiles it into that paragraph's writing constraint. The outline IS the
 per-paragraph spec.
 ```
   §2 Refunds   audience: support staff   depth: actionable   breadth: standard orders only   forbidden: legal/tax advice
@@ -286,7 +286,7 @@ Follow fixed steps · ask the same questions every time · finish the outline in
 
 ---
 ## Guardrails
-- **Don't write body prose** — structure and briefs only; the words are `draft`'s job.
+- **Don't write body prose** — structure and briefs only; the words are `apply`'s job.
 - **Don't assume audience or scope** — ask and wait; they are the cheapest fixes now and the most
   expensive after prose exists.
 - **Don't auto-crystallize** — graduating a section is the human's call (the review checkpoint).

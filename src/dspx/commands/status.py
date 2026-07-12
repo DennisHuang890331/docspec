@@ -73,6 +73,55 @@ def _style_carriers_moved(rec_style, style_now: dict) -> list[str]:
             if rec_style.get(k) != style_now.get(k)]
 
 
+def compute_sync(layout: Layout, leaf: Leaf, recorded, by_section: dict, dindex: dict,
+                 deliverable_missing: bool = False,
+                 needs_migration: bool = False) -> tuple[str, list[str]]:
+    """一節的同步狀態（sync）＋（若 stale-style）動了的 doctrine 載體名單。
+    抽成獨立函式讓 status 與 instructions（apply 模式投影）共用同一判準——避免 sync
+    優先序在兩處重寫而漂移（鐵律2）。回 (sync, style_moved)。"""
+    style_moved: list[str] = []
+    if recorded is None:
+        return "unwritten", style_moved
+    if deliverable_missing:
+        # 存在性互驗（corpus-fail-loud-batch D2）：帳本有記錄但交付檔不見了——
+        # 「曾經有交付物、現在缺席」＝必然異常，不得以帳本指紋照算 synced/stale。
+        return "deliverable-missing", style_moved
+    if needs_migration:
+        # 帳本版本閘（fingerprint v2 D7）：v1 舊值與 v2 算法現值不可比——逐軸比對必然全紅
+        # ＝假 stale 風暴，也不得報 synced。顯 needs-migration、文章級指示 --rebaseline。
+        return "needs-migration", style_moved
+    # 相容舊格式（str=只有 own）與新格式（{own, anc, deps, norm, style}）
+    rec_own = recorded.get("own") if isinstance(recorded, dict) else recorded
+    rec_anc = recorded.get("anc") if isinstance(recorded, dict) else None
+    rec_deps = recorded.get("deps") if isinstance(recorded, dict) else None
+    rec_norm = recorded.get("norm") if isinstance(recorded, dict) else None
+    rec_style = recorded.get("style") if isinstance(recorded, dict) else None
+    own_now = leaf.source_hash()
+    anc_now = ancestor_brief_fingerprint(leaf.section, by_section)
+    deps_now = deps_fingerprint(leaf, dindex)
+    norm_now = ancestor_normative_fingerprint(leaf.section, by_section)
+    style_now = style_fingerprint(layout)
+    # 優先序 own > upstream > norm > inherited > style：規矩失守比敘事框架移動嚴重、
+    # 但仍在「散文必須重寫」（own/upstream）之下——norm 變更常見結局是「散文合法、ack 即清」。
+    if isinstance(recorded, dict) and recorded.get("redraft"):
+        # 標髒旗標（docspec stale / redraft）：在 own 比對**前**投影成 stale-own——
+        # apply（rewrite）的 pickup 集合（stale-own）零改動接手；散文真重寫（render 重算）或
+        # render --ack-own 才清旗標。舊帳本無此鍵＝行為不變（零遷移）。
+        return "stale-own", style_moved
+    if rec_own != own_now:
+        return "stale-own", style_moved          # 自己的源改了 → apply rewrite 重渲染
+    if rec_deps is not None and rec_deps != deps_now:
+        return "stale-upstream", style_moved     # realizes 的共享真相改了 → apply rewrite 重渲染
+    if rec_norm is not None and rec_norm != norm_now:
+        return "stale-norm", style_moved         # 祖先 active normative（規矩）改了 → apply align 逐句核對
+    if rec_anc is not None and rec_anc != anc_now:
+        return "stale-inherited", style_moved    # 只有祖先 brief 改了 → apply align 敘事性對齊
+    if rec_style is not None and rec_style != style_now:
+        # 寫作 doctrine（writing-guide/glossary/purpose）改了 → apply align 就地重套風格/對齊術語
+        return "stale-style", _style_carriers_moved(rec_style, style_now)
+    return "synced", style_moved
+
+
 def _leaf_row(layout: Layout, leaf: Leaf, schema: Schema, check_ok: bool,
               docs_hashes: dict, by_section: dict, dindex: dict,
               deliverable_missing: bool = False,
@@ -80,49 +129,9 @@ def _leaf_row(layout: Layout, leaf: Leaf, schema: Schema, check_ok: bool,
     has_concept = (leaf.dir / "concept.yaml").is_file()
     has_decisions = (leaf.dir / "decisions.yaml").is_file()
     recorded = docs_hashes.get(leaf.section)
-    style_moved: list[str] = []
-    if recorded is None:
-        sync = "unwritten"
-    elif deliverable_missing:
-        # 存在性互驗（corpus-fail-loud-batch D2）：帳本有記錄但交付檔不見了——
-        # 「曾經有交付物、現在缺席」＝必然異常，不得以帳本指紋照算 synced/stale。
-        sync = "deliverable-missing"
-    elif needs_migration:
-        # 帳本版本閘（fingerprint v2 D7）：v1 舊值與 v2 算法現值不可比——逐軸比對必然全紅
-        # ＝假 stale 風暴，也不得報 synced。顯 needs-migration、文章級指示 --rebaseline。
-        sync = "needs-migration"
-    else:
-        # 相容舊格式（str=只有 own）與新格式（{own, anc, deps, norm, style}）
-        rec_own = recorded.get("own") if isinstance(recorded, dict) else recorded
-        rec_anc = recorded.get("anc") if isinstance(recorded, dict) else None
-        rec_deps = recorded.get("deps") if isinstance(recorded, dict) else None
-        rec_norm = recorded.get("norm") if isinstance(recorded, dict) else None
-        rec_style = recorded.get("style") if isinstance(recorded, dict) else None
-        own_now = leaf.source_hash()
-        anc_now = ancestor_brief_fingerprint(leaf.section, by_section)
-        deps_now = deps_fingerprint(leaf, dindex)
-        norm_now = ancestor_normative_fingerprint(leaf.section, by_section)
-        style_now = style_fingerprint(layout)
-        # 優先序 own > upstream > norm > inherited > style：規矩失守比敘事框架移動嚴重、
-        # 但仍在「散文必須重寫」（own/upstream）之下——norm 變更常見結局是「散文合法、ack 即清」。
-        if isinstance(recorded, dict) and recorded.get("redraft"):
-            # 標髒旗標（docspec stale / redraft）：在 own 比對**前**投影成 stale-own——
-            # draft 的 pickup 集合（stale-own）零改動接手；散文真重寫（render 重算）或
-            # render --ack-own 才清旗標。舊帳本無此鍵＝行為不變（零遷移）。
-            sync = "stale-own"
-        elif rec_own != own_now:
-            sync = "stale-own"          # 自己的源改了 → draft 重渲染
-        elif rec_deps is not None and rec_deps != deps_now:
-            sync = "stale-upstream"     # realizes 的共享真相改了 → draft 重渲染
-        elif rec_norm is not None and rec_norm != norm_now:
-            sync = "stale-norm"         # 祖先 active normative（規矩）改了 → edit 逐句核對散文是否違反
-        elif rec_anc is not None and rec_anc != anc_now:
-            sync = "stale-inherited"    # 只有祖先 brief 改了 → edit 敘事性對齊
-        elif rec_style is not None and rec_style != style_now:
-            sync = "stale-style"        # 寫作 doctrine（writing-guide/glossary/purpose）改了 → edit 就地重套風格/對齊術語
-            style_moved = _style_carriers_moved(rec_style, style_now)
-        else:
-            sync = "synced"
+    sync, style_moved = compute_sync(layout, leaf, recorded, by_section, dindex,
+                                     deliverable_missing=deliverable_missing,
+                                     needs_migration=needs_migration)
 
     state = section_state(leaf, schema, check_ok)
 
@@ -281,12 +290,6 @@ def run(argv: list[str]) -> int:
               f"staleness is shown) — migrate once with `docspec render {art} --rebaseline` (prose "
               "is preserved; pending stale signals are absorbed into the new baseline)")
     print("\n  flags: c=concept d=decisions m=material v=develop h=history")
-    print("  sync → who picks it up: stale-own / stale-upstream → draft (re-render the section) · "
-          "stale-norm → edit (an ancestor's active normative ruling changed — re-check the prose "
-          "sentence by sentence against the new ruling; conforming with no change needed → "
-          "render --ack) · "
-          "stale-inherited → edit (narrative-align, or render --ack if no change needed) · "
-          "stale-style → edit (restyle / terminology-align to the updated writing-guide/glossary/"
-          "purpose, or render --ack if the prose already conforms) · "
-          "unwritten → draft · ✎ drifted → edit (reconcile the hand-edit)")
+    print("  (sync is state; the single apply skill routes its own mode from it — "
+          "docspec instructions apply <section> projects the mode + verb)")
     return 0

@@ -22,7 +22,7 @@ You are a **delegated subagent**. The main agent gave you the diagram's *intent*
 show) and the deliverable asset dir (`docs/assets/`, where the diagram is delivered). Your job: produce one `.drawio`
 source plus a rendered **PNG** image there, then hand the image path back. You do NOT edit the
 deliverable prose, place the figure in the document, or assign a figure number — the renderer
-numbers figures at export, and `draft` writes the `![caption](assets/<file>)` reference. You make
+numbers figures at export, and `apply` writes the `![caption](assets/<file>)` reference. You make
 the picture; the engine and the main agent do the rest.
 
 The two vendored helpers live next to this file:

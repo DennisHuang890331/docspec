@@ -98,18 +98,17 @@ entries:
 
 ## ✍️ 撰寫流程
 
-你在 agent 對話裡說要寫什麼，它呼叫六個 skill，引擎在背後把關：
+你在 agent 對話裡說要寫什麼，它呼叫五個 skill，引擎在背後把關：
 
 | skill | 做什麼 |
 |---|---|
 | **develop** | 長出／重整一節的概念與決策（受眾、深度、廣度）；先有骨架，不寫散文 |
-| **draft** | 把一節渲染成散文，只看得到那一節 |
-| **edit** | 潤稿：逐行 → 文句 → 校對 |
+| **apply** | 將一節對齊其來源：rewrite 模式盲渲染散文（原 draft）、align 模式潤稿與對齊（原 edit） |
 | **factcheck** | 對抗式查核，每條主張對一手來源；只標記、不擋發行 |
 | **publish** | 不可逆發行：所有閘綠 → 凍結唯讀快照 → 升版 → 記 changelog |
 | **release** | 互動排版：匯出 → 看頁面圖 → 調旋鈕 → 重出 |
 
-這是迴圈，不是流水線：factcheck 抓到問題，工作就退回 develop 或 draft，再重新走回 publish。節要晉級也得整批過關：develop 階段的思考草稿要先榨乾、欄位齊全，`docspec ready` 才放行，所以引擎的索引裡不會有看起來完成、其實還空著的節。agent 遵循的完整契約（欄位、流程、規則）由 `docspec guide` 即時投影，不靠會過時的說明文件。
+這是迴圈，不是流水線：factcheck 抓到問題，工作就退回 develop 或 apply，再重新走回 publish。節要晉級也得整批過關：develop 階段的思考草稿要先榨乾、欄位齊全，`docspec ready` 才放行，所以引擎的索引裡不會有看起來完成、其實還空著的節。agent 遵循的完整契約（欄位、流程、規則）由 `docspec guide` 即時投影，不靠會過時的說明文件。
 
 ## 📄 匯出 PDF
 
@@ -126,7 +125,7 @@ docspec setup
 
 ## 📐 工程圖
 
-工程圖是文件的一部分，不是匯出時才硬加上去的。哪一節需要圖，`draft` 就交給專門的繪圖 skill **dspx-diagram**，由它畫成 draw.io 原生檔，再渲成高解析 PNG 嵌進交付物。落到頁面上的是向量的方塊與連線，不是 ASCII 圖，也不是沒渲染的 mermaid 區塊。要用繪圖功能，先跑一次 `docspec setup --with-drawio` 把繪圖器裝好。
+工程圖是文件的一部分，不是匯出時才硬加上去的。哪一節需要圖，`apply` 就交給專門的繪圖 skill **dspx-diagram**，由它畫成 draw.io 原生檔，再渲成高解析 PNG 嵌進交付物。落到頁面上的是向量的方塊與連線，不是 ASCII 圖，也不是沒渲染的 mermaid 區塊。要用繪圖功能，先跑一次 `docspec setup --with-drawio` 把繪圖器裝好。
 
 ## ✂️ 刻意不做什麼
 

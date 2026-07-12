@@ -100,18 +100,17 @@ Staleness travels along four axes, and `docspec status` names them per section: 
 
 ## ✍️ Authoring workflow
 
-You describe what you want in your agent's chat, and it invokes six skills while the engine gatekeeps behind them:
+You describe what you want in your agent's chat, and it invokes five skills while the engine gatekeeps behind them:
 
 | Skill | What it does |
 |---|---|
 | **develop** | grow or restructure a section's concepts and decisions (audience, depth, breadth); skeleton first, no prose |
-| **draft** | render one section to prose, seeing only that section |
-| **edit** | an editing pass: line → sentence → proofread |
+| **apply** | align a section to its source: rewrite mode blind-renders prose (former draft), align mode polishes and re-aligns (former edit) |
 | **factcheck** | adversarial check of each claim against a source; flags only, never blocks a release |
 | **publish** | irreversible release: gates green → freeze a read-only snapshot → bump version → changelog |
 | **release** | interactive PDF layout: export → review page images → tune knobs → re-export |
 
-This is a loop, not a pipeline: when factcheck finds a problem, the work returns to develop or draft before it comes back through publish. Graduating a section is also a transaction: the develop-stage scratch file must be squeezed dry and the fields complete before `docspec ready` lets it advance, so the engine's index never holds a section that looks finished but isn't. The full contract the agent follows (fields, workflow, rules) is projected live by `docspec guide`, not kept in documentation that can go stale.
+This is a loop, not a pipeline: when factcheck finds a problem, the work returns to develop or apply before it comes back through publish. Graduating a section is also a transaction: the develop-stage scratch file must be squeezed dry and the fields complete before `docspec ready` lets it advance, so the engine's index never holds a section that looks finished but isn't. The full contract the agent follows (fields, workflow, rules) is projected live by `docspec guide`, not kept in documentation that can go stale.
 
 ## 📄 PDF output
 
@@ -128,7 +127,7 @@ docspec setup
 
 ## 📐 Diagrams
 
-Engineering diagrams are part of the document, not something bolted on at export. When a section needs one, `draft` hands off to a support skill, **dspx-diagram**, which authors the figure as a real draw.io file and renders it to a high-resolution PNG embedded in the deliverable. What lands on the page is vector-drawn boxes and edges, not ASCII art and not an unrendered mermaid block. Install the renderer once with `docspec setup --with-drawio`.
+Engineering diagrams are part of the document, not something bolted on at export. When a section needs one, `apply` hands off to a support skill, **dspx-diagram**, which authors the figure as a real draw.io file and renders it to a high-resolution PNG embedded in the deliverable. What lands on the page is vector-drawn boxes and edges, not ASCII art and not an unrendered mermaid block. Install the renderer once with `docspec setup --with-drawio`.
 
 ## ✂️ What it deliberately leaves out
 

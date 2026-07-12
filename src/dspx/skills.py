@@ -25,9 +25,9 @@ class Skill:
     """一個內建 skill：權威原始檔 + 解析出的中介資料。
 
     `kind` 區分兩類：
-      - "workflow"（預設）＝六個作者工作流 skill（develop/draft/edit/factcheck/
+      - "workflow"（預設）＝五個作者工作流 skill（develop/apply/factcheck/
         publish/release）：裝成 skill（自動載入）＋command（人顯式叫用 slash/workflow）。
-      - "support" ＝craft skill（如 dspx-diagram），由 draft/develop 委派的 subagent
+      - "support" ＝craft skill（如 dspx-diagram），由 apply/develop 委派的 subagent
         載入、非工作流階段、不產 slash command；它隨帶 scripts/ 等輔助檔一起落地。
     """
 

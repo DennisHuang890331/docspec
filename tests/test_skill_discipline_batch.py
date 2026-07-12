@@ -142,28 +142,44 @@ def test_guide_json_carries_reasoning_step_in_develop_skill(make_project, monkey
 # ── 3. 〔#16〕〔#19〕skill 文案落地 ──────────────────────────────────
 
 
-def test_edit_carries_exclusion_list_after_routing_rule_before_stage1():
-    """dspx-edit：排除清單節在「The Routing Rule」之後、Stage 1 之前，逐條列排除項＋去處。"""
-    body = _skill_body("dspx-edit")
+def test_apply_merges_both_modes():
+    """dspx-apply 併 draft+edit 雙模式：body 真含 rewrite（盲渲染/寫作原則/Bans）
+    與 align（三階段/verdict verb/exclusion list）兩模式內容——非空殼。"""
+    body = _skill_body("dspx-apply")
+    assert "Choosing the mode" in body            # 模式選擇段（engine 路由、不查表）
+    assert "# Rewrite mode" in body               # rewrite 模式（原 draft）
+    assert "Inverted pyramid" in body
+    assert "blind to its siblings" in body
+    assert "## Bans" in body
+    assert "# Align mode" in body                 # align 模式（原 edit）
+    assert "## The Routing Rule" in body
+    assert "Stage 1 — Line edit" in body
+    assert "Stage 3 — Proofread" in body
+    assert "--ack-own" in body                    # verdict verb 白名單
+    assert "dspx-draft" not in body and "dspx-edit" not in body   # 舊名不再出現
+
+
+def test_apply_align_carries_exclusion_list_after_routing_rule_before_stage1():
+    """dspx-apply align 模式：排除清單節在「The Routing Rule」之後、Stage 1 之前，逐條列排除項＋去處。"""
+    body = _skill_body("dspx-apply")
     routing = body.index("## The Routing Rule")
     excl = body.index("## Subagent dispatch briefs — the exclusion list")
     stage1 = body.index("## Stage 1")
     assert routing < excl < stage1               # 插入位置正確
     section = body[excl:stage1]
     assert "SEMANTIC work only" in section        # brief 開頭必聲明
-    # 逐條排除項與去處
     assert "Punctuation width" in section
-    assert "docspec normalize" in section         # 引擎確定性 auto-fix（punctuation-normalizer 落地後）
+    assert "docspec normalize" in section         # 引擎確定性 auto-fix
     assert "V18" in section                        # lint 殘留兜底、指回 normalize
     assert "docspec lint" in section              # 洩漏 scaffolding／drift 去處
     assert "docspec check" in section             # 錨點去處
     assert "grep" in section                      # banned openers 監工手動、同樣不派
 
 
-def test_edit_dont_list_has_punctuation_ban():
-    """dspx-edit Guardrails Don't 含標點寬度禁令（禁手改 sweep、byte-exact 點名、導向 normalize）。"""
-    body = _skill_body("dspx-edit")
-    dont = body[body.index("**Don't**"):]
+def test_apply_guardrails_dont_has_punctuation_ban():
+    """dspx-apply 共用 Guardrails Don't 含標點寬度禁令（禁手改 sweep、byte-exact 點名、導向 normalize）。"""
+    body = _skill_body("dspx-apply")
+    dont = body[body.rindex("**Don't**"):]        # 最後一段＝共用 Guardrails Don't
     assert "punctuation-width sweep" in dont.lower()
     assert "no blind regex" in dont.lower()
     assert "byte-exact" in dont.lower()
@@ -171,10 +187,10 @@ def test_edit_dont_list_has_punctuation_ban():
     assert "docspec normalize" in dont       # 導向引擎確定性 normalize（非手改、非 audit finding）
 
 
-def test_draft_bans_have_punctuation_ban():
-    """dspx-draft Bans 含同旨禁令（禁手改 sweep、不禁寫稿當下寫對、byte-exact 點名、導向 normalize）。"""
-    body = _skill_body("dspx-draft")
-    bans = body[body.index("## Bans"):body.index("## Guardrails")]
+def test_apply_rewrite_bans_have_punctuation_ban():
+    """dspx-apply rewrite 模式 Bans 含同旨禁令（禁手改 sweep、不禁寫稿當下寫對、byte-exact 點名、導向 normalize）。"""
+    body = _skill_body("dspx-apply")
+    bans = body[body.index("## Bans"):body.index("## Rewrite guardrails")]
     assert "punctuation-width sweep" in bans.lower()
     assert "as you compose" in bans          # 不禁寫稿當下寫對
     assert "docspec normalize" in bans       # 導向引擎確定性 normalize
@@ -197,7 +213,7 @@ def test_develop_teaches_reopen_after_reversal_paragraph():
 def test_punctuation_stance_points_to_normalize():
     """punctuation-normalizer 落地後：標點文案改指向引擎確定性 `docspec normalize`（不再手改、
     不再是誠實版「無 auto-fix」）；仍不宣稱引擎會創作/改寫內容（normalize 只換字寬）。"""
-    for name in ("dspx-edit", "dspx-draft"):
+    for name in ("dspx-apply",):
         body = _skill_body(name)
         assert "docspec normalize" in body                     # 導向引擎確定性 auto-fix
         assert "no punctuation auto-fix today" not in body       # 誠實版已過時、不得殘留

@@ -29,8 +29,8 @@ def test_artifact_kinds_and_aperture():
 
 def test_skills_table_present():
     schema = load_schema()
-    assert set(schema.skills) == {"develop", "draft", "edit", "factcheck", "publish", "release"}
-    assert schema.skills["draft"]["reads"] == ["concept", "decisions", "material"]
+    assert set(schema.skills) == {"develop", "apply", "factcheck", "publish", "release"}
+    assert schema.skills["apply"]["reads"] == ["concept", "decisions", "material", "docs"]
 
 
 def test_unknown_schema_raises():

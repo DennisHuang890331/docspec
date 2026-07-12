@@ -193,7 +193,7 @@ def test_instructions_glossary_block_is_lean(make_project, write_leaf, monkeypat
          "aliases_forbidden": ["安全監控系統"]},
     ]}, allow_unicode=True, sort_keys=False), encoding="utf-8")
     monkeypatch.chdir(home.parent)
-    assert instr_cmd.run(["draft", "g/x"]) == 0
+    assert instr_cmd.run(["apply", "g/x"]) == 0
     out = capsys.readouterr().out
     # 精瘦：定義/英文不出現在注入文字
     assert "監測異常並發報的子系統" not in out
@@ -222,7 +222,7 @@ def test_instructions_backstage_projections_warn_against_narration(make_project,
     monkeypatch.chdir(home.parent)
 
     # draft：自身 brief/sources（Readable）+ 父鏈 brief + 祖先 normative 都帶後台警告
-    assert instr_cmd.run(["draft", "art/child"]) == 0
+    assert instr_cmd.run(["apply", "art/child"]) == 0
     out = capsys.readouterr().out
     assert "constraints/provenance you OBEY" in out      # 自身 brief/sources
     assert "本節規範" in out                              # 守護字串點名報幕句式
@@ -244,7 +244,7 @@ def test_instructions_writing_guide_precedes_sections_with_tail_pointer(make_pro
     (home / "writing-guide.md").write_text("# Writing guide\n\n風格權威哨兵句。\n", encoding="utf-8")
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1})
     monkeypatch.chdir(home.parent)
-    assert instr_cmd.run(["edit", "g/x"]) == 0
+    assert instr_cmd.run(["apply", "g/x"]) == 0
     out = capsys.readouterr().out
     assert out.index("Writing guide") < out.index("── Readable")   # 風格權威在逐節內容之前
     assert out.rstrip().splitlines()[-1].startswith("(style authority:")  # 尾端回指
@@ -275,7 +275,7 @@ def test_instructions_develop_prints_roadmap(make_project, write_leaf, monkeypat
     assert "Backlog (roadmap)" in out
     assert "r1" in out and "f1" in out
 
-    assert instr_cmd.run(["draft", "art"]) == 0
+    assert instr_cmd.run(["apply", "art"]) == 0
     assert "Backlog (roadmap)" not in capsys.readouterr().out
 
 
@@ -287,7 +287,7 @@ def test_guide_projects_workflow_and_artifacts(make_project, monkeypatch, capsys
     assert guide.run(["--json"]) == 0
     data = json.loads(capsys.readouterr().out)
     assert data["workflow"].get("loop")                       # 敘事來自 schema、非 hardcode
-    assert len(data["workflow"].get("skills", [])) == 6   # develop/draft/edit/factcheck/publish/release
+    assert len(data["workflow"].get("skills", [])) == 5   # develop/apply/factcheck/publish/release
     ids = {a["id"] for a in data["artifacts"]}
     assert {"concept", "decisions", "develop"} <= ids         # 涵蓋每個 schema artifact
     concept = next(a for a in data["artifacts"] if a["id"] == "concept")
@@ -334,7 +334,7 @@ def test_factcheck_gets_ancestor_normative(make_project, write_leaf, monkeypatch
     assert any(d["id"] == "dec-sot" for a in an for d in a["decisions"])
     # M4：draft 現在也拿得到祖先 normative（落筆遵守 ruling；供料、非 gate）
     capsys.readouterr()
-    instr.run(["draft", "art/child", "--json"])
+    instr.run(["apply", "art/child", "--json"])
     draft_an = json.loads(capsys.readouterr().out)["ancestorNormative"]
     assert any(d["id"] == "dec-sot" for a in draft_an for d in a["decisions"])
 

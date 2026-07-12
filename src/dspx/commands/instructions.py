@@ -76,6 +76,66 @@ _ACTION_CRITERION = {
     "move": "mv executed at archive + check green",
 }
 
+# change target action → apply 模式（change 內驅動；move/retire 是交易、不走 apply prose）
+_ACTION_MODE = {
+    "create": "rewrite", "revise": "rewrite", "redraft": "rewrite",
+    "align": "align", "review": "align",
+}
+
+
+def _sync_mode_verb(sync: str) -> tuple[str, str] | None:
+    """一節的 staleness 型別 → apply 模式 + 對應 render/ack verb（change 外驅動）。
+    synced / uncrystallized 等無工作態回 None。"""
+    if sync in ("unwritten", "stale-own", "stale-upstream"):
+        return "rewrite", "docspec render <article>  (blind-render the section from its aperture)"
+    if sync == "stale-norm":
+        return "align", ("docspec render <article>  (a sentence violated the changed ruling) — else "
+                         "docspec render <article> --ack <section>  (re-checked; prose conforms)")
+    if sync in ("stale-inherited", "stale-style"):
+        return "align", ("docspec render <article>  (you re-tuned the prose) — else "
+                         "docspec render <article> --ack <section>  (reviewed; no change needed)")
+    if sync == "drifted":
+        return "align", "reconcile the hand-edit, then docspec render <article>"
+    return None
+
+
+def _apply_mode(layout, schema, leaves, section: str) -> dict | None:
+    """instructions apply <section> 的模式投影：change 內由 target action 選、change 外由
+    staleness 型別選（同一套路由住 apply 內部，不外漏尾表）。回 {mode, verb, reason} 或 None。"""
+    from dspx import change as chg
+    from dspx.commands.status import compute_sync
+
+    by_section = {lf.section: lf for lf in leaves}
+    leaf = by_section.get(section)
+
+    # change 內：target action 定模式（多單命中取第一個有 apply 模式的 action）
+    concept_id = str(leaf.concept_id) if leaf is not None and leaf.concept_id else None
+    for change, t in chg.changes_hitting_section(layout, section, concept_id, leaves):
+        mode = _ACTION_MODE.get(t.action)
+        if mode:
+            verb = (_sync_mode_verb("stale-own") if mode == "rewrite"
+                    else _sync_mode_verb("stale-inherited"))
+            return {"mode": mode, "verb": verb[1] if verb else "",
+                    "reason": f"change {change.id} action={t.action}"}
+
+    # change 外：staleness 型別定模式
+    if leaf is None:
+        return None
+    from dspx.model import decision_index
+    from dspx.render import ledger_needs_migration, read_ledger
+    ledger = read_ledger(layout, leaf.article)
+    recorded = ledger.get(section)
+    deliverable_missing = bool(ledger) and not layout.docs_latest(leaf.article).is_file()
+    needs_migration = ledger_needs_migration(layout, leaf.article)
+    dindex = decision_index(leaves)
+    sync, _ = compute_sync(layout, leaf, recorded, by_section, dindex,
+                           deliverable_missing=deliverable_missing,
+                           needs_migration=needs_migration)
+    mv = _sync_mode_verb(sync)
+    if mv is None:
+        return {"mode": "—", "verb": "", "reason": f"{sync} (no apply work needed)"}
+    return {"mode": mv[0], "verb": mv[1], "reason": sync}
+
 
 def _change_context(layout, leaves, section: str) -> list[dict]:
     """本節命中的 active change context（多單全列；workflow-introspection 5.1）。"""
@@ -105,7 +165,7 @@ def _print_change_context(layout, leaves, section: str) -> None:
 
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec instructions", description=HELP)
-    parser.add_argument("skill", help="develop / draft / edit / factcheck / publish / release")
+    parser.add_argument("skill", help="develop / apply / factcheck / publish / release")
     parser.add_argument("section", help="leaf-section path (relative to corpus/)")
     parser.add_argument("--json", action="store_true", dest="as_json", help="output as JSON")
     args = parser.parse_args(argv)
@@ -142,10 +202,14 @@ def run(argv: list[str]) -> int:
         w["closed"] = bool(art.closed) if art else False
         w["yamlSkeleton"] = yaml_skeleton(art) if art else None
 
+    apply_mode = (_apply_mode(layout, schema, leaves, args.section)
+                  if args.skill == "apply" else None)
+
     if args.as_json:
         print(json.dumps({
             "skill": proj.skill,
             "section": proj.section,
+            "applyMode": apply_mode,
             "activeChanges": _change_context(layout, leaves, args.section),
             "reads": proj.reads,
             "writes": proj.writes,
@@ -165,6 +229,12 @@ def run(argv: list[str]) -> int:
         return 0
 
     print(f"aperture projection: skill={proj.skill}  section={proj.section}\n")
+
+    if apply_mode is not None:
+        print(f"── apply mode: {apply_mode['mode']}  ({apply_mode['reason']}) ──")
+        if apply_mode["verb"]:
+            print(f"   clear-with: {apply_mode['verb']}")
+        print()
 
     _print_change_context(layout, leaves, args.section)
 

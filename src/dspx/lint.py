@@ -242,7 +242,7 @@ def _scan_deliverable_text(body: str, where: str, all_ids: set[str]) -> list[Fin
     for m in _ALERT_RE.findall(body):
         findings.append(Finding("V12", ERROR, where,
                                 "leftover GFM alert/admonition (e.g. `> [!WARNING]`) -- "
-                                "draft emits these as a stop-and-flag marker; never ship one"))
+                                "apply (rewrite mode) emits these as a stop-and-flag marker; never ship one"))
     for m in dict.fromkeys(_RESERVED_EXAMPLE_RE.findall(body)):
         findings.append(Finding("V13", WARN, where,
                                 f"reserved example/placeholder token shipped \"{m.strip()}\" -- "

@@ -135,7 +135,7 @@ def test_documents_one_liner(make_project, write_leaf):
 def test_map_only_develop(make_project, write_leaf):
     home = _two_tree_governed(make_project, write_leaf)
     assert isinstance(_project(home, "develop", "t2").forest, dict)
-    for other in ("draft", "edit", "factcheck", "publish"):
+    for other in ("apply", "factcheck", "publish"):
         assert _project(home, other, "t2").forest is None
 
 
@@ -149,7 +149,7 @@ def test_develop_prints_forest_map(make_project, write_leaf, monkeypatch, capsys
     assert "t2 → t1" in out
 
     # draft 投影沒有森林地圖段
-    assert instr.run(["draft", "t2"]) == 0
+    assert instr.run(["apply", "t2"]) == 0
     assert "森林地圖" not in capsys.readouterr().out
 
 
@@ -267,7 +267,7 @@ def test_draft_gets_governed_parent_normative(make_project, write_leaf):
                            "statement": "父 ruling"}])
     write_leaf(home, "t2", concept={"id": "c-t2", "title": "T2", "order": 1, "status": "draft",
                                     "concept": "子", "brief": {"a": "2"}, "governed-by": ["c-t1"]})
-    proj = _project(home, "draft", "t2")
+    proj = _project(home, "apply", "t2")
     assert any(d["id"] == "d-gov" for a in proj.ancestor_normative for d in a["decisions"])
 
 
@@ -280,7 +280,7 @@ def test_factcheck_coverage_contract_projected(make_project, write_leaf):
     cc = _project(home, "factcheck", "doc/sec").coverage_contract
     assert cc and cc["must_cover"] == ["項目甲", "項目乙"]
     assert cc["layout"] == "prose" and cc["kind"] == "reference"
-    assert _project(home, "draft", "doc/sec").coverage_contract is None
+    assert _project(home, "apply", "doc/sec").coverage_contract is None
 
 
 # ── anchors：root concept ∪ 已被 governed-by 指到的 concept（Decision 4）──────
@@ -337,7 +337,7 @@ def test_develop_forest_map_prints_anchors_and_catalogue_hint(make_project, writ
     assert "    anchor: c-a-anchor — 深錨  (a/deep/anchor)" in out
     assert "  (full concept catalogue of a document: docspec list <article> --json)" in out
     # 非 develop skill：forest=None → 無 anchor 行、無目錄指引
-    assert instr.run(["draft", "b"]) == 0
+    assert instr.run(["apply", "b"]) == 0
     out2 = capsys.readouterr().out
     assert "anchor:" not in out2 and "full concept catalogue" not in out2
 

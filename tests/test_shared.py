@@ -32,7 +32,7 @@ def test_aperture_follows_realizes(make_project, write_leaf):
     home = _shared_project(make_project, write_leaf)
     layout = Layout(home)
     leaves = load_project(layout)
-    proj = project(layout, load_schema(), "draft", "occ/mirror", leaves)
+    proj = project(layout, load_schema(), "apply", "occ/mirror", leaves)
     assert len(proj.realized) == 1
     r = proj.realized[0]
     assert r["id"] == "d-sm-states"

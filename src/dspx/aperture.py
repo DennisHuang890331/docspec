@@ -28,7 +28,7 @@ from dspx.model import (
 )
 from dspx.schema import Schema
 
-# draft 讀 concept 的准投欄位（治理欄 realizes 不投）
+# apply（rewrite 模式）讀 concept 的准投欄位（治理欄 realizes 不投）
 _DRAFT_CONCEPT_FIELDS = ("concept", "brief", "must_cover", "sources")
 # glossary 注入＝精瘦索引（省 token）；definition/english 是下鑽欄（`docspec show <id>`），不注入。
 # 白名單單一來源住 glossary.GLOSSARY_INDEX_FIELDS——style 面 gloss 子軸指紋（model）同源共用，
@@ -61,21 +61,21 @@ class Projection:
     coverage_contract: dict | None = None             # factcheck 完整性契約前景化：{must_cover:[...], layout, kind}（W3；餵非阻塞 audit）
     coherence_contract: dict | None = None            # factcheck 語義一致性探針：列出該核對「該一致的對」（title/framing/own-brief/decision/figure ↔ prose/祖先 brief）；純 projection、餵非阻塞 audit、零 gate（revision-coherence-probes）
 
-# 注入寫作守則的 skill（連貫靠它替代跨節脈絡）
-_GUIDE_SKILLS = ("draft", "edit")
-# 注入術語權威的 skill：draft 寫前用正名、edit 對照、factcheck 核對＋拿 english 映回英文來源
-_GLOSSARY_SKILLS = ("draft", "edit", "factcheck")
-# 需要看到「本節 realizes 的共享真相」的 skill：draft 要渲染它、factcheck 要核對它
-_REALIZED_SKILLS = ("draft", "factcheck")
-# 需要知道「本節可放哪些圖」的 skill：draft 放圖、edit 核對引用不斷
-_ASSET_SKILLS = ("draft", "edit")
-# 需要看到「整篇章節骨架」的 skill：draft 寫角色開場（structure-visible / prose-blind）
-_DOCUMENT_MAP_SKILLS = ("draft",)
-# 需要祖先鏈 normative 決策的 skill：factcheck 做語義對抗稽核；**draft 落筆時遵守 ruling**
-# （M4：draft 對父 ruling 全盲＝低層輸出不連貫的根源）。純供料、非阻塞——子違抗父仍只由 audit 表達。
-_INHERITANCE_SKILLS = ("factcheck", "draft")
-# 看得到森林整體目標（config.purpose）的 skill：develop 開工脈絡、draft 寫定向 overview 的北極星（W2）
-_PURPOSE_SKILLS = ("develop", "draft")
+# 注入寫作守則的 skill（連貫靠它替代跨節脈絡）：apply（rewrite 盲寫靠它、align 逐節核一致）
+_GUIDE_SKILLS = ("apply",)
+# 注入術語權威的 skill：apply 寫前用正名/對照、factcheck 核對＋拿 english 映回英文來源
+_GLOSSARY_SKILLS = ("apply", "factcheck")
+# 需要看到「本節 realizes 的共享真相」的 skill：apply（rewrite）要渲染它、factcheck 要核對它
+_REALIZED_SKILLS = ("apply", "factcheck")
+# 需要知道「本節可放哪些圖」的 skill：apply（rewrite 放圖、align 核對引用不斷）
+_ASSET_SKILLS = ("apply",)
+# 需要看到「整篇章節骨架」的 skill：apply（rewrite）寫角色開場（structure-visible / prose-blind）
+_DOCUMENT_MAP_SKILLS = ("apply",)
+# 需要祖先鏈 normative 決策的 skill：factcheck 做語義對抗稽核；**apply（rewrite）落筆時遵守 ruling**
+# （M4：盲寫對父 ruling 全盲＝低層輸出不連貫的根源）。純供料、非阻塞——子違抗父仍只由 audit 表達。
+_INHERITANCE_SKILLS = ("factcheck", "apply")
+# 看得到森林整體目標（config.purpose）的 skill：develop 開工脈絡、apply 寫定向 overview 的北極星（W2）
+_PURPOSE_SKILLS = ("develop", "apply")
 
 
 def _yaml_text(obj: object) -> str:
@@ -85,13 +85,13 @@ def _yaml_text(obj: object) -> str:
 def _read_concept(leaf: Leaf, skill: str) -> object:
     if leaf.concept is None:
         return None
-    if skill == "draft":
+    if skill == "apply":
         return {k: leaf.concept[k] for k in _DRAFT_CONCEPT_FIELDS if k in leaf.concept}
     return leaf.concept
 
 
 def _read_decisions(leaf: Leaf, skill: str) -> object:
-    if skill == "draft":
+    if skill == "apply":
         # 只投 active 條目的 statement（剝 rationale/why/rejected/trace）
         return [
             {"id": e.get("id"), "statement": e.get("statement")}

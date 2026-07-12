@@ -76,7 +76,7 @@ You read `docs`, so you can also catch the deliverable drifting ahead of its own
 - **substantive-content** — a fact, number, or claim in the prose has no backing in source (or contradicts it);
 - **substantive-style** — register/structure diverged from what the brief and writing guide call for.
 
-You FLAG and classify; you NEVER edit the prose. The FIX loops back to `develop` (source out of date) or `edit` (prose out of line) — naming which is part of the finding, applying it never is.
+You FLAG and classify; you NEVER edit the prose. The FIX loops back to `develop` (source out of date) or `apply` (prose out of line) — naming which is part of the finding, applying it never is.
 
 ---
 

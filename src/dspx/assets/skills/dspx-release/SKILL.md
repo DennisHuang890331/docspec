@@ -31,7 +31,7 @@ with the human: export produces the PDF, proof renders it to page images, you an
 those images together, agree what to adjust, you change ONLY the **format layer**, then re-export
 and re-proof until it looks right. The snapshot's bytes never move.
 
-**This is a procedure with a loop, not a free stance.** Like `edit` and `publish` it has an ordered
+**This is a procedure with a loop, not a free stance.** Like `apply` and `publish` it has an ordered
 mechanism (export → proof → look → adjust → repeat). Unlike them it is *interactive and iterative*:
 it converges over rounds, with the human in every round, because typesetting quality is something
 humans see and judge, not something the engine gates.
@@ -50,7 +50,7 @@ humans see and judge, not something the engine gates.
 - **A layout problem you can only fix by changing content → route upstream, don't self-fix.** A
   table too wide because the *content* has too many columns; an overlong heading; a claim that must
   be reworded. Raise an audit finding (or hand it to the human); the human takes it back through
-  `edit` → `publish` → `release`. Release reports and waits; it never reaches into content.
+  `apply` → `publish` → `release`. Release reports and waits; it never reaches into content.
 - **Reach for the validated format knobs FIRST.** Express a layout change as *values* in a
   `--format-config` YAML (page/font/size/leading/table/code/…). docspec validates every value and
   deterministically compiles it into a renderer override — a bad value is refused before any markup
@@ -109,12 +109,12 @@ You converge over rounds; the human is in every round.
 
 **Broken diagram → route upstream (diagrams are embedded images, authored upstream).** Diagrams travel
 as raster images: a subagent loading the `dspx-diagram` skill authors a `.drawio` + its rendered PNG into
-the section's `assets/` upstream in `draft`, and the deliverable embeds the PNG (drawio's SVG export
+the section's `assets/` upstream in `apply`, and the deliverable embeds the PNG (drawio's SVG export
 collapses to a black box under the Typst track, so the embedded image is a PNG). Release does NOT draw,
 re-draw, or hand-edit a diagram — there is **no sanctioned raw-LaTeX** here any more (TikZ and the
 mermaid→TikZ swap are retired). If a figure looks wrong in proof (blank box, clipped, stale, wrong
 content), that is a content/asset defect: **route it upstream** — the human takes it back through
-`draft`, where the diagram subagent re-renders the image; then re-publish and re-release. A genuinely
+`apply`, where the diagram subagent re-renders the image; then re-publish and re-release. A genuinely
 format-level figure issue (the image is correct but too large / poorly placed on the page) is the only
 kind you handle here, and you handle it with the validated format knobs (image sizing), never by
 editing the picture.
@@ -126,7 +126,7 @@ editing the picture.
 - Read the proof images yourself every round — the defects you fix are the ones you can SEE.
 - Reach for the validated `--format-config` knobs first; keep content byte-locked.
 - Use the pack hand-edit only as an escape hatch when no knob fits, changing the smallest parameter.
-- Route a broken/blank/wrong diagram upstream — diagrams are images authored by the `dspx-diagram` subagent in `draft`; never redraw at release.
+- Route a broken/blank/wrong diagram upstream — diagrams are images authored by the `dspx-diagram` subagent in `apply`; never redraw at release.
 - Route any content-only blocker upstream as an audit finding; let the human re-edit → re-publish.
 - Measure with `docspec measure-fonts` instead of guessing font sizes by eye.
 
@@ -154,7 +154,7 @@ Human: "v1.2.0 is published — typeset it for delivery."
 > - Classify: table rules + body density = **format** → knobs. The 7-column overflow can't fit any
 >   page at readable size = **content** (too many columns) → route upstream.
 > - Adjust: a `--format-config` bumping leading and lightening table rules. Leave the matrix alone.
-> - Route upstream: raise an audit finding on the matrix — split or transpose in `edit`, then re-publish.
+> - Route upstream: raise an audit finding on the matrix — split or transpose in `apply`, then re-publish.
 >
 > **Round 2** — re-export, re-proof: p.3 and body read cleanly; the matrix is the open finding, the
 > human's call. Hand back: layout is clean except the matrix, which is upstream. Awaiting the human.

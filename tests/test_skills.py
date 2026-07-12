@@ -6,11 +6,10 @@ from dspx.commands import skills_cmd as skills_cmd
 from dspx.frontmatter import parse_frontmatter
 from dspx.skills import available_skills
 
-# 六個作者工作流 skill（裝成 skill＋command）
+# 五個作者工作流 skill（裝成 skill＋command）——draft+edit 已併為單一 apply
 _EXPECTED = {
     "dspx-develop",
-    "dspx-draft",
-    "dspx-edit",
+    "dspx-apply",
     "dspx-factcheck",
     "dspx-publish",
     "dspx-release",
@@ -81,14 +80,14 @@ def test_install_all_writes_skill_and_command_per_tool(tmp_path, monkeypatch):
         for name in _EXPECTED:
             assert (tmp_path / base / "skills" / name / "SKILL.md").is_file()
         meta, body = parse_frontmatter(
-            (tmp_path / base / "skills" / "dspx-draft" / "SKILL.md").read_text(encoding="utf-8"),
+            (tmp_path / base / "skills" / "dspx-apply" / "SKILL.md").read_text(encoding="utf-8"),
             source=tmp_path)
-        assert meta["name"] == "dspx-draft"
+        assert meta["name"] == "dspx-apply"
         assert meta["description"] and body.strip()
     # (2) command：各工具原生叫用位置
-    assert (tmp_path / ".claude" / "commands" / "dspx" / "draft.md").is_file()        # /dspx:draft
-    assert (tmp_path / ".agent" / "workflows" / "dspx-draft.md").is_file()            # antigravity
-    assert (codex_home / "prompts" / "dspx-draft.md").is_file()                        # codex 全域
+    assert (tmp_path / ".claude" / "commands" / "dspx" / "apply.md").is_file()        # /dspx:apply
+    assert (tmp_path / ".agent" / "workflows" / "dspx-apply.md").is_file()            # antigravity
+    assert (codex_home / "prompts" / "dspx-apply.md").is_file()                        # codex 全域
     # 不再產單檔 AGENTS.md（OpenSpec 已棄用）
     assert not (tmp_path / "AGENTS.md").exists()
 

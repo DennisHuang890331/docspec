@@ -10,6 +10,15 @@ a minor bump.
 
 ## [Unreleased]
 
+### Changed — draft and edit merge into a single `apply` skill
+
+- **The draft and edit workflow skills merge into one skill, `apply`**, with two engine-routed
+  modes — **rewrite** (blind-render a section's prose from its concept/brief; the former draft
+  skill) and **align** (line/sentence/proofread pass over already-rendered prose; the former edit
+  skill) — so the agent no longer chooses between two adjacent skills by hand.
+- `docspec status`'s sync-state → skill-routing legend, which named draft and edit as separate
+  routing targets, is removed; every routing case now points at `apply`.
+
 ### Added — prose cross-references become stable anchors with render-injected §numbers
 
 - **A prose cross-reference to another section/decision is now a stable anchor, not a hand-typed
@@ -200,7 +209,7 @@ a minor bump.
 ### Changed — diagram doctrine
 
 - The native-TikZ and mermaid→TikZ doctrine is retired in favor of embedded drawio images.
-  `draft` / `develop` / `release` stances updated; lint `Ve3` now flags both ```mermaid and raw
+  `apply` / `develop` / `release` stances updated; lint `Ve3` now flags both ```mermaid and raw
   `{=latex}`/`{=tex}` blocks (not backend-neutral; stripped on the Typst track) and points at the
   drawio image workflow.
 
@@ -232,7 +241,7 @@ a minor bump.
   `ancestor_brief_fingerprint` spans the full `governed-by` closure (not just the same-tree path),
   so a governance parent's brief change restales its cross-tree children too; `check` rejects a
   `governed-by` edge into a `deprecated` concept.
-- `draft` receives ancestor normative rulings and the project purpose in its aperture; `factcheck`'s
+- `apply` receives ancestor normative rulings and the project purpose in its aperture; `factcheck`'s
   projection foregrounds the coverage contract (`must_cover` + layout/kind).
 - Article-root cover title now reads from `corpus/<article>/group.yaml` (fixes a CJK document
   cover showing a romanized slug instead of its real title).
@@ -255,7 +264,7 @@ a minor bump.
   last one, corrupting a decision record without any warning).
 - `render --ack <section>` clears `stale-inherited` when the prose genuinely needs no change
   (refused if the section is actually `stale-own`/`stale-upstream` — rewrite it instead).
-- `edit`/`factcheck` re-examine the document's title/framing on a deep revision, not just the
+- `apply`/`factcheck` re-examine the document's title/framing on a deep revision, not just the
   touched section.
 - **Non-blocking semantic coherence** (no new engine gate): `factcheck`'s aperture projects a
   coherence contract — title/framing/own-brief/decision/figure checked against the current prose
@@ -290,7 +299,7 @@ a minor bump.
   decision's statement against the consuming section's prose, catching prose that still implements
   a since-superseded upstream truth.
 - `publish` runs a whole-document convergence checklist before the trigger, so an agent can't
-  declare victory right after `draft` and skip `edit`/`factcheck`.
+  declare victory right after `apply` and skip `factcheck`.
 - `docspec status` projects the sync-state → skill-routing legend (which skill picks up which
   staleness flag).
 
@@ -300,7 +309,7 @@ a minor bump.
   (concept-kind) target instead of silently accepting it; a superseded-but-present target is still
   allowed through as a legal transition window. `aperture` surfaces the live/superseded status of a
   realized decision and walks the supersede chain to its terminal live successor, instead of
-  silently anchoring `draft`'s output on dead truth.
+  silently anchoring `apply`'s output on dead truth.
 - **Transitive blast radius**: `docspec impact <concept>` now reports the *transitive*
   `governed-by` blast radius (every downstream document, not just direct children) — this matches
   what `status` actually re-stales, so `impact` no longer under-reports the effect of a change.
@@ -309,7 +318,7 @@ a minor bump.
 - **New `stale-style` ledger axis**: a `style_fingerprint` (hash of `writing-guide.md` +
   `glossary.yaml`) means restyling the shared writing guide is no longer invisible to staleness —
   every section written against the old style is flagged `stale-style` (lowest-priority axis: own >
-  upstream > inherited > style) and routes through `edit`, clearable via `render --ack`.
+  upstream > inherited > style) and routes through `apply`, clearable via `render --ack`.
 - **Diagram assets move to the delivery side (Model A)**: `.drawio` sources and their rendered PNGs
   now live under `docs/assets/` (or `docs/<article>/assets/` in a per-article layout), not
   `corpus/<section>/assets/` — diagrams are a deliverable, not backstage authoring source. This
@@ -324,8 +333,8 @@ a minor bump.
   `governed-by`, `Tier-N`, `factcheck`, `raise a finding`, …) leaking into deliverable prose.
   Writing-guide backbone rule 8 names the ban and requires a domain-language replacement.
 - **Backstage brief/coverage projections carry a non-narration guard**: `instructions` marks the
-  backstage brief/coverage/coherence/ancestor-normative blocks it projects to `draft`/`develop` as
-  "obey, never narrate" — `draft`/`develop` no longer open a section with a
+  backstage brief/coverage/coherence/ancestor-normative blocks it projects to `apply`/`develop` as
+  "obey, never narrate" — `apply`/`develop` no longer open a section with a
   "this section establishes…" role-framing announcement. Extended to the whole-document overview
   level: the root/overview section may not narrate the document's own chapter structure or refer to
   the document as a self-made artifact ("this spec splits the work into…").
