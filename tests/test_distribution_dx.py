@@ -14,7 +14,6 @@ from dspx import _install_source
 from dspx import cli
 from dspx.commands.maintenance import init as init_cmd
 from dspx.commands.maintenance import self_update as su_cmd
-from dspx.commands.maintenance import upgrade as upgrade_cmd
 from dspx.commands.maintenance import version as version_cmd
 
 
@@ -126,13 +125,6 @@ def test_typst_version_missing_hints(monkeypatch):
     from dspx import paths
     monkeypatch.setattr(paths, "resolve_typst", lambda: None)
     assert "docspec setup" in version_cmd._typst_version()
-
-
-# ── upgrade HELP assets-only 首句 ──────────────────────────────────
-
-def test_upgrade_help_states_assets_only_up_front():
-    assert upgrade_cmd.HELP.startswith("(assets only")
-    assert "uv tool upgrade docspec" in upgrade_cmd.HELP
 
 
 # ── init 非阻塞更新檢查（全 mock）─────────────────────────────────

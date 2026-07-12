@@ -13,7 +13,6 @@ import yaml
 
 from dspx.commands.query import check as check_cmd
 from dspx.commands.query import lint as lint_cmd
-from dspx.commands.query import list_cmd
 from dspx.commands.corpus import new as new_cmd
 from dspx.commands.corpus import ready as ready_cmd
 from dspx.commands.query import show as show_cmd
@@ -191,10 +190,10 @@ def test_show_not_found_mentions_both_shapes(make_project, write_leaf, monkeypat
     monkeypatch.chdir(home.parent)
     assert show_cmd.run(["no/where"]) == 1
     err = capsys.readouterr().err
-    assert "id or section" in err and "docspec list" in err
+    assert "id or section" in err and "docspec status" in err
 
 
-# ── 4. list ──────────────────────────────────────────────────────────────────
+# ── 4. status: group nodes（list 已併入 status；group 列由 status 補上）─────────────
 
 def _titled_group_corpus(home, write_leaf):
     write_leaf(home, "demo/intro", concept={"id": "ci", "title": "導言", "order": 1,
@@ -203,129 +202,34 @@ def _titled_group_corpus(home, write_leaf):
                                                   "concept": "y"})
     gdir = home / "corpus" / "demo" / "guide"
     (gdir / "group.yaml").write_text(
-        yaml.safe_dump({"title": "操作指南", "order": 2}, allow_unicode=True), encoding="utf-8")
+        yaml.safe_dump({"title": "操作指南", "order": 2}, allow_unicode=True),
+        encoding="utf-8")
 
 
-def test_list_group_row_with_localized_title(make_project, write_leaf, monkeypatch, capsys):
-    """4.2a：titled group.yaml → group 列（text＋json）帶在地化標題、kind=group。"""
+def test_status_group_node_with_localized_title(make_project, write_leaf, monkeypatch, capsys):
+    """titled group.yaml → status 的 group 列（text＋json）帶在地化標題。"""
     home = make_project()
     _titled_group_corpus(home, write_leaf)
     monkeypatch.chdir(home.parent)
-    assert list_cmd.run([]) == 0
+    assert status_cmd.run([]) == 0
     assert "[group] demo/guide/ — 操作指南" in capsys.readouterr().out
-    assert list_cmd.run(["--json"]) == 0
-    rows = json.loads(capsys.readouterr().out)
-    g = next(r for r in rows if r["section"] == "demo/guide")
-    assert g["kind"] == "group" and g["title"] == "操作指南"
-    assert g["id"] is None and g["concept"] is None and g["status"] is None
-    assert g["order"] == 2.0                       # group.yaml order
+    assert status_cmd.run(["--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    g = next(r for r in data["groups"] if r["section"] == "demo/guide")
+    assert g["title"] == "操作指南" and g["order"] == 2.0 and g["article"] == "demo"
 
 
-def test_list_rows_carry_kind_and_existing_keys(make_project, write_leaf, monkeypatch, capsys):
-    """4.2b：leaf 列 kind=leaf、develop-only 列 kind=develop-only；既有 key 全在。"""
+def test_status_group_nodes_scoped_to_article(make_project, write_leaf, monkeypatch, capsys):
+    """status <article> 的 group 列只含該文章；--section 指單一 leaf 時不列 group。"""
     home = make_project()
-    write_leaf(home, "g/x", concept={"id": "cx", "title": "X", "order": 1, "concept": "one"},
-               decisions=_dec("d1"))
+    _titled_group_corpus(home, write_leaf)
+    write_leaf(home, "other/g/x", concept={"id": "ox", "title": "X", "order": 1, "concept": "z"})
     monkeypatch.chdir(home.parent)
-    new_cmd.run(["g/fresh"])
-    capsys.readouterr()
-    assert list_cmd.run(["--json"]) == 0
-    rows = json.loads(capsys.readouterr().out)
-    leaf = next(r for r in rows if r["section"] == "g/x")
-    assert leaf["kind"] == "leaf"
-    assert {"section", "article", "title", "id", "order", "concept", "status"} <= set(leaf)
-    assert leaf["concept"] == "one" and leaf["status"] == "ready"     # 既有值不變
-    dev = next(r for r in rows if r["section"] == "g/fresh")
-    assert dev["kind"] == "develop-only" and dev["status"] == "developing"
-
-
-def test_list_scoped_to_article(make_project, write_leaf, monkeypatch, capsys):
-    """4.1：list <article> 只列該文章；unknown → pinned stderr＋exit 1。"""
-    home = make_project()
-    write_leaf(home, "a/x", concept={"id": "ca", "title": "X", "order": 1})
-    write_leaf(home, "b/y", concept={"id": "cb", "title": "Y", "order": 1})
-    monkeypatch.chdir(home.parent)
-    assert list_cmd.run(["a", "--json"]) == 0
-    rows = json.loads(capsys.readouterr().out)
-    assert {r["article"] for r in rows} == {"a"}
-    assert list_cmd.run(["nope"]) == 1
-    assert 'no leaf sections found for article "nope"' in capsys.readouterr().err
-
-
-def test_list_noarg_text_unchanged_on_groupless_corpus(make_project, write_leaf,
-                                                       monkeypatch, capsys):
-    """4.2d：無 group 的 corpus，no-arg TEXT 輸出與改動前 golden 逐位元相同。"""
-    home = make_project()
-    write_leaf(home, "g/x", concept={"id": "cx", "title": "X", "order": 1})
-    write_leaf(home, "g/y", concept={"id": "cy", "title": "Y", "order": 2})
-    monkeypatch.chdir(home.parent)
-    assert list_cmd.run([]) == 0
-    golden = "\ng/\n    g/x — X\n    g/y — Y\n"    # 改動前輸出（byte-compare）
-    assert capsys.readouterr().out == golden
-
-
-def _outline_order_corpus(home, write_leaf):
-    """projection-order-and-map-fixes 3.3 fixture：末節 order 與字典序相反（annex-b 字典序
-    最前、order=99 殿後；foreword order=0.5 最前）＋ annex 群 group.yaml order 殿後。"""
-    write_leaf(home, "demo/foreword", concept={"id": "c-fw", "title": "前言", "order": 0.5,
-                                               "concept": "開場"})
-    write_leaf(home, "demo/intro", concept={"id": "c-in", "title": "簡介", "order": 1,
-                                            "concept": "導入"})
-    write_leaf(home, "demo/annex-b/ground", concept={"id": "c-bg", "title": "地面", "order": 1,
-                                                     "concept": "附錄內容"})
-    (home / "corpus" / "demo" / "annex-b" / "group.yaml").write_text(
-        yaml.safe_dump({"title": "附錄B", "order": 99}, allow_unicode=True), encoding="utf-8")
-
-
-def test_list_text_follows_outline_order(make_project, write_leaf, monkeypatch, capsys):
-    """3.3：text 輸出依共用 outline 排序器（非字典序；group order 生效、group 列 interleave
-    進 outline 位置）；縮排／[group] 標記格式不變。"""
-    home = make_project()
-    _outline_order_corpus(home, write_leaf)
-    monkeypatch.chdir(home.parent)
-    assert list_cmd.run([]) == 0
-    out = capsys.readouterr().out
-    golden = ("\ndemo/\n"
-              "    demo/foreword — 前言\n"
-              "    demo/intro — 簡介\n"
-              "    [group] demo/annex-b/ — 附錄B\n"
-              "      demo/annex-b/ground — 地面\n")
-    assert out == golden          # 順序＝outline（字典序會是 annex-b 最前）；格式逐 byte 不變
-
-
-def test_list_json_follows_outline_order_fields_unchanged(make_project, write_leaf,
-                                                          monkeypatch, capsys):
-    """3.3：--json 列序同 text（leaf/group interleave 進 outline 順序）；欄位名值不變。"""
-    home = make_project()
-    _outline_order_corpus(home, write_leaf)
-    monkeypatch.chdir(home.parent)
-    assert list_cmd.run(["--json"]) == 0
-    rows = json.loads(capsys.readouterr().out)
-    assert [r["section"] for r in rows] == [
-        "demo/foreword", "demo/intro", "demo/annex-b", "demo/annex-b/ground"]
-    g = next(r for r in rows if r["kind"] == "group")
-    assert set(g) == {"section", "article", "title", "id", "order", "concept", "status", "kind"}
-    assert g["title"] == "附錄B" and g["order"] == 99.0 and g["id"] is None
-
-
-def test_list_develop_only_interleaves_at_default_order(make_project, write_leaf,
-                                                        monkeypatch, capsys):
-    """3.3：develop-only 節無 concept order → 預設 0.0 參與 outline 排序（interleave、不掉隊）；
-    article 之間維持字典序分組。"""
-    home = make_project()
-    _outline_order_corpus(home, write_leaf)
-    write_leaf(home, "aaa/x", concept={"id": "c-ax", "title": "X", "order": 1, "concept": "x"})
-    monkeypatch.chdir(home.parent)
-    new_cmd.run(["demo/fresh"])
-    capsys.readouterr()
-    assert list_cmd.run(["--json"]) == 0
-    rows = json.loads(capsys.readouterr().out)
-    secs = [r["section"] for r in rows]
-    # article 間字典序：aaa 在 demo 前；demo 內 develop-only（order 預設 0.0）排最前
-    assert secs == ["aaa/x", "demo/fresh", "demo/foreword", "demo/intro",
-                    "demo/annex-b", "demo/annex-b/ground"]
-    dev = next(r for r in rows if r["section"] == "demo/fresh")
-    assert dev["kind"] == "develop-only" and dev["status"] == "developing"
+    assert status_cmd.run(["demo", "--json"]) == 0
+    groups = json.loads(capsys.readouterr().out)["groups"]
+    assert {g["section"] for g in groups} == {"demo/guide"}
+    assert status_cmd.run(["--section", "demo/intro", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["groups"] == []
 
 
 # ── 5. status / check / lint scoping ────────────────────────────────────────

@@ -190,7 +190,7 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
         article = leaf.article
         art_leaves = [lf for lf in leaves if lf.article == article]
         order_by_section = outline_order_by_section(layout, art_leaves)
-        # 章號同源：與 render 交付物、`docspec list` 走同一 outline_numbering（單一真相＝order＋
+        # 章號同源：與 render 交付物、`docspec status` 走同一 outline_numbering（單一真相＝order＋
         # 樹位置＋numbering 政策）；draft 看得到每節推導章號（None＝根節/numbering:none＝不編號）。
         numbers = outline_numbering(layout, art_leaves, article)
         rows = [

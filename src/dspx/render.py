@@ -424,7 +424,7 @@ def _depth(article: str, section: str) -> int:
     return len([p for p in section.split("/") if p]) - 1
 
 
-# ── outline 排序拓樸：引擎單一共用來源（render 正史；aperture document map／`docspec list`
+# ── outline 排序拓樸：引擎單一共用來源（render 正史；aperture document map／`docspec status` group 列
 #    一律 import 這三個函式，勿另寫副本——副本已實證漂移：漏讀 group.yaml order、退回字典序）──
 
 def outline_order_by_section(layout: Layout, leaves: list[Leaf]) -> dict[str, float]:
@@ -481,7 +481,7 @@ def outline_numbering(layout: Layout, art_leaves: list[Leaf],
 
     回傳 section → 顯示標籤：str（如 `6.`／`6.1`／`附錄 A`／`A.1`）或 None（`numbering: none`＝不
     編號）；不在表內的 section（如文章根節＝文件標題）＝無編號。章號 derive 自 outline 排序拓樸
-    （與 render／aperture document-map／`docspec list` 同一套 `outline_order_by_section`＋
+    （與 render／aperture document-map／`docspec status` 同一套 `outline_order_by_section`＋
     `outline_sort_key`）＋各節 `numbering` 政策——corpus title 永不含章號，單一真相＝order＋樹位
     置＋政策，重排即自動重編號（散文不動、指紋照 F2 沿用）。
 

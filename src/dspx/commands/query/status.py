@@ -252,8 +252,22 @@ def run(argv: list[str]) -> int:
 
     needs_migration_articles = sorted(a for a, m in migration_by_article.items() if m)
 
+    # 分組節點列（吸收原 `docspec list` 唯一多出的能力）：concept-less 的 group 目錄，
+    # 帶 group.yaml 在地化標題/order。--section 指到單一 leaf 時不列 group。
+    from dspx.render import _group_order, _group_title, outline_group_nodes
+    group_rows: list[dict] = []
+    if not args.section:
+        for gs in outline_group_nodes(leaves):
+            if args.article and gs.split("/", 1)[0] != args.article:
+                continue
+            group_rows.append({
+                "section": gs, "article": gs.split("/", 1)[0],
+                "title": _group_title(layout, gs, gs.rsplit("/", 1)[-1]),
+                "order": _group_order(layout, gs)})
+
     if args.as_json:
         print(json.dumps({"checkOk": check_ok, "sections": rows,
+                          "groups": group_rows,
                           "skeletonStale": skeleton_stale,
                           "needsMigration": needs_migration_articles},
                          ensure_ascii=False, indent=2))
@@ -292,6 +306,11 @@ def run(argv: list[str]) -> int:
               "version (its values are not comparable with the current algorithms, so no per-axis "
               f"staleness is shown) — migrate once with `docspec render {art} --rebaseline` (prose "
               "is preserved; pending stale signals are absorbed into the new baseline)")
+    if group_rows:
+        print("\n  group nodes (concept-less grouping folders; title from group.yaml):")
+        for g in group_rows:
+            order = "" if g["order"] is None else f"  order={g['order']}"
+            print(f"    [group] {g['section']}/ — {g['title']}{order}")
     print("\n  flags: c=concept d=decisions m=material v=develop h=history")
     print("  (sync is state; the single apply skill routes its own mode from it — "
           "docspec instructions apply <section> projects the mode + verb)")

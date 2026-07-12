@@ -1,4 +1,0 @@
-# 整節退場記錄（僅存在於 corpus/_archive/ 封存包內；由 `docspec retire-section` 機械寫入）。
-# 死決策不住這裡——就地留在原 decisions.yaml 標 superseded/deprecated。
-# draft 不讀此檔；factcheck/develop 查「當初為何退場」時才讀。
-entries: []

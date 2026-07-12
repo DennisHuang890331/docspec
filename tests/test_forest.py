@@ -334,7 +334,7 @@ def test_develop_forest_map_prints_anchors_and_catalogue_hint(make_project, writ
     out = capsys.readouterr().out
     assert "    anchor: c-a-root — A根  (a)" in out
     assert "    anchor: c-a-anchor — 深錨  (a/deep/anchor)" in out
-    assert "  (full concept catalogue of a document: docspec list <article> --json)" in out
+    assert "  (full concept catalogue of a document: docspec show <article> --concepts --json)" in out
     # 非 develop skill：forest=None → 無 anchor 行、無目錄指引
     assert instr.run(["apply", "b"]) == 0
     out2 = capsys.readouterr().out

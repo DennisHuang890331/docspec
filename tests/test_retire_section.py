@@ -6,8 +6,7 @@ import json
 
 import yaml
 
-from dspx.commands.corpus import retire as retire_cmd
-from dspx.commands.corpus import retire_section as rs_cmd
+from dspx.commands.corpus import retire as rs_cmd
 from dspx.commands.corpus import retired as retired_cmd
 from dspx.commands.query import status as status_cmd
 from dspx.layout import Layout
@@ -63,36 +62,6 @@ def test_retire_section_prefix_filter(make_project, write_leaf, monkeypatch, cap
     assert retired_cmd.run(["a"]) == 0
     out = capsys.readouterr().out
     assert "a/x" in out and "b/y" not in out
-
-
-def test_retire_decision_reports_in_place_non_mutating(make_project, write_leaf, monkeypatch,
-                                                       capsys):
-    """contract-slimming D3：retire＝純報告——死決策**留在原 decisions.yaml**，
-    不搬 history.yaml、不寫 history.md、零檔案異動。"""
-    home = make_project()
-    write_leaf(home, "a/x",
-               concept={"id": "c1", "title": "X", "order": 1},
-               decisions=[
-                   {"id": "d-old", "kind": "normative", "status": "deprecated",
-                    "statement": "鎖 Linux", "rationale": "當時只有 Linux wheel",
-                    "rejected": ["MQTT", "gRPC"]},
-                   {"id": "d-new", "kind": "normative", "status": "accepted",
-                    "statement": "雙語"},
-               ])
-    monkeypatch.chdir(home.parent)
-    leaf = home / "corpus" / "a" / "x"
-    dec_before = (leaf / "decisions.yaml").read_bytes()
-    assert retire_cmd.run(["a/x"]) == 0                          # retire＝純報告、零寫入
-    out = capsys.readouterr().out
-    assert "d-old" in out and "deprecated" in out                # 逐條點名死決策
-    assert "STAY IN PLACE" in out                                # 就地即終態、無物可搬
-    # 零寫入：decisions.yaml 位元不變（d-old 連 rationale/rejected 都原樣留著）
-    assert (leaf / "decisions.yaml").read_bytes() == dec_before
-    dec = yaml.safe_load((leaf / "decisions.yaml").read_text(encoding="utf-8"))
-    assert [d["id"] for d in dec["entries"]] == ["d-old", "d-new"]
-    # 不再生 live 樹 history.yaml / history.md
-    assert not (leaf / "history.yaml").exists()
-    assert not (leaf / "history.md").exists()
 
 
 def test_retire_section_rejects_unknown(make_project, write_leaf, monkeypatch):

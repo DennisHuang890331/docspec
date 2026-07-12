@@ -1,5 +1,8 @@
-"""Phase F — 散布/更新 UX：doctor（唯讀診斷）、upgrade（資產層對齊）、version（三版本）、
-init 排版提示。連網一律 mock（CI 絕不真連網）。"""
+"""Phase F — 散布/更新 UX：doctor（唯讀診斷）、setup（資產層安裝＋對齊已裝）、version（三版本）、
+init 排版提示。連網一律 mock（CI 絕不真連網）。
+
+（upgrade 已併入 setup：setup 冪等，且偵測到已裝 TinyTeX 就對齊——原 upgrade 的「對齊已裝資產」
+職責＝setup 的一個切面。）"""
 
 from __future__ import annotations
 
@@ -12,7 +15,6 @@ from dspx import paths
 from dspx.commands.maintenance import doctor as doctor_cmd
 from dspx.commands.maintenance import init as init_cmd
 from dspx.commands.maintenance import setup as setup_cmd
-from dspx.commands.maintenance import upgrade as upgrade_cmd
 from dspx.commands.maintenance import version as version_cmd
 
 
@@ -76,7 +78,7 @@ def test_doctor_missing_fonts_fails(monkeypatch, tmp_path, capsys):
     assert doctor_cmd.run([]) == 1
     out = capsys.readouterr().out
     assert "[FAIL]" in out
-    assert "docspec upgrade" in out
+    assert "docspec setup" in out
     assert paths.REQUIRED_FONT_FILES[0] in out
 
 
@@ -98,7 +100,7 @@ def test_doctor_lock_missing_packages_warns(monkeypatch, tmp_path, capsys):
     assert doctor_cmd.run([]) == 0      # WARN 不致非零
     out = capsys.readouterr().out
     assert "[WARN]" in out
-    assert "docspec upgrade" in out
+    assert "docspec setup" in out
 
 
 def test_doctor_no_lock_warns_setup(monkeypatch, tmp_path, capsys):
@@ -207,33 +209,35 @@ def test_cli_version_flag_uses_report(monkeypatch, tmp_path, capsys):
     assert "TinyTeX" in out and "pandoc" in out
 
 
-# ── upgrade：資產層、重用 setup、冪等、印程式更新提示 ──────────────────
+# ── setup：資產層安裝、對齊已裝 TinyTeX（吸收 upgrade）、印程式更新提示 ──────────────────
 
-def test_upgrade_reuses_setup_and_prints_program_hint(monkeypatch, tmp_path, capsys):
+def test_setup_aligns_installed_tinytex_and_prints_program_hint(monkeypatch, tmp_path, capsys):
+    """setup 偵測到已裝 TinyTeX（tlmgr_path 命中）就對齊它（無 --with-latex 也對齊）＝原 upgrade
+    的「對齊已裝資產」職責；末尾印程式更新提示（uv 換 wheel）。"""
     monkeypatch.setattr(paths, "data_dir", lambda: tmp_path)
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_platform_key", lambda: "windows")
+    monkeypatch.setattr(setup_cmd, "_platform_key", lambda: "windows")
     calls = []
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_tinytex",
+    monkeypatch.setattr(setup_cmd, "_ensure_tinytex",
                         lambda *a, **k: calls.append("tinytex") or True)
-    # TinyTeX 已裝（tlmgr_path 命中）→ upgrade 才對齊它
+    # TinyTeX 已裝（tlmgr_path 命中）→ setup 對齊它，即使沒給 --with-latex
     monkeypatch.setattr(paths, "tlmgr_path", lambda root: tmp_path / "tlmgr")
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_packages",
+    monkeypatch.setattr(setup_cmd, "_ensure_packages",
                         lambda tlmgr: (calls.append("pkgs") or (True, ["xecjk"])))
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_fonts",
+    monkeypatch.setattr(setup_cmd, "_ensure_fonts",
                         lambda **k: calls.append("fonts") or True)
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_pandoc",
+    monkeypatch.setattr(setup_cmd, "_ensure_pandoc",
                         lambda **k: calls.append("pandoc") or True)
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_typst",
+    monkeypatch.setattr(setup_cmd, "_ensure_typst",
                         lambda **k: calls.append("typst") or True)
     monkeypatch.setattr(paths, "resolve_xelatex", lambda: tmp_path / "xelatex")
     monkeypatch.setattr(paths, "resolve_pandoc", lambda: tmp_path / "pandoc")
     monkeypatch.setattr(paths, "resolve_typst", lambda: tmp_path / "typst")
     monkeypatch.setattr(paths, "resolve_drawio", lambda: None)
     written = {}
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_write_lock",
+    monkeypatch.setattr(setup_cmd, "_write_lock",
                         lambda tlmgr, xe, pkgs, pandoc=None, typst=None, drawio=None:
                         written.update(pkgs=pkgs, pandoc=pandoc, typst=typst))
-    assert upgrade_cmd.run([]) == 0
+    assert setup_cmd.run([]) == 0
     # 核心先（fonts/pandoc/typst），TinyTeX 已裝才對齊（tinytex/pkgs）
     assert calls == ["fonts", "pandoc", "typst", "tinytex", "pkgs"]
     assert written["pkgs"] == ["xecjk"] and written["typst"] == tmp_path / "typst"
@@ -242,35 +246,35 @@ def test_upgrade_reuses_setup_and_prints_program_hint(monkeypatch, tmp_path, cap
     assert "uv tool install" in out
 
 
-def test_upgrade_skips_tinytex_when_not_installed(monkeypatch, tmp_path):
-    """TinyTeX 未裝（tlmgr_path 回 None）且無 --with-latex → upgrade 不碰 TinyTeX（不硬塞）。"""
+def test_setup_skips_tinytex_when_not_installed(monkeypatch, tmp_path):
+    """TinyTeX 未裝（tlmgr_path 回 None）且無 --with-latex → setup 不碰 TinyTeX（不硬塞數百 MB）。"""
     monkeypatch.setattr(paths, "data_dir", lambda: tmp_path)
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_platform_key", lambda: "windows")
+    monkeypatch.setattr(setup_cmd, "_platform_key", lambda: "windows")
     calls = []
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_fonts", lambda **k: calls.append("fonts") or True)
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_pandoc", lambda **k: calls.append("pandoc") or True)
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_typst", lambda **k: calls.append("typst") or True)
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_tinytex", lambda *a, **k: calls.append("tinytex") or True)
+    monkeypatch.setattr(setup_cmd, "_ensure_fonts", lambda **k: calls.append("fonts") or True)
+    monkeypatch.setattr(setup_cmd, "_ensure_pandoc", lambda **k: calls.append("pandoc") or True)
+    monkeypatch.setattr(setup_cmd, "_ensure_typst", lambda **k: calls.append("typst") or True)
+    monkeypatch.setattr(setup_cmd, "_ensure_tinytex", lambda *a, **k: calls.append("tinytex") or True)
     monkeypatch.setattr(paths, "tlmgr_path", lambda root: None)   # 未裝
     monkeypatch.setattr(paths, "resolve_xelatex", lambda: None)
     monkeypatch.setattr(paths, "resolve_pandoc", lambda: tmp_path / "pandoc")
     monkeypatch.setattr(paths, "resolve_typst", lambda: tmp_path / "typst")
     monkeypatch.setattr(paths, "resolve_drawio", lambda: None)
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_write_lock", lambda *a, **k: None)
-    assert upgrade_cmd.run([]) == 0
+    monkeypatch.setattr(setup_cmd, "_write_lock", lambda *a, **k: None)
+    assert setup_cmd.run([]) == 0
     assert "tinytex" not in calls and calls == ["fonts", "pandoc", "typst"]
 
 
-def test_upgrade_aborts_on_tinytex_failure(monkeypatch, tmp_path):
+def test_setup_aborts_on_tinytex_failure(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "data_dir", lambda: tmp_path)
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_platform_key", lambda: "windows")
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_fonts", lambda **k: True)
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_pandoc", lambda **k: True)
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_typst", lambda **k: True)
+    monkeypatch.setattr(setup_cmd, "_platform_key", lambda: "windows")
+    monkeypatch.setattr(setup_cmd, "_ensure_fonts", lambda **k: True)
+    monkeypatch.setattr(setup_cmd, "_ensure_pandoc", lambda **k: True)
+    monkeypatch.setattr(setup_cmd, "_ensure_typst", lambda **k: True)
     # 強制走 LaTeX 軌（--with-latex），且 TinyTeX 安裝失敗 → 中止
     monkeypatch.setattr(paths, "tlmgr_path", lambda root: None)
-    monkeypatch.setattr(upgrade_cmd.setup_cmd, "_ensure_tinytex", lambda *a, **k: False)
-    assert upgrade_cmd.run(["--with-latex"]) == 1
+    monkeypatch.setattr(setup_cmd, "_ensure_tinytex", lambda *a, **k: False)
+    assert setup_cmd.run(["--with-latex"]) == 1
 
 
 # ── init：被動排版提示（離線、可關）─────────────────────────────────
@@ -352,5 +356,6 @@ def test_hook_honors_help(capsys):
 
 def test_new_commands_registered():
     from dspx.commands import REGISTRY
-    for name in ("doctor", "upgrade", "version"):
+    for name in ("doctor", "setup", "version"):
         assert name in REGISTRY
+    assert "upgrade" not in REGISTRY          # 已併入 setup

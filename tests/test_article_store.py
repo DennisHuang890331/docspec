@@ -390,7 +390,8 @@ def test_store_new_ready_workbench_lifecycle(make_project, monkeypatch, tmp_path
     from dspx.commands.corpus import put as put_cmd
     from dspx.commands.corpus import ready as ready_cmd
     home = make_project()
-    _wl(home, "g", concept={"id": "c-root", "title": "根", "order": 1})
+    _wl(home, "g", concept={"id": "c-root", "title": "根", "order": 1,
+                            "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
     monkeypatch.chdir(home.parent)
     assert store_cmd.run(["migrate", "g"]) == 0
     layout = Layout(home)
@@ -414,20 +415,95 @@ def test_store_new_ready_workbench_lifecycle(make_project, monkeypatch, tmp_path
     assert not st.work_develop(layout, "g/newsec").is_file()
 
 
-def test_store_mv_and_retire_guarded(make_project, monkeypatch, capsys):
-    """mv/retire-section 對 store 篇＝誠實 fail-loud（結構化記錄搬移/退場為 Phase-C 後續），指路 store dump。"""
+def test_store_mv_repoints_records_sidesections_survive(make_project, monkeypatch, capsys):
+    """mv 對 store 篇＝真的改記錄 path 前綴（不搬資料夾）；旁節記錄逐欄不變、check 綠、revision+1。"""
     from dspx.commands.corpus import mv as mv_cmd
-    from dspx.commands.corpus import retire_section as retire_cmd
+    from dspx.commands.query import check as check_cmd
     home = make_project()
-    _wl(home, "g", concept={"id": "c-root", "title": "根", "order": 1})
-    _wl(home, "g/intro", concept={"id": "c-in", "title": "簡介", "order": 2})
+    _wl(home, "g", concept={"id": "c-root", "title": "根", "order": 1,
+                            "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
+    _wl(home, "g/intro", concept={"id": "c-in", "title": "簡介", "order": 2},
+        material="原材料\n")
+    _wl(home, "g/other", concept={"id": "c-ot", "title": "旁節", "order": 3},
+        decisions=[{"id": "d-o", "kind": "normative", "status": "accepted", "statement": "旁規"}])
     monkeypatch.chdir(home.parent)
     assert store_cmd.run(["migrate", "g"]) == 0
+    rev_before = st.load_article(st.store_path(Layout(home), "g")).revision
+    other_before = copy.deepcopy(st.load_article(st.store_path(Layout(home), "g")).record_by_path("g/other"))
 
-    assert mv_cmd.run(["g/intro", "g/preface"]) == 1
-    assert "store dump" in capsys.readouterr().err
-    assert retire_cmd.run(["g/intro"]) == 1
-    assert "store dump" in capsys.readouterr().err
+    capsys.readouterr()
+    assert mv_cmd.run(["g/intro", "g/preface"]) == 0
+    art = st.load_article(st.store_path(Layout(home), "g"))
+    assert art.record_by_path("g/intro") is None                 # 舊 path 記錄消失
+    moved = art.record_by_path("g/preface")
+    assert moved is not None and moved.concept["id"] == "c-in"    # 身份不變、path 改了
+    assert moved.material == "原材料\n"                            # 內容隨記錄走
+    assert art.revision == rev_before + 1                        # revision+1
+    # 旁節記錄逐欄不變（結構化搬移不碰非 target 記錄）
+    other_after = art.record_by_path("g/other")
+    assert other_after.concept == other_before.concept
+    assert other_after.decisions == other_before.decisions
+    # check 綠（mv 自驗）
+    assert check_cmd.run([]) == 0
+
+
+def test_store_retire_extracts_record_and_archives(make_project, monkeypatch, capsys):
+    """retire 對 store 篇＝抽記錄→ dump 封存包、活 store 移除記錄、revision+1；retired 查得到、旁節存活。"""
+    from dspx.commands.corpus import retire as retire_cmd
+    from dspx.commands.corpus import retired as retired_cmd
+    home = make_project()
+    _wl(home, "g", concept={"id": "c-root", "title": "根", "order": 1,
+                            "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
+    _wl(home, "g/intro", concept={"id": "c-in", "title": "簡介", "order": 2,
+                                  "concept": "新手第一課"},
+        material="材料內容\n")
+    _wl(home, "g/other", concept={"id": "c-ot", "title": "旁節", "order": 3})
+    monkeypatch.chdir(home.parent)
+    assert store_cmd.run(["migrate", "g"]) == 0
+    rev_before = st.load_article(st.store_path(Layout(home), "g")).revision
+
+    capsys.readouterr()
+    assert retire_cmd.run(["g/intro", "--in", "v2"]) == 0
+    art = st.load_article(st.store_path(Layout(home), "g"))
+    assert art.record_by_path("g/intro") is None                 # 活 store 已無此記錄
+    assert art.record_by_path("g/other") is not None             # 旁節存活
+    assert art.record_by_path("g") is not None                   # 根存活
+    assert art.revision == rev_before + 1
+    # 封存包＝可回復的散檔形態＋history.yaml（kind:section entry）
+    dest = home / "corpus" / "_archive" / "g__intro"
+    assert (dest / "concept.yaml").is_file()
+    assert (dest / "material.md").read_text(encoding="utf-8") == "材料內容\n"
+    hist = yaml.safe_load((dest / "history.yaml").read_text(encoding="utf-8"))
+    sec = next(e for e in hist["entries"] if e.get("kind") == "section")
+    assert sec["id"] == "c-in" and sec["statement"] == "新手第一課" and sec["retired-in"] == "v2"
+    # 引擎隱形：load_project 不再看到退場節
+    assert "g/intro" not in {lf.section for lf in load_project(Layout(home))}
+    # retired 查得到
+    capsys.readouterr()
+    assert retired_cmd.run([]) == 0
+    assert "g/intro" in capsys.readouterr().out
+
+
+def test_store_retire_whole_article_removes_store_and_migrates_deliverable(
+        make_project, monkeypatch, capsys):
+    """整篇 store 退役（退掉唯一/根節、活 store 無 leaf 殘留）→ 刪 store 檔＋交付物/帳本搬進封存包。"""
+    from dspx.commands.corpus import retire as retire_cmd
+    home = make_project()
+    _wl(home, "solo", concept={"id": "c-solo", "title": "獨", "order": 1,
+                               "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
+    monkeypatch.chdir(home.parent)
+    assert store_cmd.run(["migrate", "solo"]) == 0
+    render_cmd.run(["solo"])
+    latest = Layout(home).docs_latest("solo")
+    assert st.store_path(Layout(home), "solo").is_file() and latest.is_file()
+
+    capsys.readouterr()
+    assert retire_cmd.run(["solo"]) == 0
+    assert not st.store_path(Layout(home), "solo").is_file()      # 整篇退役＝刪 store 檔
+    dest = home / "corpus" / "_archive" / "solo"
+    assert (dest / "concept.yaml").is_file()                      # 記錄 dump 成散檔（可回復）
+    assert not latest.exists() and (dest / "_latest.md").is_file()  # 交付物搬進封存包
+    assert (dest / "solo.sections.yaml").is_file()               # 帳本一併搬走、docs/.ledger 無孤兒
 
 
 def test_store_get_put_roundtrip(make_project, monkeypatch, tmp_path, capsys):

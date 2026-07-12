@@ -9,7 +9,6 @@ from dspx.commands.query import lint as lint_cmd
 from dspx.commands.corpus import new as new_cmd
 from dspx.commands.deliverable import publish as publish_cmd
 from dspx.commands.corpus import ready as ready_cmd
-from dspx.commands.corpus import retire as retire_cmd
 
 
 def _entries(path):
@@ -78,7 +77,8 @@ def test_new_scaffolds_develop_only(make_project, monkeypatch):
 
 
 def test_new_then_instructions_on_uncrystallized(make_project, monkeypatch, capsys):
-    """未結晶節（只有 develop.md）也能投影；concept 模板的 id/order 已填好供結晶。"""
+    """未結晶節（只有 develop.md）也能投影；id/order 由 new 種在 develop.md 註解頭、投影可見
+    （template-slimming：concept/decisions 的 yaml 骨架改由 schema 單一推導，不再有手維護模板檔）。"""
     import json
     from dspx.commands.projection import instructions as instr
     home = make_project()
@@ -88,9 +88,14 @@ def test_new_then_instructions_on_uncrystallized(make_project, monkeypatch, caps
     capsys.readouterr()
     assert instr.run(["develop", "g/b", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
-    tpl = "".join(w.get("template") or "" for w in data["writes"])
-    assert "sec-" in tpl          # concept 模板 id 已填
-    assert "order: 2" in tpl      # 同層第二個 → order 接龍 2
+    # id/order 種在 develop.md（投影的 reads）——結晶時 copy 進 concept.yaml
+    dev = data["reads"].get("develop", "")
+    assert "sec-" in dev          # new 種的穩定 id
+    assert "order: 2" in dev      # 同層第二個 → order 接龍 2
+    # concept 的可貼骨架＝schema 單一推導（yaml_skeleton），不再來自模板檔
+    concept_w = next(w for w in data["writes"] if w["id"] == "concept")
+    assert concept_w["template"] is None                     # 模板檔已刪
+    assert "concept" in (concept_w.get("yamlSkeleton") or "")  # 骨架由 schema 推導
 
 
 def test_new_seeds_develop_header_with_id_title_order(make_project, monkeypatch):
@@ -187,16 +192,13 @@ def test_retired_lists_active_decision_retirements(make_project, write_leaf, mon
 def test_show_addresses_dead_decision_in_place(make_project, write_leaf, monkeypatch, capsys):
     """contract-slimming D3：死決策留原 decisions.yaml、就地可 show（不搬 history.yaml）。"""
     import json
-    from dspx.commands.corpus import retire as retire_cmd
     from dspx.commands.query import show
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1},
                decisions=[{"id": "d-old", "kind": "normative", "status": "deprecated",
                            "statement": "old", "rationale": "because reasons"}])
     monkeypatch.chdir(home.parent)
-    assert retire_cmd.run(["a/x"]) == 0        # 純報告、零寫入
-    assert not (home / "corpus" / "a" / "x" / "history.yaml").exists()
-    capsys.readouterr()
+    assert not (home / "corpus" / "a" / "x" / "history.yaml").exists()  # 死決策就地、不搬 history
     # 死決策留原檔＝show 就地定址（kind:decision，rationale 直接在條目上）
     assert show.run(["d-old", "--json"]) == 0
     p = json.loads(capsys.readouterr().out)
@@ -387,38 +389,41 @@ def test_factcheck_gets_ancestor_normative(make_project, write_leaf, monkeypatch
     assert any(d["id"] == "dec-sot" for a in draft_an for d in a["decisions"])
 
 
-def test_list_json_includes_concept_and_status(make_project, write_leaf, monkeypatch, capsys):
+def test_status_concept_and_ready_via_show_and_status(make_project, write_leaf, monkeypatch, capsys):
+    """（list 已併入 status；per-leaf concept 一句話改由 `show <article> --concepts` 查、
+    ready 狀態由 status 查。）"""
     import json
-    from dspx.commands.query import list_cmd
+    from dspx.commands.query import show as show_cmd
+    from dspx.commands.query import status as status_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "the one-liner"},
                decisions=[{"id": "d1", "kind": "normative", "status": "accepted", "statement": "s"}])
     monkeypatch.chdir(home.parent)
-    assert list_cmd.run(["--json"]) == 0
-    rows = json.loads(capsys.readouterr().out)
-    row = next(r for r in rows if r["section"] == "g/x")
-    assert row["concept"] == "the one-liner"
-    assert row["status"] == "ready"
+    assert show_cmd.run(["g", "--concepts", "--json"]) == 0
+    sec = next(s for s in json.loads(capsys.readouterr().out)["sections"] if s["section"] == "g/x")
+    assert sec["concept"] == "the one-liner"
+    assert status_cmd.run(["--json"]) == 0
+    row = next(r for r in json.loads(capsys.readouterr().out)["sections"] if r["section"] == "g/x")
+    assert row["state"] == "ready"
 
 
-def test_list_shows_develop_only_sections(make_project, monkeypatch, capsys):
-    """只有 develop.md（未結晶）的節：status 看得到，list 也要看得到（同 liveness 判準），
-    不可誤報 Corpus is empty。"""
+def test_status_shows_develop_only_sections(make_project, monkeypatch, capsys):
+    """只有 develop.md（未結晶）的節：status 看得到、標 developing，不可誤報 empty。"""
     import json
-    from dspx.commands.query import list_cmd
+    from dspx.commands.query import status as status_cmd
     from dspx.commands.corpus import new as new_cmd
     home = make_project()
     monkeypatch.chdir(home.parent)
     new_cmd.run(["g/intro"])                      # 只建 develop.md、未結晶
     # text 模式：不說 empty、列出該節並標 developing
-    assert list_cmd.run([]) == 0
+    assert status_cmd.run([]) == 0
     out = capsys.readouterr().out
-    assert "Corpus is empty" not in out
+    assert "corpus is empty" not in out.lower()
     assert "g/intro" in out and "developing" in out
-    # json 模式：含該節、status=developing
-    assert list_cmd.run(["--json"]) == 0
-    rows = json.loads(capsys.readouterr().out)
-    assert any(r["section"] == "g/intro" and r["status"] == "developing" for r in rows)
+    # json 模式：含該節、state=developing
+    assert status_cmd.run(["--json"]) == 0
+    rows = json.loads(capsys.readouterr().out)["sections"]
+    assert any(r["section"] == "g/intro" and r["state"] == "developing" for r in rows)
 
 
 def test_hook_postcheck_flags_incomplete(make_project, write_leaf, monkeypatch):
@@ -449,8 +454,11 @@ def test_hook_postcheck_never_disturbs(tmp_path):
     assert hook._postcheck({}) == 0
 
 
-def test_retire_is_non_mutating(make_project, write_leaf, monkeypatch, capsys):
-    """contract-slimming D3：retire 純報告、零寫入——死決策留原 decisions.yaml、不生 history.yaml。"""
+def test_dead_decisions_stay_in_place_shown_by_all_status(make_project, write_leaf, monkeypatch,
+                                                          capsys):
+    """contract-slimming D3（取代已刪的 retire 報告）：死決策留原 decisions.yaml，由
+    `docspec show <article> --decisions --all-status` 就地列出、標 DEAD；零檔案異動。"""
+    from dspx.commands.query import show as show_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1},
                decisions=[
@@ -460,13 +468,12 @@ def test_retire_is_non_mutating(make_project, write_leaf, monkeypatch, capsys):
     monkeypatch.chdir(home.parent)
     leaf = home / "corpus" / "g" / "x"
     before = (leaf / "decisions.yaml").read_bytes()
-    assert retire_cmd.run(["g/x"]) == 0
-    # 死決策留原檔（一個 byte 不動）、無 history.yaml、報告點名死決策
+    assert show_cmd.run(["g", "--decisions", "--all-status"]) == 0
+    out = capsys.readouterr().out
+    assert "d-old" in out and "DEAD" in out
     assert (leaf / "decisions.yaml").read_bytes() == before
     assert [e["id"] for e in _entries(leaf / "decisions.yaml")] == ["d-old", "d-new"]
     assert not (leaf / "history.yaml").exists()
-    assert "d-old" in capsys.readouterr().out
-    # 報告後 check 仍綠
     assert check_cmd.run([]) == 0
 
 

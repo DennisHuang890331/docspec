@@ -38,8 +38,10 @@ def _stub_setup_run(monkeypatch, tmp_path):
 
 
 def test_setup_core_does_not_install_tinytex(monkeypatch, tmp_path, capsys):
-    """核心 setup（無旗標）只裝 fonts+pandoc+typst，不碰 TinyTeX/tlmgr/drawio。"""
+    """核心 setup（無旗標、機器未裝 TinyTeX）只裝 fonts+pandoc+typst，不碰 TinyTeX/tlmgr/drawio。
+    （已裝 TinyTeX 才會被 setup 對齊——見 test_phase_f 的 aligns_installed_tinytex。）"""
     calls = _stub_setup_run(monkeypatch, tmp_path)
+    monkeypatch.setattr(paths, "tlmgr_path", lambda root: None)   # 機器未裝 TinyTeX
     assert setup_cmd.run([]) == 0
     assert "tinytex" not in calls and "pkgs" not in calls and "drawio" not in calls
     assert {"fonts", "pandoc", "typst"} <= set(calls)

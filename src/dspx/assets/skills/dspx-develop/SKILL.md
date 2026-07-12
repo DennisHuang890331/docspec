@@ -54,5 +54,5 @@ Open questions for you: <the framing calls still owed>
 - Don't auto-crystallize — graduating a section is the human's checkpoint.
 - Always fill `forbidden`; establish the byline once (a real value or an obvious RFC 2606 reserved placeholder, NEVER a plausible fabricated name).
 - A cross-section dependency is a structural edge (`realizes` / `governed-by`), never a prose mention and never parked in `sources:` (external provenance only) — only structured edges enter the staleness fingerprints.
-- After a pivot / supersede, sweep the metadata/asset layers the content-hash ledger can't see (descendant briefs, framing text, `concept.title`, figures, roadmap); mark prose dirty with `docspec stale` / `docspec redraft`, never a fake edit to `concept.yaml`.
+- After a pivot / supersede, sweep the metadata/asset layers the content-hash ledger can't see (descendant briefs, framing text, `concept.title`, figures, roadmap); mark prose dirty with `docspec stale <section>` (or `docspec stale <article>` for a whole re-projection), never a fake edit to `concept.yaml`.
 - Don't self-evaluate or victory-lap — present the state and hand back; the human (or a blind judge) assesses.

@@ -56,7 +56,7 @@ You author inside your agent's chat through the installed skills, so the docspec
 | `docspec setup` | download the PDF typesetting toolchain (only when you export a PDF) |
 | `docspec doctor` / `upgrade` / `version` | diagnose the environment / align the managed PDF toolchain / show version |
 
-`docspec --help` lists these human-facing commands, and the full agent-facing set is under `docspec --help-all`. Note that `docspec upgrade` aligns the PDF toolchain rather than docspec's own code; to update docspec, re-run the install command above.
+`docspec --help` lists these human-facing commands, and the full agent-facing set is under `docspec --help-all`. Note that `docspec setup` aligns the PDF toolchain (idempotent, and it also re-aligns already-installed assets) rather than docspec's own code; to update docspec, re-run the install command above.
 
 ## 🧠 How it works
 

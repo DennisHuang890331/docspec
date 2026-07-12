@@ -149,11 +149,14 @@ def run(argv: list[str]) -> int:
         sys.stderr.write("docspec: typst install did not complete — setup aborted.\n")
         return 1
 
-    # 4. TinyTeX + tlmgr packages — OPTIONAL（--with-latex；只給想本機編期刊 .tex 的人）
+    # 4. TinyTeX + tlmgr packages — OPTIONAL（--with-latex 明裝；或**偵測到已裝就對齊**——
+    #    setup 吸收了原 `docspec upgrade` 的「對齊已裝資產」職責：setup 冪等，upgrade 只是它的
+    #    一個切面。健康環境＝no-op、缺件補齊、程式帶新 manifest tag 後重抓。核心不硬塞數百 MB。
     tlmgr: Path | None = None
     xelatex = None
     packages: list[str] = []
-    if args.with_latex:
+    tinytex_present = paths.tlmgr_path(paths.tinytex_root()) is not None
+    if args.with_latex or tinytex_present:
         if not _ensure_tinytex(pkey, force=args.force, no_download=args.no_download,
                                use_dev_shortcut=not args.no_dev_shortcut):
             sys.stderr.write("docspec: TinyTeX install did not complete — setup aborted.\n")
@@ -192,4 +195,7 @@ def run(argv: list[str]) -> int:
     else:
         print("  draw.io: not installed (run `docspec setup --with-drawio` to add diagram rendering)")
     print("  From now on `docspec export <article>` / `docspec proof <article>` run purely off data_dir.")
+    # 兩軌更新心智：資產（本指令對齊）vs 程式碼（dspx wheel，用 uv 換）。setup 只碰資產層。
+    print("\nProgram code (the dspx wheel) is not updated here — use: "
+          "uv tool install --from <docspec path or PyPI> docspec --reinstall --no-cache")
     return 0

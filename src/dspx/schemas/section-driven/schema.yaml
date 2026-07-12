@@ -50,7 +50,7 @@ workflow:
     New = drill into an empty tree; revise = re-drill the affected subtree; same flow. docs/<article>/_latest is the projected deliverable.
   skills:
     - id: develop
-      summary: Developmental editor. Think freely in develop.md, then crystallize into concept/decisions/material; a superseded decision stays marked in its decisions.yaml, a whole obsolete section retires via docspec retire-section.
+      summary: Developmental editor. Think freely in develop.md, then crystallize into concept/decisions/material; a superseded decision stays marked in its decisions.yaml, a whole obsolete section retires via docspec retire.
       steps:
         - Read the forest map + roadmap first (docspec instructions develop <section>).
         - >-
@@ -123,13 +123,13 @@ workflow:
           perturb-render-revert dance) to force a re-stamp. Prose changed → plain docspec render.
           stale-norm (an ancestor's active normative ruling changed) → re-check the prose
           sentence by sentence against the new ruling first: conforming with no change needed →
-          render --ack <section>; violating → rewrite (escalate via docspec stale / redraft).
+          render --ack <section>; violating → rewrite (escalate via docspec stale).
           stale-inherited / stale-style with prose legitimately unchanged → render --ack <section>
           (refused on stale-own/upstream). stale-own / stale-upstream where the source change is
           structural wiring / metadata ONLY (realizes/governed-by re-wiring, order changes,
           sources: path moves, decided-in corrections, title renumbering) →
           render --ack-own <section> --reason <text>; a content-bearing change (must_cover,
-          breadth, a decision statement) → docspec stale / docspec redraft + rewrite mode, never ack-own.
+          breadth, a decision statement) → docspec stale <section> (or docspec stale <article> for a whole re-projection) + rewrite mode, never ack-own.
           Every verdict is journaled — give a real --reason; after an ack-own a factcheck
           follow-up is expected (you attested the prose still implements CHANGED source).
       transaction: render
@@ -230,7 +230,7 @@ authoring:
       - "prose changed → docspec render <article> (plain re-stamp)."
       - "stale-inherited / stale-style / stale-norm, prose reviewed against the moved brief / ruling / doctrine and legitimately unchanged → docspec render <article> --ack <section> (refused if the section is actually stale-own / stale-upstream — that means its own source changed and the prose genuinely needs rewriting)."
       - "stale-own / stale-upstream whose source change is STRUCTURAL WIRING / METADATA ONLY — a realizes / governed-by edge re-wired, an order change, a sources: path move, a decided-in correction, a title renumbering → docspec render <article> --ack-own <section> --reason <text>. This whitelist is EXHAUSTIVE; if the change is not on it, it is not an ack-own case. An ack-own attests the prose still implements CHANGED source, so a factcheck follow-up over the acked sections is expected (non-blocking)."
-      - "a content-bearing change (must_cover, breadth, or a decision statement moved) → the prose DOES need rewriting: escalate to rewrite mode via docspec stale <section> --reason / docspec redraft <article> --reason. NEVER ack-own a content change."
+      - "a content-bearing change (must_cover, breadth, or a decision statement moved) → the prose DOES need rewriting: escalate to rewrite mode via docspec stale <section> --reason (whole article: docspec stale <article> --reason). NEVER ack-own a content change."
     brief_envelope:
       - "brief audience / depth / layout / kind changed → review the existing prose, then ack-or-rewrite: --ack it if it still reads right under the new envelope, rewrite it if the new envelope demands different prose."
       - "brief breadth / must_cover / forbidden changed → rewrite (the coverage contract moved; re-render the leaf from its aperture) — this is never an ack case."
@@ -267,8 +267,8 @@ filing-rules:
     rule: "develop.md content distributes into exactly scope→concept / rulings→decisions / facts→material; rejected/superseded reasoning is recorded as a status:superseded decision that stays in decisions.yaml (never moved to a live-tree history.yaml); genuine throwaway is deleted. concept is required; decisions/material are on-demand (build only when the section owns rulings / has facts — never a fabricated empty container)."
     enforced-by: ready
   - id: retire-via-transaction
-    rule: "Retire a decision by marking it status: superseded/deprecated IN PLACE in its decisions.yaml (it stays addressable; docspec retire reports these, moves nothing); retire a whole section with docspec retire-section; rename/move a section folder ONLY via docspec mv — never hand-move/delete; published archive/ is immutable (hash-netted by lint)."
-    enforced-by: retire-section / mv / lint
+    rule: "Retire a decision by marking it status: superseded/deprecated IN PLACE in its decisions.yaml (it stays addressable; view them with docspec show <article> --decisions --all-status, nothing is moved); retire a whole section with docspec retire; rename/move a section folder ONLY via docspec mv — never hand-move/delete; published archive/ is immutable (hash-netted by lint)."
+    enforced-by: retire / mv / lint
   - id: sibling-dependency-via-realizes
     rule: "A dependency on ANOTHER section's decision — sibling or cross-document — is declared as a structural edge: concept.realizes (list of decision ids). Never park an internal decision id in sources: (external provenance only) and never rely on a bare id mention in prose — staleness (stale-upstream) and impact only see structural edges."
     enforced-by: check
@@ -439,7 +439,9 @@ artifacts:
     generates: concept.yaml
     kind: yaml
     description: The leaf section's governance and structural contract (one-line concept + writing envelope + source pointers + references).
-    template: templates/concept.yaml
+    # Single source of truth = this schema: the fillable scaffold is DERIVED (yaml_skeleton from the field
+    # contract below); there is no hand-maintained templates/concept.yaml to drift against. A fresh section's
+    # id/title/order are seeded into develop.md by `docspec new` and read at crystallization.
     instruction: instructions/concept.md
     requires: []
     aperture:
@@ -485,7 +487,7 @@ artifacts:
       set". A decisions.yaml that EXISTS but is structurally broken still fails loud (absence is legal, presence carries
       responsibility). Dead decisions stay HERE marked status: superseded/deprecated (addressable for the supersede chain
       / deps two-hop) — they are never relocated to a live-tree history.yaml.
-    template: templates/decisions.yaml
+    # scaffold DERIVED from the schema below (yaml_skeleton); no hand-maintained templates/decisions.yaml.
     instruction: instructions/decisions.md
     requires: []
     aperture:
@@ -540,7 +542,7 @@ artifacts:
     kind: yaml
     description: >
       A "lean index" of retirement records — NOT part of the live-tree leaf contract. It appears ONLY inside a
-      `corpus/_archive/<…>/` retirement package produced by the `docspec retire-section` transaction; a live leaf
+      `corpus/_archive/<…>/` retirement package produced by the `docspec retire` transaction; a live leaf
       directory never carries a history.yaml. (Dead DECISIONS are NOT relocated here — they stay in their owning
       decisions.yaml marked status: superseded/deprecated.) A retired SECTION's archived package holds one kind:section
       entry (id = that section's concept.id, with an archive link); the summary lives here (a one-line statement), the
@@ -548,7 +550,7 @@ artifacts:
       retirement = the archive folder itself. The agent queries via `docspec retired` (summary) / `docspec show <id>`
       (detail), and **never reads the raw files directly**. Loading an OLD project that still has a live-tree history.yaml
       stays backward-compatible (the engine reads it); `docspec tidy` reports it as migratable.
-    template: templates/history.yaml
+    # scaffold DERIVED from the schema below (yaml_skeleton); no hand-maintained templates/history.yaml.
     instruction: instructions/history.md
     requires: []
     aperture:

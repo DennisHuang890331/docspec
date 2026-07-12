@@ -36,7 +36,7 @@ def forest_view(leaves: list[Leaf], layout: Layout | None = None) -> dict:
 
     # anchor 候選＝root concept ∪「已被任一 leaf 的 governed-by 列為目標」的 concept（Decision 4）。
     # 不限跨文件邊——被列為治理目標＝定義上就是 anchor；刻意不列全部 concept（round-11 單文件
-    # 30 葉＝投影洪水），完整目錄由 `docspec list <article> --json` 提供。
+    # 30 葉＝投影洪水），完整目錄由 `docspec show <article> --concepts --json` 提供。
     governed_targets: set[str] = set()
     for lf in leaves:
         if lf.concept:

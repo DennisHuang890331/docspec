@@ -319,7 +319,7 @@ def run(argv: list[str]) -> int:
             print(f"  {h['childDoc']} → {h['parentDoc']}{warn}")
         for pair in f.get("parallel", []):
             print(f"  {pair[0]} ∥ {pair[1]}")
-        print("  (full concept catalogue of a document: docspec list <article> --json)")
+        print("  (full concept catalogue of a document: docspec show <article> --concepts --json)")
         print()
 
     if proj.roadmap is not None:

@@ -157,7 +157,7 @@ def run_archive(layout, schema, change: "chg.Change", *, override_drift: bool = 
         for sec, sync in absorbed:
             sys.stderr.write(f"    · {sec}  (was {sync})\n")
         sys.stderr.write("  if any needs real re-verification, open a follow-up change targeting it "
-                         "(or docspec redraft it).\n")
+                         "(or docspec stale <section> it).\n")
     return 0
 
 

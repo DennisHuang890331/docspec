@@ -10,6 +10,63 @@ a minor bump.
 
 ## [Unreleased]
 
+### Changed / Removed — command-surface consolidation (kill redundant commands, finish store lifecycle)
+
+Four commands were folded into the command that already owned their behavior, and the dead
+report-only `retire` was removed. Nothing is lost — every capability moved to a named home
+(recorded here + preserved in git history), the CLI just stops carrying triplets and empty shells.
+
+- **Removed `retire` (the non-mutating report).** The old `docspec retire <section>` only *reported*
+  dead decisions that already sit in place in `decisions.yaml`; it mutated nothing. That report is
+  replaced by the new classification view **`docspec show <article> --decisions --all-status`** (see
+  Added below), which lists every ruling incl. superseded/deprecated ones marked `⚰ DEAD`. This
+  collapsed the confusing triplet (report `retire` / transaction `retire-section` / query `retired`)
+  down to a pair (transaction `retire` / query `retired`).
+- **Renamed `retire-section` → `retire`.** The whole-section retirement transaction (move the section
+  subtree into `corpus/_archive/`, record a `kind: section` history entry, migrate an orphaned
+  article's deliverable + ledger) now *is* `docspec retire <section>`. All schema/instructions/skill
+  text that said `retire-section` now says `retire`.
+- **Merged `upgrade` → `setup`.** `docspec upgrade` only ever aligned the asset layer (fonts / pandoc
+  / typst / optional TinyTeX) — a strict subset of idempotent `setup`. `setup` now also **aligns an
+  already-installed TinyTeX** (detected via `tlmgr`) without requiring `--with-latex`, and prints the
+  two-track update reminder (assets via `setup`, program via `uv tool install … --reinstall`). Run
+  `docspec setup` where you used to run `docspec upgrade`. `doctor`'s fix hints now point at `setup`.
+- **Merged `list` → `status`.** `list`'s only capability that `status` lacked — **group-node rows**
+  (concept-less grouping folders with their localized `group.yaml` title/order) — is now emitted by
+  `status` (a `groups` array in `--json`, a "group nodes" block in text). Per-leaf concept one-liners
+  that `list --json` used to carry are available via `docspec show <article> --concepts`.
+- **Merged `redraft` → `stale`.** `docspec stale` now takes either a **leaf section** (mark one) or an
+  **article name** (mark every written section = whole re-projection, backing up `_latest.md` first —
+  the old `redraft` behavior). The verdicts-journal verb stays `stale` for a section and `redraft`
+  for a whole article, so the audit trail is unchanged.
+- **Removed the redundant `templates/concept.yaml` / `decisions.yaml` / `history.yaml`** (template
+  slimming). After the store backend landed, `docspec get` already derived its empty yaml scaffold
+  from the schema field contract (`yaml_skeleton`), never from these files; only the aperture
+  projection still read them, duplicating the schema-derived skeleton it also emits. The **schema is
+  now the single source of truth** for these three artifacts' scaffold (kept `generates:` +
+  `instruction:`, dropped `template:`). The `{id}/{title}/{order}` auto-fill they carried is already
+  provided by `docspec new` seeding `develop.md`. The **md templates (material / develop / history-md)
+  are unchanged** — those are genuinely read. Loading the deleted files was verified to have no other
+  code dependency before removal.
+
+### Added — store-backed `mv` / `retire`, and `show` classification views
+
+- **`docspec mv` and `docspec retire` now operate on store-backed articles** (previously they failed
+  loud with a "does not yet operate on store-backed article" Phase-C placeholder). `mv` rewrites the
+  affected records' `path` prefix in place (+ marker/audit/roadmap references), bumps `revision`,
+  self-verifies with `check`, and rolls back on failure with zero partial effect. `retire` extracts
+  the section subtree's records, dumps them into a recoverable scattered-file archive package under
+  `corpus/_archive/` (with the `kind: section` history entry), removes them from the live store, and
+  bumps `revision`; a whole-article retirement removes the store file and migrates the deliverable +
+  ledger into the archive. Side sections' records survive byte-for-byte.
+- **`docspec show <article> --decisions | --concepts | --material`** — forward classification views
+  across an article (or a section subtree), complementing the existing reverse views
+  (`--impact`/`--realized-by`/`--referenced-by`). `--decisions` lists each section's rulings
+  (path/id/kind/status/statement); `--decisions --all-status` also lists dead rulings (⚰ DEAD),
+  replacing the removed report `retire`. `--concepts` lists each section's one-line concept + its
+  *differential* brief (only the fields it overrides). `--material` lists which sections carry
+  material and each material's `## <type>: <title>` heading index. Both backends supported.
+
 ### Added — one-file-per-article store backend (article-store-backend, stage 2: A/B/C/D/E)
 
 - An article's corpus truth can now live in a single engine-owned `corpus/<article>.yaml` **store

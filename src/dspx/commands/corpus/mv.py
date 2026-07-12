@@ -8,6 +8,8 @@
      v1 範圍限 leaf/group、同一 article：article root（無 `/`）與跨 article 明確排除
      （root 牽動交付檔名/publish 凍結/journal，屬後續擴充）。身份（concept.id）不動、
      指紋帳本不手改——收尾提示 `render --rebaseline` 以新 key 重生。
+     **store 篇**（`corpus/<article>.yaml`）走結構化記錄搬移：改記錄的 path 前綴（不搬資料夾）、
+     revision+1、canonical 原子重寫，其餘（引用重寫、check 自驗、回滾）與 tree 版一致。
   2. **資產模式** `docspec mv docs/assets/old.png new.png`：改圖檔名＋以 basename 比對重寫所有
      `docs/*_latest.md` 與 corpus `material.md` 的 `![](…old.png)` 引用；同樣原子/回滾。
 """
@@ -236,17 +238,11 @@ def _run_section_mode(layout, schema, old_arg: str, new_arg: str) -> int:
         sys.stderr.write("docspec: source and destination are identical (nothing to move)\n")
         return 2
 
-    # ── 誠實邊界：store 篇的結構化記錄搬移＝Phase-C 後續（未落地）。不靜默走檔案粒度 mv（會對
-    #    store 篇無效／撞 phantom 夾）；指路 store dump ↔ load 的散檔逃生口。 ──
+    # ── backend 路由：store 篇改的是記錄的 path 前綴（不搬資料夾），走結構化記錄搬移。 ──
     from dspx import store as _store
-    for art in {layout.article_of(old), layout.article_of(new)}:
-        if _store.article_has_store(layout, art):
-            sys.stderr.write(
-                f"docspec: mv does not yet operate on store-backed article \"{art}\" "
-                f"(corpus/{art}.yaml). Rename/move a store section via `docspec store dump {art} "
-                "<DIR>`, mv in the scattered export, then `docspec store load` — the structured "
-                "record-move is a Phase-C follow-up.\n")
-            return 1
+    if (_store.article_has_store(layout, layout.article_of(old))
+            or _store.article_has_store(layout, layout.article_of(new))):
+        return _run_store_section_mode(layout, schema, old, new)
 
     src = layout.section_dir(old)
     dst = layout.section_dir(new)
@@ -257,7 +253,7 @@ def _run_section_mode(layout, schema, old_arg: str, new_arg: str) -> int:
     if not _is_section_folder(layout, src):
         sys.stderr.write(
             f"docspec: section \"{old}\" not found (needs a leaf with concept.yaml/develop.md or a "
-            "group folder containing sections). Use docspec status / docspec list for paths.\n")
+            "group folder containing sections). Use docspec status for paths.\n")
         return 1
 
     # v1 範圍：article root（無 `/`）不搬——交付檔名/publish 凍結/verdicts journal 綁 article 名。
@@ -336,6 +332,98 @@ def _run_section_mode(layout, schema, old_arg: str, new_arg: str) -> int:
     else:
         print("  (no path-keyed references pointed at the moved subtree)")
     print(f"  reminder: run `docspec render {article} --rebaseline` — the fingerprint ledger is "
+          "keyed by section path and is NOT hand-edited; rebaseline regenerates it for the new "
+          "paths (prose is preserved). Identity (concept.id) is unchanged.")
+    return 0
+
+
+# ── 節模式（store backend）────────────────────────────────────────────────
+
+def _run_store_section_mode(layout, schema, old: str, new: str) -> int:
+    """store 篇改名/搬移：改記錄的 path 前綴（不搬資料夾）＋同步重寫 docs marker/audit/roadmap
+    路徑引用；revision+1、canonical dump、原子寫；自跑 check 驗引用完整，失敗回滾零半套。"""
+    from dspx import store as _store
+
+    old_art, new_art = layout.article_of(old), layout.article_of(new)
+    # v1 範圍：article root 不搬、跨 article 不搬（同 tree 版；store 天生 per-article）。
+    if "/" not in old:
+        sys.stderr.write(
+            f"docspec: refusing to move article root \"{old}\" — the store file is keyed by the "
+            "article name (corpus/<article>.yaml); root moves are a later mv extension. v1 scope "
+            "is leaf/group.\n")
+        return 1
+    if "/" not in new:
+        sys.stderr.write(
+            f"docspec: destination \"{new}\" would be an article root (no parent segment); v1 mv "
+            "cannot promote a section to an article root.\n")
+        return 1
+    if old_art != new_art:
+        sys.stderr.write(
+            f"docspec: refusing cross-article move (\"{old_art}\" -> \"{new_art}\") — v1 mv is "
+            "same-article only.\n")
+        return 1
+
+    problem = validate_section_path(new)
+    if problem:
+        sys.stderr.write(f"docspec: refusing to move to \"{new}\": {problem}\n")
+        return 2
+
+    store_file = _store.store_path(layout, old_art)
+    art = _store.load_article(store_file, verify=True)
+    subtree = [r for r in art.records if r.path == old or r.path.startswith(old + "/")]
+    if not subtree:
+        sys.stderr.write(
+            f"docspec: section \"{old}\" not found in store corpus/{old_art}.yaml. "
+            "Use docspec status for paths.\n")
+        return 1
+    if any(r.path == new or r.path.startswith(new + "/") for r in art.records):
+        sys.stderr.write(
+            f"docspec: destination \"{new}\" already exists in the store; resolve it before moving.\n")
+        return 1
+
+    # mv 以 check 自驗——先要求綠（無法分辨既有錯與本次搬移造成的錯）。
+    pre = _check_result(layout, schema)
+    if not pre.ok:
+        sys.stderr.write(
+            "docspec: refusing to mv — docspec check is not green; mv self-verifies with check and "
+            "cannot tell a pre-existing error from one it caused. Fix these first:\n")
+        for err in pre.errors[:20]:
+            sys.stderr.write(f"    ✗ {err}\n")
+        return 1
+
+    touched = [
+        layout.docs_latest(old_art),
+        forest_audit_path(layout), doc_audit_path(layout, old_art),
+        forest_roadmap_path(layout), doc_roadmap_path(layout, old_art),
+    ]
+    snapshots = _snapshot([store_file] + touched)
+    report: list[str] = []
+    try:
+        for r in subtree:
+            remapped = _remap_section(r.path, old, new)
+            if remapped is not None:
+                report.append(f"corpus/{old_art}.yaml record path: {r.path} -> {remapped}")
+                r.path = remapped
+        art.revision += 1
+        _store.save_article(layout, art, schema)
+        report += _rewrite_latest_markers(layout.docs_latest(old_art), old, new)
+        report += _rewrite_audit_file(forest_audit_path(layout), old, new)
+        report += _rewrite_audit_file(doc_audit_path(layout, old_art), old, new)
+        report += _rewrite_roadmap_file(forest_roadmap_path(layout), old, new)
+        report += _rewrite_roadmap_file(doc_roadmap_path(layout, old_art), old, new)
+        result = _check_result(layout, schema)
+        if not result.ok:
+            raise _MvAbort("check went red after the move:\n    "
+                           + "\n    ".join(f"✗ {e}" for e in result.errors[:20]))
+    except (_MvAbort, Exception) as exc:  # noqa: BLE001 — 任何失敗都要回滾
+        _restore(snapshots)
+        sys.stderr.write(f"docspec: mv aborted (no partial effect): {exc}\n")
+        return 1
+
+    print(f"mv: \"{old}\" -> \"{new}\" (store records repointed; references rewritten; check green)")
+    for c in report:
+        print(f"  {c}")
+    print(f"  reminder: run `docspec render {old_art} --rebaseline` — the fingerprint ledger is "
           "keyed by section path and is NOT hand-edited; rebaseline regenerates it for the new "
           "paths (prose is preserved). Identity (concept.id) is unchanged.")
     return 0

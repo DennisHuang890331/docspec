@@ -56,7 +56,7 @@ docspec init                  # 建專案；裝進 Claude Code、Codex 或 Antig
 | `docspec setup` | 下載 PDF 排版工具鏈（只在要出 PDF 時） |
 | `docspec doctor` / `upgrade` / `version` | 環境體檢 / 對齊受控 PDF 工具鏈 / 看版本 |
 
-`docspec --help` 列的是這些給人用的指令，agent 在背後用的完整清單則在 `docspec --help-all`。注意 `docspec upgrade` 對齊的是 PDF 工具鏈，而不是 docspec 程式本身；要更新 docspec，重跑上面的安裝指令即可。
+`docspec --help` 列的是這些給人用的指令，agent 在背後用的完整清單則在 `docspec --help-all`。注意 `docspec setup` 對齊的是 PDF 工具鏈（冪等，且會對齊已裝資產），而不是 docspec 程式本身；要更新 docspec，重跑上面的安裝指令即可。
 
 ## 🧠 運作方式
 

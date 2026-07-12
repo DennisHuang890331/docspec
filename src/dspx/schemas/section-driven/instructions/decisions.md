@@ -6,7 +6,7 @@
 
 每條決策：
 - `kind`：`normative`（會投影成散文裡的規範句，用 必須/MUST 等關鍵字）或 `rationale`（背景判斷/理據）。
-- `status`：`proposed` / `accepted`（兩者為 active，draft 會讀其 statement）/ `superseded` / `deprecated`（退場態——**就地留在本檔**標記，供 supersede 鏈解析、deps 指紋二跳、check 的 repoint 導引定址；**不再搬去 live 樹 history.yaml**。history.yaml 只在整節退場時由 `docspec retire-section` 生成於 `_archive/` 封存包）。
+- `status`：`proposed` / `accepted`（兩者為 active，draft 會讀其 statement）/ `superseded` / `deprecated`（退場態——**就地留在本檔**標記，供 supersede 鏈解析、deps 指紋二跳、check 的 repoint 導引定址；**不再搬去 live 樹 history.yaml**。history.yaml 只在整節退場時由 `docspec retire` 生成於 `_archive/` 封存包）。
 - `statement`：決策本身（what）。draft **只讀這句**。
 - `rationale`：why（給 factcheck/audit agent 讀，draft 不讀）。
 - `rejected`：考慮過但否決的選項（留給 audit 當禁區，draft 不讀）。

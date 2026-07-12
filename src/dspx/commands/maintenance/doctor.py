@@ -7,7 +7,7 @@ r"""docspec doctor — 唯一排版環境診斷入口（唯讀、離線、不改
   1. 程式版本 dspx.__version__。
   2. typst（預設 render 引擎）：paths.resolve_typst() 命中否（否 → FAIL：`docspec setup`）。
   3. pandoc：受控 pandoc 命中否（缺 → FAIL：`docspec setup`）。
-  4. 字型：paths.REQUIRED_FONT_FILES 在 resolve_fonts_dir() 齊否（缺 → FAIL：`docspec upgrade`）。
+  4. 字型：paths.REQUIRED_FONT_FILES 在 resolve_fonts_dir() 齊否（缺 → FAIL：`docspec setup`）。
      （字型兩軌共用：Typst --font-path 與期刊 xelatex 都要。）
   5. TinyTeX（xelatex，OPTIONAL）：預設 Typst 軌不用、期刊軌 emit-only 不自編；只有想本機編
      emit 出的期刊 `.tex` 才需要 → 缺 = WARN（`docspec setup --with-latex`），非 FAIL。
@@ -101,7 +101,7 @@ def _check_packages() -> _Check:
         return _Check(
             _WARN, "tlmgr packages",
             f"tex.lock is missing {len(missing)} expected package(s): {' '.join(missing)}",
-            "docspec upgrade")
+            "docspec setup")
     return _Check(_OK, "tlmgr packages", f"tex.lock declares {len(declared)}, covering all expected")
 
 
@@ -109,14 +109,14 @@ def _check_fonts() -> _Check:
     try:
         fdir = paths.resolve_fonts_dir()
     except Exception as exc:  # noqa: BLE001
-        return _Check(_FAIL, "fonts", f"resolution failed: {exc}", "docspec upgrade")
+        return _Check(_FAIL, "fonts", f"resolution failed: {exc}", "docspec setup")
     if fdir is None:
-        return _Check(_FAIL, "fonts", "controlled fonts directory not found", "docspec upgrade")
+        return _Check(_FAIL, "fonts", "controlled fonts directory not found", "docspec setup")
     missing = [f for f in paths.REQUIRED_FONT_FILES if not (fdir / f).is_file()]
     if missing:
         return _Check(
             _FAIL, "fonts",
-            f"{fdir} is missing {len(missing)} file(s): {', '.join(missing)}", "docspec upgrade")
+            f"{fdir} is missing {len(missing)} file(s): {', '.join(missing)}", "docspec setup")
     return _Check(_OK, "fonts", f"{len(paths.REQUIRED_FONT_FILES)} files present in {fdir}")
 
 
@@ -173,7 +173,7 @@ def _check_deep() -> _Check:
                       "docspec doctor (fix the FAILs above first)")
     if bad:
         return _Check(_FAIL, "deep test (real compile)",
-                      f"PDF text layer has broken/missing-glyph markers: {bad}", "docspec upgrade")
+                      f"PDF text layer has broken/missing-glyph markers: {bad}", "docspec setup")
     return _Check(_OK, "deep test (real compile)", "single-page Chinese minimal file compiled, text layer clean")
 
 
@@ -263,7 +263,7 @@ def _check_latest() -> _Check | None:
         return _Check(
             _WARN, "update check",
             f"docspec pins TinyTeX={current}, upstream latest={latest}",
-            "upgrade the docspec program (uv tool install … --reinstall --no-cache), then `docspec upgrade`")
+            "upgrade the docspec program (uv tool install … --reinstall --no-cache), then `docspec setup`")
     return _Check(_OK, "update check", f"already at the upstream latest TinyTeX ({latest})")
 
 

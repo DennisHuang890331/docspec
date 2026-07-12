@@ -150,7 +150,147 @@ def _addr_hint(leaves: list, arg: str) -> str:
             return (f"\"{a}\" is a decision id owned by {lf.section} — try "
                     f"`docspec show {a} --realized-by`, or address the section \"{lf.section}\".")
     return ("give a leaf section path (has '/', e.g. guide/intro) or a concept id "
-            "(docspec list shows sections; docspec show <id> shows an id's payload).")
+            "(docspec status shows sections; docspec show <id> shows an id's payload).")
+
+
+# ── 分類視圖（整篇/子樹橫看某一分類）──────────────────────────────────────────
+
+def _scope_leaves(leaves: list, arg: str) -> list | None:
+    """arg → 該 article 或該子樹的 leaves（依 section 排序）；無命中 → None。
+    arg 是 article 名（== lf.article）或 section 子樹前綴（== lf.section 或其前綴）皆吃。"""
+    a = arg.strip("/")
+    if not a:
+        return None
+    scoped = [lf for lf in leaves
+              if lf.article == a or lf.section == a or lf.section.startswith(a + "/")]
+    if not scoped:
+        return None
+    return sorted(scoped, key=lambda lf: lf.section)
+
+
+def _statement_head(text: object, width: int = 80) -> str:
+    """裁決/歷史 statement 截行（單行、去換行、截 width 字）。"""
+    s = " ".join(str(text or "").split())
+    return s[:width]
+
+
+def _decisions_view(leaves: list, all_status: bool) -> dict:
+    """整篇每節裁決（path/id/kind/status/statement）。預設只 active；--all-status 含死決策
+    （superseded/deprecated，就地留在 decisions.yaml）＝取代已刪的 retire 報告。"""
+    from dspx.model import ACTIVE_DECISION_STATUSES
+    sections: list[dict] = []
+    total = 0
+    dead = 0
+    for lf in leaves:
+        rulings: list[dict] = []
+        for e in lf.decisions:
+            if not e.get("id"):
+                continue
+            status = str(e.get("status"))
+            is_dead = status not in ACTIVE_DECISION_STATUSES
+            if is_dead and not all_status:
+                continue
+            rulings.append({"id": e.get("id"), "kind": e.get("kind"), "status": status,
+                            "statement": _statement_head(e.get("statement")),
+                            "dead": is_dead})
+            total += 1
+            if is_dead:
+                dead += 1
+        if rulings:
+            sections.append({"section": lf.section, "decisions": rulings})
+    return {"kind": "decisions", "allStatus": all_status, "sections": sections,
+            "total": total, "dead": dead}
+
+
+def _print_decisions_view(payload: dict) -> None:
+    tag = " (all statuses, incl. dead)" if payload["allStatus"] else " (active only)"
+    print(f"decisions across {len(payload['sections'])} section(s){tag} — "
+          f"{payload['total']} ruling(s), {payload['dead']} dead:")
+    if not payload["sections"]:
+        print("  (no rulings)")
+    for s in payload["sections"]:
+        print(f"\n  {s['section']}:")
+        for d in s["decisions"]:
+            mark = " ⚰ DEAD" if d["dead"] else ""
+            print(f"    [{d['id']}] {d.get('kind') or '—'} · {d['status']}{mark}  {d['statement']}")
+
+
+def _brief_differential(concept: dict) -> dict:
+    """該節自己填的 brief 欄（差異制：只列本節寫出的欄，省略＝繼承）。非 dict → {}。"""
+    brief = (concept or {}).get("brief")
+    if not isinstance(brief, dict):
+        return {}
+    return {k: v for k, v in brief.items() if v not in (None, "", [], {})}
+
+
+def _concepts_view(leaves: list) -> dict:
+    sections: list[dict] = []
+    for lf in leaves:
+        c = lf.concept or {}
+        sections.append({
+            "section": lf.section, "id": c.get("id"), "title": c.get("title"),
+            "concept": c.get("concept"),
+            "briefDifferential": _brief_differential(c)})
+    return {"kind": "concepts", "sections": sections}
+
+
+def _print_concepts_view(payload: dict) -> None:
+    print(f"concepts across {len(payload['sections'])} section(s) "
+          "(one-liner + differential brief — only fields this section overrides):")
+    for s in payload["sections"]:
+        title = f" — {s['title']}" if s.get("title") else ""
+        print(f"\n  {s['section']}{title}  [{s.get('id') or '—'}]")
+        print(f"    concept: {s.get('concept') or '—'}")
+        bd = s.get("briefDifferential") or {}
+        if bd:
+            fields = "  ".join(f"{k}={v}" for k, v in bd.items())
+            print(f"    brief (differential): {fields}")
+        else:
+            print("    brief (differential): — (fully inherited)")
+
+
+_MATERIAL_HEADING_RE = None
+
+
+def _material_headings(material: str | None) -> list[dict]:
+    """material.md 的標題索引：`## <類型>: <標題> {#m-<錨>}`（錨可選）。"""
+    import re
+    global _MATERIAL_HEADING_RE
+    if _MATERIAL_HEADING_RE is None:
+        _MATERIAL_HEADING_RE = re.compile(
+            r"^##\s+(?P<type>[^:：]+)[:：]\s*(?P<title>.*?)"
+            r"(?:\s*\{#(?P<anchor>[^}]+)\})?\s*$")
+    out: list[dict] = []
+    for line in (material or "").splitlines():
+        m = _MATERIAL_HEADING_RE.match(line)
+        if m:
+            out.append({"type": m.group("type").strip(),
+                        "title": m.group("title").strip(),
+                        "anchor": m.group("anchor")})
+    return out
+
+
+def _material_view(leaves: list) -> dict:
+    sections: list[dict] = []
+    for lf in leaves:
+        if not lf.has_material:
+            continue
+        sections.append({"section": lf.section,
+                         "headings": _material_headings(lf.material)})
+    return {"kind": "material", "sections": sections}
+
+
+def _print_material_view(payload: dict) -> None:
+    print(f"material across {len(payload['sections'])} section(s) with material:")
+    if not payload["sections"]:
+        print("  (no section carries material)")
+    for s in payload["sections"]:
+        print(f"\n  {s['section']}:")
+        if not s["headings"]:
+            print("    (material present, but no `## <type>: <title>` headings)")
+        for h in s["headings"]:
+            anchor = f"  {{#{h['anchor']}}}" if h.get("anchor") else ""
+            print(f"    · {h['type']}: {h['title']}{anchor}")
 
 
 # ── 反向關係查詢（改動影響預覽；反向索引＝既有正向邊的反向鄰接表，同源不漂）──────────
@@ -345,6 +485,16 @@ def run(argv: list[str]) -> int:
     view.add_argument("--referenced-by", action="store_true", dest="referenced_by",
                       help="reverse view: every section whose prose anchor points at the section "
                            "(given by path or its concept id)")
+    view.add_argument("--decisions", action="store_true",
+                      help="classification view: every section's rulings across an article (or a "
+                           "section subtree) — path/id/kind/status/statement")
+    view.add_argument("--concepts", action="store_true",
+                      help="classification view: every section's one-line concept + differential brief")
+    view.add_argument("--material", action="store_true",
+                      help="classification view: which sections carry material + each material's title index")
+    parser.add_argument("--all-status", action="store_true", dest="all_status",
+                        help="with --decisions: also include dead rulings (superseded/deprecated) "
+                             "— the in-place index that replaces the old retire report")
     args = parser.parse_args(argv)
 
     try:
@@ -352,6 +502,29 @@ def run(argv: list[str]) -> int:
         leaves = load_model(layout)
     except BootstrapError as exc:
         return exc.exit_code
+
+    # ── 分類視圖（整篇/子樹橫看某一分類；crossdoc 的反向視圖的正向補集）────────────────
+    if args.decisions or args.concepts or args.material:
+        scoped = _scope_leaves(leaves, args.id)
+        if scoped is None:
+            sys.stderr.write(
+                f"docspec: no sections found for \"{args.id}\" (give an article name or a section "
+                "subtree path; docspec status lists articles/sections).\n")
+            return 1
+        if args.decisions:
+            payload = _decisions_view(scoped, args.all_status)
+            printer = _print_decisions_view
+        elif args.concepts:
+            payload = _concepts_view(scoped)
+            printer = _print_concepts_view
+        else:
+            payload = _material_view(scoped)
+            printer = _print_material_view
+        if args.as_json:
+            print(json.dumps({"id": args.id, **payload}, ensure_ascii=False, indent=2))
+        else:
+            printer(payload)
+        return 0
 
     # ── 反向關係查詢（定址統一：id 與節路徑自動判別、兩種都吃）────────────────────
     if args.impact:
@@ -407,7 +580,7 @@ def run(argv: list[str]) -> int:
         found = _find_section(leaves, layout, args.id)
     if found is None:
         sys.stderr.write(
-            f"docspec: id or section \"{args.id}\" not found (use docspec list to see sections; "
+            f"docspec: id or section \"{args.id}\" not found (use docspec status to see sections; "
             "docspec show <id> --realized-by / <section> --referenced-by / --impact for "
             "back-references)\n")
         return 1

@@ -17,7 +17,7 @@ HELP = "Print program version + install source + typst / pandoc versions + optio
 
 
 def _tinytex_version() -> str:
-    """tex.lock 記的 TinyTeX tag（setup/upgrade 落地）；無 → 提示尚未 setup。"""
+    """tex.lock 記的 TinyTeX tag（setup 落地）；無 → 提示尚未 setup。"""
     lock = paths.read_tex_lock()
     if lock is None:
         return "(not installed; run `docspec setup`)"

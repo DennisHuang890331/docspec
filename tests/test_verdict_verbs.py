@@ -7,7 +7,6 @@ from pathlib import Path
 
 import yaml
 
-from dspx.commands.deliverable import redraft as redraft_cmd
 from dspx.commands.deliverable import render as render_cmd
 from dspx.commands.deliverable import stale as stale_cmd
 from dspx.layout import Layout
@@ -289,7 +288,7 @@ def test_journal_appends_per_verdict_with_full_schema(tmp_path, write_leaf, monk
     own_before = read_ledger(Layout(home), "doc")["doc/sec"]["own"]
     assert render_cmd.run(["doc", "--ack-own", "doc/sec", "--ack", "doc/sec/a",
                            "--reason", "接線對齊"]) == 0
-    assert redraft_cmd.run(["doc", "--reason", "全文重投"]) == 0
+    assert stale_cmd.run(["doc", "--reason", "全文重投"]) == 0
     j = _read_journal(home, "doc")
     assert [(e["verb"], e["section"]) for e in j] == [
         ("ack-own", "doc/sec"), ("ack", "doc/sec/a"),
@@ -347,7 +346,7 @@ def test_redraft_backs_up_latest_and_marks_all_written(tmp_path, write_leaf, mon
     render_cmd.run(["g"])
     docs_before = sorted(p.as_posix() for p in (home.parent / "docs").rglob("*"))
     pre = _latest(home).read_text("utf-8")
-    assert redraft_cmd.run(["g", "--reason", "全文重投"]) == 0
+    assert stale_cmd.run(["g", "--reason", "全文重投"]) == 0
     backups = list((home / ".ledger" / "redraft-backup").glob("g.*.md"))
     assert len(backups) == 1
     assert backups[0].read_text("utf-8") == pre                      # 內容==標髒前交付物
@@ -365,12 +364,12 @@ def test_redraft_refusals(tmp_path, write_leaf, monkeypatch, capsys):
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])                                            # 全未撰寫
     capsys.readouterr()
-    assert redraft_cmd.run(["g"]) != 0                               # 無 reason
+    assert stale_cmd.run(["g"]) != 0                                 # 無 reason
     assert "--reason" in capsys.readouterr().err
-    assert redraft_cmd.run(["g", "--reason", "r"]) != 0              # 無已撰寫節
+    assert stale_cmd.run(["g", "--reason", "r"]) != 0                # 無已撰寫節
     assert "no written sections" in capsys.readouterr().err
-    assert redraft_cmd.run(["nope", "--reason", "r"]) != 0           # 未知文章
-    assert "no leaf sections found for article" in capsys.readouterr().err
+    assert stale_cmd.run(["nope", "--reason", "r"]) != 0             # 未知文章
+    assert "no leaf section or article found" in capsys.readouterr().err
     assert not (home / ".ledger" / "redraft-backup").exists()        # 拒跑＝零備份
 
 
@@ -447,9 +446,8 @@ def test_parse_section_bodies_default_unchanged_and_callback_reports():
 
 def test_verdict_commands_registered_agent_facing():
     from dspx.commands import HUMAN_COMMANDS, REGISTRY
-    for name in ("stale", "redraft"):
-        assert name in REGISTRY
-        assert name not in HUMAN_COMMANDS                            # agent-facing、預設 help 隱藏
+    assert "stale" in REGISTRY and "stale" not in HUMAN_COMMANDS  # agent-facing、預設 help 隱藏
+    assert "redraft" not in REGISTRY                             # 已併入 stale <article>
 
 
 def test_guide_projects_verdict_verbs_and_whitelist(tmp_path, write_leaf, monkeypatch, capsys):
@@ -461,5 +459,5 @@ def test_guide_projects_verdict_verbs_and_whitelist(tmp_path, write_leaf, monkey
     out = capsys.readouterr().out
     assert "--ack-own" in out
     assert "must_cover" in out                                       # 白名單反例（content-bearing）
-    assert "docspec stale" in out and "docspec redraft" in out
+    assert "docspec stale" in out
     assert "perturb-render-revert" in out                            # 禁止擾動復原 dance
