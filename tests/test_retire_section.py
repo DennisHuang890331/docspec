@@ -82,7 +82,7 @@ def test_retire_decision_reports_in_place_non_mutating(make_project, write_leaf,
     monkeypatch.chdir(home.parent)
     leaf = home / "corpus" / "a" / "x"
     dec_before = (leaf / "decisions.yaml").read_bytes()
-    assert retire_cmd.run(["a/x", "--in", "v2"]) == 0            # --in＝deprecated no-op
+    assert retire_cmd.run(["a/x"]) == 0                          # retire＝純報告、零寫入
     out = capsys.readouterr().out
     assert "d-old" in out and "deprecated" in out                # 逐條點名死決策
     assert "STAY IN PLACE" in out                                # 就地即終態、無物可搬

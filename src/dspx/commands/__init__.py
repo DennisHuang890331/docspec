@@ -28,10 +28,11 @@ from dspx.commands import diff as _diff  # noqa: E402
 from dspx.commands import doctor as _doctor  # noqa: E402
 from dspx.commands import export as _export  # noqa: E402
 from dspx.commands import freeze_cmd as _freeze_cmd  # noqa: E402
+from dspx.commands import get as _get  # noqa: E402
 from dspx.commands import guide as _guide  # noqa: E402
 from dspx.commands import hook as _hook  # noqa: E402
-from dspx.commands import impact as _impact  # noqa: E402
 from dspx.commands import init as _init  # noqa: E402
+from dspx.commands import put as _put  # noqa: E402
 from dspx.commands import instructions as _instructions  # noqa: E402
 from dspx.commands import lint as _lint  # noqa: E402
 from dspx.commands import list_cmd as _list_cmd  # noqa: E402
@@ -89,7 +90,8 @@ _register(_proof)
 _register(_measure_fonts)
 _register(_reference)
 _register(_diff)
-_register(_impact)
+_register(_get)
+_register(_put)
 _register(_hook)
 _register(_freeze_cmd)
 _register(_audit)

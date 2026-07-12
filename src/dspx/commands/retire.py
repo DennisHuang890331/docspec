@@ -34,8 +34,6 @@ def _load_entries(path) -> list[dict]:
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec retire", description=HELP)
     parser.add_argument("section", help="leaf section path (relative to corpus/)")
-    parser.add_argument("--in", dest="retired_in", default=None,
-                        help="(deprecated no-op) formerly the change/session tag; retire no longer writes")
     args = parser.parse_args(argv)
 
     try:
@@ -65,5 +63,5 @@ def run(argv: list[str]) -> int:
         print(f"  · {e.get('id')} ({e.get('status')})"
               + (f" -> superseded-by {e.get('superseded-by')}" if e.get("superseded-by") else ""))
     print("  (docspec retire is now non-mutating; it writes no files. Use `docspec show <id>` / "
-          "`docspec impact <id>` to inspect a dead decision.)")
+          "`docspec show <id> --realized-by` to inspect a dead decision and who realizes it.)")
     return 0

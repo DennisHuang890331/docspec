@@ -1,4 +1,4 @@
-"""跨文件共享概念：realizes 撈真相、deps→stale-upstream、impact 反向視圖。"""
+"""跨文件共享概念：realizes 撈真相、deps→stale-upstream、反向索引視圖。"""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import yaml
 
 from dspx.aperture import project
 from dspx.commands import render as render_cmd
-from dspx.commands.impact import _analyze
 from dspx.commands.status import _docs_hashes, _leaf_row
+from dspx.crossref import build_reverse_indices
 from dspx.layout import Layout
 from dspx.model import decision_index, load_project
 from dspx.schema import load_schema
@@ -95,10 +95,13 @@ def test_deps_only_tracks_statement_not_rationale(make_project, write_leaf, monk
     assert sync == "synced"   # rationale 變、statement 沒變 → 不觸發
 
 
-def test_impact_reverse_view(make_project, write_leaf):
-    """impact：d-sm-states 在哪定義、被誰 realizes。"""
+def test_reverse_realizes_view(make_project, write_leaf):
+    """反向索引：d-sm-states 被 occ/mirror realize（跨文件）；反向 ≡ 正向反轉（同源）。"""
     home = _shared_project(make_project, write_leaf)
     leaves = load_project(Layout(home))
-    info = _analyze(leaves, "d-sm-states")
-    assert info["definedAt"] == "sc/state-machine"
-    assert info["realizedBy"] == ["occ/mirror"]
+    ri = build_reverse_indices(leaves)
+    assert [lf.section for lf in ri.reverse_realizes["d-sm-states"]] == ["occ/mirror"]
+    # 同源斷言：leaf∈reverse_realizes[d] ⟺ d∈leaf.realizes（全掃）
+    for d, lfs in ri.reverse_realizes.items():
+        for lf in lfs:
+            assert d in [str(x) for x in (lf.concept.get("realizes") or [])]

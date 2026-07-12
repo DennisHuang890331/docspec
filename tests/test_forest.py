@@ -7,8 +7,8 @@ import yaml
 
 from dspx.aperture import project
 from dspx.check import run_check
-from dspx.commands import impact as impact_cmd
-from dspx.commands.impact import _analyze
+from dspx.commands import show as show_cmd
+from dspx.crossref import build_reverse_indices
 from dspx.forest import forest_view
 from dspx.layout import Layout
 from dspx.model import load_project
@@ -37,7 +37,7 @@ def _two_tree_governed(make_project, write_leaf):
     return home
 
 
-# ── 單向：父不存子，反向只由 impact 算 ──
+# ── 單向：父不存子，反向只由 show --impact（descendants）算 ──
 def test_single_direction_parent_stores_no_child(make_project, write_leaf, monkeypatch, capsys):
     home = _two_tree_governed(make_project, write_leaf)
     # t1 自己的 concept 沒有任何指向 t2 的欄位（父不存子）
@@ -46,25 +46,26 @@ def test_single_direction_parent_stores_no_child(make_project, write_leaf, monke
     assert "governed-by" not in t1_raw
     assert all("c-t2" not in str(v) and "t2" != v for v in t1_raw.values())
 
-    # 反向只由 impact 算出：impact c-t1 列出 governed-by ← t2
+    # 反向只由 show t1 --impact 算出：t2 是 t1 的子孫（stale-inherited）
     monkeypatch.chdir(home.parent)
-    assert impact_cmd.run(["c-t1"]) == 0
-    out = capsys.readouterr().out
-    assert "governed-by ← t2" in out
+    import json
+    assert show_cmd.run(["t1", "--impact", "--json"]) == 0
+    info = json.loads(capsys.readouterr().out)
+    assert "t2" in info["staleInherited"]
 
 
-def test_impact_governed_by_json(make_project, write_leaf, monkeypatch, capsys):
+def test_impact_descendants_json(make_project, write_leaf, monkeypatch, capsys):
     home = _two_tree_governed(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
     import json
-    assert impact_cmd.run(["c-t1", "--json"]) == 0
+    assert show_cmd.run(["t1", "--impact", "--json"]) == 0
     info = json.loads(capsys.readouterr().out)
-    assert info["governedBy"] == ["t2"]
+    assert info["staleInherited"] == ["t2"]
 
 
-def test_impact_governed_by_is_transitive(make_project, write_leaf, monkeypatch, capsys):
+def test_impact_descendants_is_transitive(make_project, write_leaf, monkeypatch, capsys):
     """深森林 blast radius：改 t1（頂層）不只炸到直接 governed-by 它的 t2，還遞移炸到
-    governed-by t2 的 t3（staleness 用同一 ancestor_leaves 算 stale-inherited）。Round 9 LOW-2。"""
+    governed-by t2 的 t3（descendants 用同一 ancestor_leaves 反轉＝與 stale-inherited 同源）。"""
     home = make_project()
     write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1,
                                     "status": "draft", "concept": "T1 主旨", "brief": {"範圍": "一"}})
@@ -74,17 +75,15 @@ def test_impact_governed_by_is_transitive(make_project, write_leaf, monkeypatch,
     write_leaf(home, "t3", concept={"id": "c-t3", "title": "T3", "order": 1,
                                     "status": "draft", "concept": "T3 主旨",
                                     "brief": {"範圍": "三"}, "governed-by": ["c-t2"]})
-    info = _analyze(_leaves(home), "c-t1")
-    assert info["governedBy"] == ["t2"]               # 直接
-    assert info["governedTransitive"] == ["t3"]       # 遞移（過去被漏算 → blast radius 低估）
+    ri = build_reverse_indices(_leaves(home))
+    assert sorted(lf.section for lf in ri.descendants["t1"]) == ["t2", "t3"]  # 直接 + 遞移
 
-    # CLI blast radius 計入遞移 = 2（t2 直接 + t3 遞移），且 t3 標 inherited (transitive)
+    # CLI stale-inherited 計入遞移（t2 直接 + t3 遞移）
     monkeypatch.chdir(home.parent)
-    assert impact_cmd.run(["c-t1"]) == 0
+    assert show_cmd.run(["t1", "--impact"]) == 0
     out = capsys.readouterr().out
-    assert "Blast radius: 2 section(s)" in out
-    assert "governed-by ← t2" in out
-    assert "inherited (transitive) ← t3" in out
+    assert "stale-inherited" in out
+    assert "t2" in out and "t3" in out
 
 
 # ── derive（無第二份）：刪掉 governed-by → hierarchy 立刻消失 ──
@@ -477,22 +476,23 @@ def test_develop_forest_map_prints_uncrystallized_note_and_cycle_warning(
     assert "cycle" not in t3_edge
 
 
-# ── impact 零命中訊息（Decision 12 / 13d）─────────────────────────────────────
+# ── show --impact 零命中訊息（誠實回報「無跨節影響」，非錯誤）─────────────────────
 
 
-def test_impact_zero_blast_message_not_orphan(make_project, write_leaf, monkeypatch, capsys):
-    """10.1：未被消費的活 concept → 訊息說 not-yet-consumed／no inbound，非裸孤兒句；
-    有下游時非零分支不變。"""
+def test_impact_zero_blast_message(make_project, write_leaf, monkeypatch, capsys):
+    """未被消費的活 concept（無子孫、無 realizer、無錨）→ 回「no cross-section impact」；
+    有下游後非零分支列出子孫。"""
     home = make_project()
     write_leaf(home, "t1", concept={"id": "c-t1", "title": "T1", "order": 1, "status": "draft",
                                     "concept": "新 anchor", "brief": {"範圍": "一"}})
     monkeypatch.chdir(home.parent)
-    assert impact_cmd.run(["c-t1"]) == 0
+    assert show_cmd.run(["t1", "--impact"]) == 0
     out = capsys.readouterr().out
-    assert "not-yet-consumed" in out and "no inbound" in out
-    assert "(nothing depends on it)" not in out
+    assert "no cross-section impact" in out
     write_leaf(home, "t2", concept={"id": "c-t2", "title": "T2", "order": 1, "status": "draft",
                                     "concept": "子", "brief": {"範圍": "二"},
                                     "governed-by": ["c-t1"]})
-    assert impact_cmd.run(["c-t1"]) == 0
-    assert "(changing it means redoing these)" in capsys.readouterr().out
+    assert show_cmd.run(["t1", "--impact"]) == 0
+    out2 = capsys.readouterr().out
+    assert "no cross-section impact" not in out2
+    assert "t2" in out2

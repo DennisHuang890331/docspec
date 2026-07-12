@@ -16,6 +16,54 @@ def _entries(path):
     return (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("entries", [])
 
 
+# ── skill-redesign: instructions apply 投影承載 skill 不再重抄的規則（golden）──────────────
+
+
+def test_instructions_apply_projects_authoring_three_blocks(make_project, write_leaf, monkeypatch, capsys):
+    """skill-redesign golden：instructions apply 投影三區塊——寫作原則（含 zero-inference 雙載）／
+    ── Verdict verbs ──（白名單逐項＋brief-envelope 欄規則）／── Dispatch exclusions ──（逐條）。
+    規則住 schema 的 authoring 塊、被投影；skill 只錨。"""
+    import json
+
+    from dspx.commands import instructions as instr_cmd
+    home = make_project()
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
+    monkeypatch.chdir(home.parent)
+
+    assert instr_cmd.run(["apply", "a/x"]) == 0
+    out = capsys.readouterr().out
+    # 1) 寫作原則（含 zero-inference 行內鐵律，雙載）
+    assert "── Writing principles ──" in out
+    assert "Inverted pyramid" in out and "Lead with the payload" in out
+    assert "IMPORTANT — zero-inference:" in out and "[TBD]" in out
+    # 2) verdict verbs：白名單逐項（ack-own 結構化白名單、EXHAUSTIVE）＋brief-envelope 欄規則
+    assert "── Verdict verbs ──" in out
+    assert "--ack-own" in out and "This whitelist is EXHAUSTIVE" in out
+    assert "Brief-envelope handling" in out and "ack-or-rewrite" in out
+    # 3) dispatch exclusions：逐條（punctuation→normalize、V18、grep banned openers）
+    assert "── Dispatch exclusions ──" in out
+    assert "docspec normalize" in out and "V18" in out
+    assert "SEMANTIC work only" in out and "grep" in out
+
+    # 只投 apply：develop/factcheck 不帶這三塊
+    assert instr_cmd.run(["develop", "a/x"]) == 0
+    d = capsys.readouterr().out
+    assert "── Verdict verbs ──" not in d and "── Dispatch exclusions ──" not in d
+    assert instr_cmd.run(["factcheck", "a/x"]) == 0
+    assert "── Dispatch exclusions ──" not in capsys.readouterr().out
+
+    # JSON 同載 authoring（結構化，供程式消費）
+    assert instr_cmd.run(["apply", "a/x", "--json"]) == 0
+    data = json.loads(capsys.readouterr().out)
+    auth = data["authoring"]
+    assert auth["principles"] and auth["zero_inference"]
+    assert auth["verdict_verbs"]["whitelist"] and auth["verdict_verbs"]["brief_envelope"]
+    assert auth["dispatch_exclusions"]["items"]
+    # develop --json：無 authoring（None）
+    assert instr_cmd.run(["develop", "a/x", "--json"]) == 0
+    assert json.loads(capsys.readouterr().out)["authoring"] is None
+
+
 def test_new_scaffolds_develop_only(make_project, monkeypatch):
     """develop 階段只建 develop.md；concept/decisions 由結晶時才產（不預建空 stub）。"""
     home = make_project()
@@ -411,7 +459,7 @@ def test_retire_is_non_mutating(make_project, write_leaf, monkeypatch, capsys):
     monkeypatch.chdir(home.parent)
     leaf = home / "corpus" / "g" / "x"
     before = (leaf / "decisions.yaml").read_bytes()
-    assert retire_cmd.run(["g/x", "--in", "t1"]) == 0
+    assert retire_cmd.run(["g/x"]) == 0
     # 死決策留原檔（一個 byte 不動）、無 history.yaml、報告點名死決策
     assert (leaf / "decisions.yaml").read_bytes() == before
     assert [e["id"] for e in _entries(leaf / "decisions.yaml")] == ["d-old", "d-new"]

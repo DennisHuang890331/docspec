@@ -14,7 +14,6 @@ import yaml
 
 from dspx.check import run_check
 from dspx.commands import check as check_cmd
-from dspx.commands import impact as impact_cmd
 from dspx.commands import ready as ready_cmd
 from dspx.commands import show as show_cmd
 from dspx.commands import status as status_cmd
@@ -170,12 +169,12 @@ def _dead_decision_project(make_project, write_leaf, monkeypatch):
 
 
 def test_dead_decision_addressable_in_place(make_project, write_leaf, monkeypatch, capsys):
-    """(a) 死決策留原 decisions.yaml：show/impact 就地可定址、supersede 鏈解析出活接替。"""
+    """(a) 死決策留原 decisions.yaml：show / show --realized-by 就地可定址、supersede 鏈解析出活接替。"""
     home = _dead_decision_project(make_project, write_leaf, monkeypatch)
     assert show_cmd.run(["A", "--json"]) == 0
     p = json.loads(capsys.readouterr().out)
     assert p["kind"] == "decision" and p["status"] == "superseded" and p["supersededBy"] == "B"
-    assert impact_cmd.run(["A", "--json"]) == 0
+    assert show_cmd.run(["A", "--realized-by", "--json"]) == 0
     q = json.loads(capsys.readouterr().out)
     assert q["definedAt"] == "spec/up" and "spec/down" in q["realizedBy"]
     # supersede 鏈解析：下游 realizes 撈到終端活接替 B
