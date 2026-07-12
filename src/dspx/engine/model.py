@@ -13,8 +13,8 @@ from pathlib import Path
 
 import yaml
 
-from dspx.layout import Layout
-from dspx.schema import Schema
+from dspx.engine.layout import Layout
+from dspx.engine.schema import Schema
 
 
 class ModelError(Exception):
@@ -338,7 +338,7 @@ def _config_purpose(layout) -> str:
     直接輕量讀 yaml、不走 load_config（避免重複吐 unknown-key 警告）；壞 config 由 bootstrap
     的 load_config fail-loud 擋在所有指令之前，這裡防禦性回空字串即可。
     """
-    from dspx.config import CONFIG_FILE_NAME
+    from dspx.engine.config import CONFIG_FILE_NAME
     path = layout.planning_home / CONFIG_FILE_NAME
     if not path.is_file():
         return ""
@@ -367,7 +367,7 @@ def style_fingerprint(layout) -> dict:
       與 doctrine 同屬專案級寫作指導，同家族併入 style 面、不值得獨立標籤。
     各子軸回前 16 碼；帳本 `style` 欄存本 mapping（fingerprint v2 格式的一部分）。
     """
-    from dspx.glossary import GLOSSARY_INDEX_FIELDS, glossary_path, load_glossary
+    from dspx.engine.glossary import GLOSSARY_INDEX_FIELDS, glossary_path, load_glossary
 
     guide_h = hashlib.sha256()
     gp = layout.writing_guide
@@ -556,7 +556,7 @@ def load_project(layout: Layout, schema: Schema | None = None) -> list[Leaf]:
     per-article backend 自動偵測（article-store-backend 階段 2）：某篇有 `corpus/<article>.yaml`
     store 檔＝走 StoreBackend（記錄→Leaf）；否則散檔 leaf 夾樹＝TreeBackend；同篇兩者並存 fail-loud。
     上層無感——兩路都吐同構的 Leaf 清單。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
 
     leaves: list[Leaf] = []
     tree_dirs = layout.leaf_dirs()

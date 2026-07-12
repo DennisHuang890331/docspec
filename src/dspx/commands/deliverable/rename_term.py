@@ -19,7 +19,7 @@ from dataclasses import dataclass
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
 from dspx.commands.deliverable.normalize import _update_ledger_prose
-from dspx.spans import PROSE_KINDS, classify_deliverable
+from dspx.engine.spans import PROSE_KINDS, classify_deliverable
 
 NAME = "rename-term"
 HELP = ("deterministic batch term substitution inside prose spans only (code/URLs/image paths and "

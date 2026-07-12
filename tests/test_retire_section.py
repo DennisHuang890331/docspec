@@ -9,8 +9,8 @@ import yaml
 from dspx.commands.corpus import retire as rs_cmd
 from dspx.commands.corpus import retired as retired_cmd
 from dspx.commands.query import status as status_cmd
-from dspx.layout import Layout
-from dspx.model import load_project
+from dspx.engine.layout import Layout
+from dspx.engine.model import load_project
 
 
 def test_retire_section_moves_and_records(make_project, write_leaf, monkeypatch, capsys):

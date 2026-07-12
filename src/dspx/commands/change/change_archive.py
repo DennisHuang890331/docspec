@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import sys
 
-from dspx import change as chg
+from dspx.engine import change as chg
 
 
 def run_archive(layout, schema, change: "chg.Change", *, override_drift: bool = False) -> int:
@@ -35,7 +35,7 @@ def run_archive(layout, schema, change: "chg.Change", *, override_drift: bool = 
         return 1
 
     # ── 收集受影響 article + 各 article 的 action 集合（G5 每篇各自判路）──
-    from dspx.model import load_project
+    from dspx.engine.model import load_project
     union_leaves = chg.load_union(layout, change)
     article_actions: dict[str, set[str]] = {}
     corpus_sections: list[str] = []
@@ -118,7 +118,7 @@ def run_archive(layout, schema, change: "chg.Change", *, override_drift: bool = 
                                                  set(article_actions.keys()), target_sections)
 
         # ⑧ 正式帳本重算（等效 rebaseline、散文即剛收案內容）
-        from dspx.render import render_article
+        from dspx.engine.render import render_article
         official_leaves = load_project(layout)
         for art in sorted(article_actions.keys()):
             if any(lf.article == art for lf in official_leaves):
@@ -165,7 +165,7 @@ def _silently_absorbed_downstream(layout, schema, articles: set, target_sections
     """★2.2：收案落地上游後、rebaseline 前，哪些**非本單 target** 的下游節現在 stale？
     這些節接著會被 rebaseline 靜默重戳 synced（未經本次顯式復驗）。回 [(section, sync)]。"""
     from dspx.commands.query.status import _docs_hashes, _leaf_row
-    from dspx.model import decision_index, load_project
+    from dspx.engine.model import decision_index, load_project
     leaves = load_project(layout)
     by = {lf.section: lf for lf in leaves}
     dindex = decision_index(leaves)
@@ -208,7 +208,7 @@ def _run_move(layout, schema, t: "chg.Target", leaves) -> int:
 
 
 def _drifted_patch_targets(layout, article: str, sections: set[str]) -> set[str]:
-    from dspx.render import detect_drift
+    from dspx.engine.render import detect_drift
     drifted = {d["section"] for d in detect_drift(layout, article)}
     return drifted & sections
 
@@ -224,7 +224,7 @@ def _run_validator(cmd: str, path) -> None:
 def _prune_promoted_roadmap(layout, change) -> str | None:
     """收案時 prune 指向本 change 的 roadmap promoted-to entry（案卷即完工紀錄）。"""
     import yaml
-    from dspx import roadmap as rm
+    from dspx.reports import roadmap as rm
     candidates = [rm.forest_roadmap_path(layout)]
     if layout.corpus_dir.is_dir():
         for art in layout.articles():
@@ -256,8 +256,8 @@ def _warn_unclosed_audit(layout, change) -> None:
     archive 永不代結案）。"""
     if not change.promoted_from:
         return
-    from dspx.audit import all_findings
-    from dspx.model import load_project
+    from dspx.reports.audit import all_findings
+    from dspx.engine.model import load_project
     fid = change.promoted_from
     for f in all_findings(layout, load_project(layout)):
         if str(f.get("id")) == fid and f.get("status") == "open":

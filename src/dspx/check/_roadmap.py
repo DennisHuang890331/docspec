@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dspx.model import Leaf
+from dspx.engine.model import Leaf
 
 from ._cycles import _find_cycle
 
@@ -37,7 +37,7 @@ def _validate_roadmap(layout, leaves: list[Leaf], id_set: set[str],
     - from-audit 死引用（指現行 audit finding id）；
     - promoted-to 反查（★G6：active/archived 健康、abandoned 孤兒 ERROR、死指標 ERROR）。
     死引用會讓 derive 的 unblocked 算錯 → 違「引擎＝可信索引」，故 check 硬擋。"""
-    from dspx import roadmap as _roadmap
+    from dspx.reports import roadmap as _roadmap
 
     entries = _roadmap.all_entries(layout, leaves)
     if not entries:
@@ -102,7 +102,7 @@ def _validate_roadmap(layout, leaves: list[Leaf], id_set: set[str],
                             f" (a per-doc file may only hold targets within that document's tree or its root)")
 
     # ── from-audit 死引用（指現行 audit finding id；per-doc + forest）──
-    from dspx.audit import all_findings as _all_findings
+    from dspx.reports.audit import all_findings as _all_findings
     audit_ids: set[str] = {str(f["id"]) for f in _all_findings(layout, leaves)
                            if f.get("id")}
     for e in entries:
@@ -112,7 +112,7 @@ def _validate_roadmap(layout, leaves: list[Leaf], id_set: set[str],
                         f"audit finding id \"{fa}\"")
 
     # ── promoted-to 反查（★G6：roadmap entry 永遠指向一個 change id）──
-    from dspx import change as _chg
+    from dspx.engine import change as _chg
     change_states = _chg.all_change_states(layout)
     for e in entries:
         pt = e.get("promoted-to")

@@ -17,7 +17,7 @@ import re
 from dataclasses import dataclass
 
 # 單一真相源：marker／image 的權威定義住 render，直接取用、勿另寫分岔。
-from dspx.render import (
+from dspx.engine.render import (
     CLOSING_MARKER_RE,
     GROUP_MARKER_RE,
     MARKER_RE,

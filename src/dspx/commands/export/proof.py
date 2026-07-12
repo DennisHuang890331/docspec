@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 
 from dspx.commands._shared import BootstrapError, bootstrap
-from dspx.layout import Layout, parse_semver
+from dspx.engine.layout import Layout, parse_semver
 
 NAME = "proof"
 HELP = "Render the export's PDF deliverable to PNGs, page by page (for agents to review layout) → docs/exports/_proof/"

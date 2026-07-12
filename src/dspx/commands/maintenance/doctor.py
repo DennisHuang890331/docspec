@@ -29,7 +29,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from dspx import __version__, paths
+from dspx import __version__
+from dspx.engine import paths
 from dspx.commands.maintenance import setup as setup_cmd
 
 NAME = "doctor"

@@ -6,8 +6,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from dspx.config import CONFIG_FILE_NAME
-from dspx.layout import CORPUS_DIR_NAME, PLANNING_DIR_NAME
+from dspx.engine.config import CONFIG_FILE_NAME
+from dspx.engine.layout import CORPUS_DIR_NAME, PLANNING_DIR_NAME
 
 NAME = "init"
 HELP = "create a docspec project skeleton in the current directory (config.yaml + corpus/)"
@@ -288,7 +288,7 @@ def run(argv: list[str]) -> int:
             sys.stderr.write(f"docspec: unknown agent '{args.tool}'. Choices: {', '.join(_AGENTS)} (or all)\n")
             return 2
     elif sys.stdin.isatty() and sys.stdout.isatty():
-        from dspx.welcome import show_welcome
+        from dspx.env.welcome import show_welcome
         show_welcome()             # 迴圈閃動畫＋按 Enter 才進選單（仿 OpenSpec，不直接跳）
         tools = _select_tools_interactive(project_root)
         if not tools:
@@ -318,7 +318,7 @@ def run(argv: list[str]) -> int:
 
     # 載入/刷新 skill 到選定 agent（重 init＝刷新，force 覆寫舊 skill 檔）
     from dspx.commands.maintenance.skills_cmd import _install
-    from dspx.skills import SkillError
+    from dspx.env.skills import SkillError
     try:
         _install(project_root, tools, force=True)
     except SkillError as exc:
@@ -370,7 +370,7 @@ def _github_head_sha(timeout: float = 2.0) -> str | None:
         try:
             import json
             import urllib.request
-            from dspx import _install_source
+            from dspx.env import _install_source
             api = f"https://api.github.com/repos/{_install_source.GIT_REPO}/commits/HEAD"
             req = urllib.request.Request(
                 api, headers={"Accept": "application/vnd.github+json", "User-Agent": "docspec-init"})
@@ -395,7 +395,7 @@ def _print_update_check() -> None:
     不印錯誤、不改離開碼、不阻塞 init。離線環境的 git 裝路徑＝完全無輸出（零煩擾）。
     """
     try:
-        from dspx import _install_source
+        from dspx.env import _install_source
         src = _install_source.read_install_source()
         if src is None:
             return
@@ -422,7 +422,7 @@ def _tex_env_hint_reason() -> str | None:
 
     純讀本機 tex.lock（離線、不下載）。判準＝隨包 _MANIFEST tag 與 tex.lock 記的 tag。
     """
-    from dspx import paths
+    from dspx.engine import paths
     lock = paths.read_tex_lock()
     if lock is None:
         return "typesetting environment not set up yet"

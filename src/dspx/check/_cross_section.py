@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from dspx.model import Leaf
+from dspx.engine.model import Leaf
 
 
 def _decision_ids(leaves: list[Leaf]) -> set[str]:

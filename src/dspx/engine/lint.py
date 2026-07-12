@@ -11,7 +11,7 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   V8 骨肉漂移（corpus↔docs）      WARN
   V9 realizes 指向退場決策        WARN
   V10 跨文件數字一致             WARN   ← 同 snake_case 指涉的同單位值相互衝突（advisory、不阻塞）
-  V11 凍結區（archive/）被竄改    ERROR  ← 已發行版本不可變（見 dspx.freeze）
+  V11 凍結區（archive/）被竄改    ERROR  ← 已發行版本不可變（見 dspx.reports.freeze）
   V12 docs 殘留 GFM 警示/暫停旗   ERROR  ← `> [!WARNING]` 等 alert；draft 撞決策衝突刻意產生、絕不該 ship
   V15 docs 殘留撰寫工具/治理詞彙   ERROR  ← forest/governed-by/治理父/fan-in/factcheck/Tier-N/L2a/§回引…＝後台詞洩進交付物（補 V1 覆蓋缺口）
   V16 規範語句逃避詞（同句 應/不得）WARN  ← 最好／儘量／酌情／如有可能／視情況／最大限度（必要時故意排除，見下）
@@ -54,9 +54,9 @@ import re
 from dataclasses import dataclass
 
 from dspx.check import run_check
-from dspx.layout import Layout
-from dspx.model import Leaf
-from dspx.schema import Schema
+from dspx.engine.layout import Layout
+from dspx.engine.model import Leaf
+from dspx.engine.schema import Schema
 
 ERROR = "ERROR"
 WARN = "WARN"
@@ -208,7 +208,7 @@ def _split_marker_segments(body: str) -> list[tuple[str | None, str]]:
     首個標記之前的 preamble 段 section=None（finding 回退檔案級 where）。刻意不重用
     render.parse_section_bodies：它會丟掉標記後的標題行與 group 段文字——lint 要掃**全部**
     交付物文字（標題裡的洩漏也要抓），只消耗標記行本身。"""
-    from dspx.render import GROUP_MARKER_RE, MARKER_RE
+    from dspx.engine.render import GROUP_MARKER_RE, MARKER_RE
     segments: list[tuple[str | None, str]] = []
     current: str | None = None
     buf: list[str] = []
@@ -298,7 +298,7 @@ def _doc_section_segments(text: str) -> list[tuple[str | None, str]]:
     取代舊 `_split_marker_segments`＋三條 `sub("")`：fence 狀態機優先 ⇒ fenced code 內的
     字面 `dspx:section` 行不再斬斷章節（D7 刻意行為修正）。遮蔽面 kinds 子集＝對齊舊剝除
     面（不剝 image path／URL，維持 V13 對圖 path 內 example.* 的既有覆蓋＝遷移行為鎖）。"""
-    from dspx.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
+    from dspx.engine.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
                             classify_deliverable, mask_non_prose)
     masked = mask_non_prose(text, kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER})
     segments: list[tuple[str | None, str]] = []
@@ -333,7 +333,7 @@ def _lint_punctuation(layout: Layout, articles: list[str]) -> list[Finding]:
     （單一權威、報必可修的閉環）；byte-exact span 與識別碼尾隨標點天然不觸發。
 
     每章節聚一筆 WARN（`where` 帶章節定位、與 V1–V17 同格式），避免逐字元洗版。"""
-    from dspx.spans import propose_conversions
+    from dspx.engine.spans import propose_conversions
     findings: list[Finding] = []
     for article in articles:
         path = layout.docs_latest(article)
@@ -400,8 +400,8 @@ def _lint_prose_chapter_refs(layout: Layout, articles: list[str]) -> list[Findin
 
     掃描前先 `normalize_prose_anchors` 縮掉 render 注入的錨標籤（§6.5＝引擎自產、不報）；
     外部標準條號（`ISO … §4.2`）經左窗代號判定跳過。每章節聚一筆 WARN（帶章節定位）。"""
-    from dspx.render import normalize_prose_anchors
-    from dspx.spans import (FENCE, HEADING, HTML_COMMENT, INLINE_CODE, MARKER,
+    from dspx.engine.render import normalize_prose_anchors
+    from dspx.engine.spans import (FENCE, HEADING, HTML_COMMENT, INLINE_CODE, MARKER,
                             classify_deliverable, mask_non_prose)
     findings: list[Finding] = []
     for article in articles:
@@ -449,7 +449,7 @@ def _lint_numbers(layout: Layout, articles: list[str]) -> list[Finding]:
         path = layout.docs_latest(article)
         if not path.is_file():
             continue
-        from dspx.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
+        from dspx.engine.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
                                 mask_non_prose)
         body = mask_non_prose(path.read_text(encoding="utf-8"),
                               kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER})
@@ -521,7 +521,7 @@ def _lint_material(leaf: Leaf) -> list[Finding]:
 
 def _lint_drift(layout, leaves: list[Leaf]) -> list[Finding]:
     """V8 骨肉漂移：corpus 章節 vs docs/_latest 不一致（提醒 docspec render）。"""
-    from dspx.render import parse_section_bodies
+    from dspx.engine.render import parse_section_bodies
     findings: list[Finding] = []
     by_article: dict[str, set] = {}
     for leaf in leaves:
@@ -576,8 +576,8 @@ def _lint_orphan_assets(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
       全部 article 引用的**聯集**、對共用夾**單趟**掃（逐 article 掃會把只被 A 引用的圖
       對 B、C…各誤報一次＝恆誤報且重複 N 次）。
     - per-article layout：各 article 資產夾獨立，維持逐 article 比對。"""
-    from dspx.render import find_image_refs
-    from dspx.model import docs_asset_files
+    from dspx.engine.render import find_image_refs
+    from dspx.engine.model import docs_asset_files
     findings: list[Finding] = []
     articles = sorted({lf.article for lf in leaves})
 
@@ -612,7 +612,7 @@ def _lint_orphan_assets(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
 
 def _lint_freeze(layout: Layout) -> list[Finding]:
     """V11 凍結區完整性：archive/ 內已發行快照被竄改/刪除/未登記 → ERROR（歷史不可變）。"""
-    from dspx import freeze
+    from dspx.reports import freeze
     findings: list[Finding] = []
     for rel, problem in freeze.verify(layout.planning_home, layout.project_root, layout.docs_dir):
         detail = f"frozen area (archive/) {problem} -- published versions are immutable"
@@ -634,7 +634,7 @@ def _lint_glossary(layout, articles: list[str]) -> list[Finding]:
     掃描文字剝 HTML 註解＋fenced/inline code（與 V1–V4 同前處理）：code 內的別名 token
     是內容（欄位名/範例），不是散文用詞。
     """
-    from dspx.glossary import load_glossary
+    from dspx.engine.glossary import load_glossary
     terms = load_glossary(layout)
     if not terms:
         return []
@@ -643,7 +643,7 @@ def _lint_glossary(layout, articles: list[str]) -> list[Finding]:
         path = layout.docs_latest(article)
         if not path.is_file():
             continue
-        from dspx.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
+        from dspx.engine.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
                                 mask_non_prose)
         body = mask_non_prose(path.read_text(encoding="utf-8"),
                               kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER})
@@ -686,8 +686,8 @@ def _lint_roadmap(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
     Vr2 含 promoted-to 卻仍帶實質內容（超出 id/title/promoted-to）→ 搬家沒搬乾淨。
     Vr3 entry 的 what 散文引用一條仍全文開放的 audit finding id → 雙帳鏡像，該晉升搬家、非複製。
     """
-    from dspx import audit as audit_mod
-    from dspx import roadmap as roadmap_mod
+    from dspx.reports import audit as audit_mod
+    from dspx.reports import roadmap as roadmap_mod
 
     findings: list[Finding] = []
 
@@ -744,7 +744,7 @@ def _lint_audit_findings(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
     Va2 finding 散文（`finding` 欄）殘留行號形錨點（`L123`/`L123/124`）→ render 後座標會漂，
         改綁穩定節路徑／§slug（targets 裡的行號錨點是 check ERROR，這裡管散文內文的軟提醒）。
     """
-    from dspx import audit as audit_mod
+    from dspx.reports import audit as audit_mod
 
     findings: list[Finding] = []
     for f in audit_mod.all_findings(layout, leaves):
@@ -804,7 +804,7 @@ def _lint_export_safety(layout: Layout, articles: list[str]) -> list[Finding]:
         path = layout.docs_latest(article)
         if not path.is_file():
             continue
-        from dspx.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
+        from dspx.engine.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
                                 mask_non_prose)
         raw = path.read_text(encoding="utf-8")
         # 標題 slug 集（連結解析基準）：對遮蔽 fence/comment/marker 的文字取標題——fence 內的
@@ -887,7 +887,7 @@ def brief_dup_fields(leaf: Leaf, by_section: dict, concept_by_id: dict) -> list[
 
     最近祖先＝沿 aperture 同一條祖先鏈（`model.ancestor_leaves`，路徑父鏈優先、淺→深）第一個
     對該欄有提供非空值者。lint（V19）與 `docspec tidy`（刪這些欄改繼承）共用此判定。"""
-    from dspx.model import ancestor_leaves
+    from dspx.engine.model import ancestor_leaves
     brief = _brief_of(leaf)
     if not brief:
         return []
@@ -909,7 +909,7 @@ def brief_dup_fields(leaf: Leaf, by_section: dict, concept_by_id: dict) -> list[
 
 def _lint_brief_dup(leaves: list[Leaf]) -> list[Finding]:
     """V19：brief 子欄與最近祖先 byte 等值 → WARN（指向刪欄改繼承／`docspec tidy`）。"""
-    from dspx.model import _concept_by_id
+    from dspx.engine.model import _concept_by_id
     by_section = {lf.section: lf for lf in leaves}
     concept_by_id = _concept_by_id(by_section)
     findings: list[Finding] = []

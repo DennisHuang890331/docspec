@@ -17,7 +17,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from dspx import paths
+from dspx.engine import paths
 
 
 # ── 平台偵測 ──────────────────────────────────────────────────────

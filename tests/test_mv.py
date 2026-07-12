@@ -12,7 +12,7 @@ import yaml
 
 from dspx.commands.corpus import mv as mv_cmd
 from dspx.commands.deliverable import render as render_cmd
-from dspx.layout import Layout
+from dspx.engine.layout import Layout
 
 
 def _leaf(write_leaf, home, section, *, cid, title="X", order=1):
@@ -85,8 +85,8 @@ def test_mv_rewrites_audit_and_roadmap_targets(make_project, write_leaf, monkeyp
     layout = Layout(home)
 
     # per-article audit + roadmap 指向舊路徑（含 #anchor 與 concept-id target）
-    from dspx.audit import doc_audit_path
-    from dspx.roadmap import doc_roadmap_path
+    from dspx.reports.audit import doc_audit_path
+    from dspx.reports.roadmap import doc_roadmap_path
     doc_audit_path(layout, "sc").write_text(yaml.safe_dump({"findings": [
         {"id": "F1", "face": "logic", "severity": "low", "status": "open",
          "finding": "x", "targets": ["sc/safety/zone#seg", "c2"], "suggestion": ""},

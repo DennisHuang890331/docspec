@@ -13,15 +13,15 @@ from __future__ import annotations
 import yaml
 
 from dspx.commands.deliverable import render as render_cmd
-from dspx.layout import Layout
-from dspx.model import decision_index, load_project
-from dspx.render import (
+from dspx.engine.layout import Layout
+from dspx.engine.model import decision_index, load_project
+from dspx.engine.render import (
     normalize_prose_anchors,
     prose_hash,
     resolve_prose_anchors,
     strip_anchor_bindings,
 )
-from dspx.schema import load_schema
+from dspx.engine.schema import load_schema
 
 
 def _latest(home, article="g"):
@@ -206,7 +206,7 @@ def test_check_retired_prose_anchor_is_error(make_project, write_leaf, monkeypat
 
 def test_lint_v21_flags_unanchored_literal(make_project, write_leaf, monkeypatch):
     """散文未綁錨的 `§9.2` → V21 WARN；同節已綁錨的 §3 不報。"""
-    from dspx.lint import run_lint
+    from dspx.engine.lint import run_lint
     home = _three_section_project(make_project, write_leaf, monkeypatch)
     _put_prose(home, "g", "g/a", "已綁錨 <!--@sec-c--><!--@-->；未綁錨 §9.2 的舊寫法。")
     v21 = [f for f in run_lint(Layout(home), load_project(Layout(home)), load_schema())
@@ -216,7 +216,7 @@ def test_lint_v21_flags_unanchored_literal(make_project, write_leaf, monkeypatch
 
 def test_lint_v21_exempts_external_standard(make_project, write_leaf, monkeypatch):
     """外部標準條號（`ISO 13849-1 §4.2`）不誤報。"""
-    from dspx.lint import run_lint
+    from dspx.engine.lint import run_lint
     home = _three_section_project(make_project, write_leaf, monkeypatch)
     _put_prose(home, "g", "g/a", "依 ISO 13849-1 §4.2 的分級與 IEC 61508 §7.4。")
     v21 = [f for f in run_lint(Layout(home), load_project(Layout(home)), load_schema())
@@ -226,7 +226,7 @@ def test_lint_v21_exempts_external_standard(make_project, write_leaf, monkeypatc
 
 def test_lint_v21_flags_chinese_chapter_phrase(make_project, write_leaf, monkeypatch):
     """`第 6 章` 亦為未綁錨字面章號 → V21 WARN。"""
-    from dspx.lint import run_lint
+    from dspx.engine.lint import run_lint
     home = _three_section_project(make_project, write_leaf, monkeypatch)
     _put_prose(home, "g", "g/a", "詳見第 6 章的規定。")
     v21 = [f for f in run_lint(Layout(home), load_project(Layout(home)), load_schema())
@@ -238,7 +238,7 @@ def test_v21_table_cell_internal_ref_not_exempted_but_same_cell_standard_is():
     """ground-truth 回歸（table-pipe）：表格列裡標準名在別格、§ 指本文件內部節（相距兩格以上）
     → 不豁免＝WARN；但外部標準條款落在標準名的相鄰描述格（`| IEC 61508-2 | …(§7.4.2.3) |`）
     → 仍豁免（不誤報外部標準）。"""
-    from dspx.lint import _LITERAL_CHAPTER_RE, _is_external_standard_ref
+    from dspx.engine.lint import _LITERAL_CHAPTER_RE, _is_external_standard_ref
     seg = "| ISO 12100 | 三份架構文件皆缺 | 依 §3 適用文件欄納入 SC |"
     m3 = next(m for m in _LITERAL_CHAPTER_RE.finditer(seg) if m.group(0) == "§3")
     assert not _is_external_standard_ref(seg, m3.start())      # 內部節→WARN
@@ -249,7 +249,7 @@ def test_v21_table_cell_internal_ref_not_exempted_but_same_cell_standard_is():
 
 def test_v21_flags_internal_annex_reference(make_project, write_leaf, monkeypatch):
     """ground-truth 回歸（Annex/附錄）：內部 `Annex B`／`附錄 A` 交叉引用一樣重排即漂 → V21 WARN。"""
-    from dspx.lint import run_lint
+    from dspx.engine.lint import run_lint
     home = _three_section_project(make_project, write_leaf, monkeypatch)
     _put_prose(home, "g", "g/a", "詳見 Annex B 的序列圖，另見附錄 A 對照表。")
     v21 = [f for f in run_lint(Layout(home), load_project(Layout(home)), load_schema())
@@ -259,7 +259,7 @@ def test_v21_flags_internal_annex_reference(make_project, write_leaf, monkeypatc
 
 def test_v21_external_standard_annex_not_flagged():
     """外部標準的 annex（`ISO 12100 Annex B`）＝外部條款、不誤報。"""
-    from dspx.lint import _LITERAL_CHAPTER_RE, _is_external_standard_ref
+    from dspx.engine.lint import _LITERAL_CHAPTER_RE, _is_external_standard_ref
     seg = "本設計為 Type A 地基標準，依 ISO 12100 Annex B 的風險評估流程。"
     m = next(m for m in _LITERAL_CHAPTER_RE.finditer(seg) if m.group(0) == "Annex B")
     assert _is_external_standard_ref(seg, m.start())
@@ -267,7 +267,7 @@ def test_v21_external_standard_annex_not_flagged():
 
 def test_v21_appendix_heading_not_flagged(make_project, write_leaf, monkeypatch):
     """render 推導的附錄標題 `## 附錄 A 名稱` 是正當標題（HEADING 遮蔽）、非交叉引用 → 不誤報。"""
-    from dspx.lint import run_lint
+    from dspx.engine.lint import run_lint
     home = make_project()
     write_leaf(home, "g/a", concept={"id": "sec-a", "title": "甲", "order": 1})
     write_leaf(home, "g/annex", concept={"id": "sec-annex", "title": "法規對照",

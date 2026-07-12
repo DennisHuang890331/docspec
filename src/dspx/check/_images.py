@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dspx.model import Leaf
+from dspx.engine.model import Leaf
 
 
 def _validate_image_refs(layout, leaves: list[Leaf]) -> list[str]:
@@ -13,8 +13,8 @@ def _validate_image_refs(layout, leaves: list[Leaf]) -> list[str]:
 
     撞名守門已不需要：圖集中在單一 `docs/assets/`，一個 `assets/<basename>` 就是一個實體檔、
     無「扁平命名空間指向多節各自的檔」歧義（per-section 模型才有的問題，Model A 消除之）。"""
-    from dspx.render import find_image_refs, parse_section_bodies
-    from dspx.model import docs_asset_files
+    from dspx.engine.render import find_image_refs, parse_section_bodies
+    from dspx.engine.model import docs_asset_files
 
     by_section = {lf.section: lf for lf in leaves}
     errs: list[str] = []

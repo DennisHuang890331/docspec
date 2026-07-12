@@ -6,7 +6,7 @@ import argparse
 import sys
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.render import ledger_needs_migration, read_ledger, render_article
+from dspx.engine.render import ledger_needs_migration, read_ledger, render_article
 
 NAME = "render"
 HELP = "sync leaf section prose skeleton into docs/<article>/_latest.md (deterministic, preserves written prose)"
@@ -49,7 +49,7 @@ def _guard_ledger_health(layout, article: str, rebaseline: bool) -> int | None:
 def _render_change(layout, args) -> int:
     """render --change：從 union view（staging 優先、正式補底）渲染到 change 的 preview 區。
     正式 docs/ 零寫入；預覽成品與帳本從正式版 seed（★G2）。"""
-    from dspx import change as chg
+    from dspx.engine import change as chg
     if chg.change_state(layout, args.change) != chg.STATE_ACTIVE:
         sys.stderr.write(f"docspec: no active change \"{args.change}\".\n")
         return 1

@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from dspx.layout import Layout
+from dspx.engine.layout import Layout
 
 
 def _collect_referenced_assets(layout: Layout, article: str, body_md: str) -> dict[str, Path]:
@@ -16,8 +16,8 @@ def _collect_referenced_assets(layout: Layout, article: str, body_md: str) -> di
     typst/xelatex 才找得到。引用了但 docs/assets/ 找不到的，交給 `docspec check` ⑨ 閘擋
     （這裡只 copy 找得到的、不重複報錯）。
     """
-    from dspx.render import find_image_refs
-    from dspx.model import docs_asset_files
+    from dspx.engine.render import find_image_refs
+    from dspx.engine.model import docs_asset_files
     refs = [r for r in find_image_refs(body_md) if r.startswith("assets/")]
     if not refs:
         return {}
@@ -34,7 +34,7 @@ def _figure_health_warnings(body_md: str, assets: dict[str, Path]) -> list[str]:
       ② 收集到的光柵圖近全黑/近全白 → drawio SVG 在 Typst 壓成黑塊正是這樣（PNG-primary 已治源，
          此為事後健檢）。需 Pillow；缺則只做 ①。
     回 WARN 字串清單，呼叫端印 stderr、不阻擋 export。"""
-    from dspx.render import find_image_refs
+    from dspx.engine.render import find_image_refs
     warns: list[str] = []
     refs = [r for r in dict.fromkeys(find_image_refs(body_md)) if r.startswith("assets/")]
     for r in refs:

@@ -36,7 +36,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from dspx import paths
+from dspx.engine import paths
 
 from ._drawio import (
     _DRAWIO_MANIFEST,

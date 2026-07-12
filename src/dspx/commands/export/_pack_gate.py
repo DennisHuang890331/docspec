@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from dspx import paths
+from dspx.engine import paths
 
 
 def _check_pack_integrity(template_dir: Path, is_bundled: bool, allow: bool) -> int:

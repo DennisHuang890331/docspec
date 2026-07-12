@@ -7,7 +7,7 @@ import json
 
 import pytest
 
-from dspx import freeze
+from dspx.reports import freeze
 from dspx.commands._internal import hook as hook_cmd
 
 

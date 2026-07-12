@@ -2,7 +2,7 @@
 
 import pytest
 
-from dspx.frontmatter import (
+from dspx.env.frontmatter import (
     FrontmatterError,
     parse_frontmatter,
     read_frontmatter,

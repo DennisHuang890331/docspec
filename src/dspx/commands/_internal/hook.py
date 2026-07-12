@@ -17,7 +17,7 @@ import re
 import shlex
 import sys
 
-from dspx.freeze import is_frozen_path
+from dspx.reports.freeze import is_frozen_path
 
 NAME = "hook"
 HELP = "agent-tool gatekeeper (internal; PreToolUse calls `docspec hook guard`)"
@@ -167,10 +167,10 @@ def _postcheck(data: object) -> int:
         if p.name not in ("concept.yaml", "decisions.yaml", "history.yaml"):
             return 0
         from dspx.check import run_file_check
-        from dspx.config import load_config
-        from dspx.layout import Layout, find_planning_home
-        from dspx.model import load_leaf
-        from dspx.schema import load_schema
+        from dspx.engine.config import load_config
+        from dspx.engine.layout import Layout, find_planning_home
+        from dspx.engine.model import load_leaf
+        from dspx.engine.schema import load_schema
         home = find_planning_home()
         config = load_config(home)
         layout = Layout(home, config.get("docs_layout", "flat"))

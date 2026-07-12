@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from dspx.layout import Layout, parse_semver
+from dspx.engine.layout import Layout, parse_semver
 
 
 def _prune_old_pdfs(layout: Layout, article: str, keep: Path) -> list[Path]:

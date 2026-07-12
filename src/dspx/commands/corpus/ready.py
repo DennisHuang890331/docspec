@@ -18,9 +18,9 @@ import sys
 
 from dspx.check import run_file_check
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.layout import Layout
-from dspx.model import load_leaf
-from dspx.schema import Schema
+from dspx.engine.layout import Layout
+from dspx.engine.model import load_leaf
+from dspx.engine.schema import Schema
 
 NAME = "ready"
 HELP = "graduation transaction: verify completeness + develop.md drained -> delete develop.md, section turns ready"
@@ -51,7 +51,7 @@ def _graduate(layout: Layout, schema: Schema, section: str) -> tuple[bool, list[
     **backend 路由**：store 篇 leaf 由記錄餵、develop.md 住 work/（結晶前工作台），畢業＝刪 work/
     的 develop.md；散檔篇照舊（concept.yaml 存在性＋節夾內 develop.md）。
     """
-    from dspx import store as _store
+    from dspx.engine import store as _store
     reasons: list[str] = []
     is_store = _store.article_has_store(layout, layout.article_of(section))
 
@@ -155,7 +155,7 @@ def run(argv: list[str]) -> int:
             targets = sorted(set(art_leaf_sections) | set(art_dev_only))
             return _run_batch(layout, schema, section, targets, args.as_json)
 
-    from dspx import store as _store
+    from dspx.engine import store as _store
     if _store.article_has_store(layout, layout.article_of(section)):
         art = _store.cached_article(layout, layout.article_of(section))
         if art is None or art.record_by_path(section) is None:

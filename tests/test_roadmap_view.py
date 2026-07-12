@@ -13,8 +13,8 @@ import yaml
 
 from dspx.commands.governance import roadmap as roadmap_cmd
 from dspx.commands.governance.roadmap import build_backlog_view
-from dspx.layout import Layout
-from dspx.model import load_project
+from dspx.engine.layout import Layout
+from dspx.engine.model import load_project
 
 
 def _write_roadmap(path: Path, entries: list[dict]) -> None:

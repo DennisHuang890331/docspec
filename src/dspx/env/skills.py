@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from dspx.frontmatter import FrontmatterError, parse_frontmatter
+from dspx.env.frontmatter import FrontmatterError, parse_frontmatter
 
 
 class SkillError(Exception):

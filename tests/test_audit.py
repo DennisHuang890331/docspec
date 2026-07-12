@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import yaml
 
-from dspx.audit import load_doc_audit, load_forest_audit
+from dspx.reports.audit import load_doc_audit, load_forest_audit
 from dspx.check import run_check
 from dspx.commands.governance import audit as audit_cmd
-from dspx.layout import Layout
-from dspx.model import load_project
-from dspx.schema import load_schema
+from dspx.engine.layout import Layout
+from dspx.engine.model import load_project
+from dspx.engine.schema import load_schema
 
 
 def _doc_audit(home, article):
@@ -124,7 +124,7 @@ def test_raise_bad_verdict_rejected_by_argparse(make_project, write_leaf, monkey
 
 
 def test_library_validate_rejects_unknown_verdict():
-    from dspx.audit import DEFAULT_FACES, validate_finding
+    from dspx.reports.audit import DEFAULT_FACES, validate_finding
     f = {"id": "F1", "face": "logic", "severity": "low", "status": "open",
          "finding": "x", "targets": ["a"], "verdict": "bogus"}
     errs = validate_finding(f, DEFAULT_FACES)
@@ -500,9 +500,9 @@ def test_bare_line_number_anchor_in_targets_also_rejected(make_project, write_le
 
 
 def test_lint_warns_promoted_finding_with_full_body(make_project, write_leaf, monkeypatch):
-    from dspx.lint import run_lint
-    from dspx.model import load_project
-    from dspx.schema import load_schema
+    from dspx.engine.lint import run_lint
+    from dspx.engine.model import load_project
+    from dspx.engine.schema import load_schema
 
     home = make_project()
     write_leaf(home, "a", concept=_root("ca", "A"))
@@ -518,9 +518,9 @@ def test_lint_warns_promoted_finding_with_full_body(make_project, write_leaf, mo
 
 
 def test_lint_no_warn_when_promoted_finding_body_dropped(make_project, write_leaf):
-    from dspx.lint import run_lint
-    from dspx.model import load_project
-    from dspx.schema import load_schema
+    from dspx.engine.lint import run_lint
+    from dspx.engine.model import load_project
+    from dspx.engine.schema import load_schema
 
     home = make_project()
     write_leaf(home, "a", concept=_root("ca", "A"))
@@ -536,9 +536,9 @@ def test_lint_no_warn_when_promoted_finding_body_dropped(make_project, write_lea
 
 
 def test_lint_warns_line_number_anchor_in_finding_prose(make_project, write_leaf):
-    from dspx.lint import run_lint
-    from dspx.model import load_project
-    from dspx.schema import load_schema
+    from dspx.engine.lint import run_lint
+    from dspx.engine.model import load_project
+    from dspx.engine.schema import load_schema
 
     home = make_project()
     write_leaf(home, "a", concept=_root("ca", "A"))

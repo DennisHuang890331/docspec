@@ -11,10 +11,10 @@ import json
 from dspx.commands.deliverable import render as render_cmd
 from dspx.commands.query import show as show_cmd
 from dspx.commands.query.status import _docs_hashes, _leaf_row
-from dspx.crossref import build_reverse_indices
-from dspx.layout import Layout
-from dspx.model import ancestor_leaves, decision_index, load_project
-from dspx.schema import load_schema
+from dspx.engine.crossref import build_reverse_indices
+from dspx.engine.layout import Layout
+from dspx.engine.model import ancestor_leaves, decision_index, load_project
+from dspx.engine.schema import load_schema
 
 
 def _impact_project(make_project, write_leaf):

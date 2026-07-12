@@ -22,7 +22,7 @@ def _split_title_body(text: str, fallback_title: str) -> tuple[str, str]:
     首個 H1 移出正文（標題改由 before.tex `\\title` 注入、避免重複），其餘為正文。
     無 H1 → 用 fallback（文章名），正文原樣。
     """
-    from dspx.frontmatter import parse_frontmatter
+    from dspx.env.frontmatter import parse_frontmatter
     _, body = parse_frontmatter(text)
     lines = body.split("\n")
     title = fallback_title

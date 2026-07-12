@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from dspx.config import ConfigError, load_config
+from dspx.engine.config import ConfigError, load_config
 
 
 def test_defaults_when_absent(make_project):
@@ -62,7 +62,7 @@ def test_dropped_autonomy_knob_warns_and_ignored(make_project):
 # ── C2：lang_subtag（BCP-47 → typst/changelog 的 base subtag）─────────
 
 def test_lang_subtag_normalizes():
-    from dspx.config import lang_subtag
+    from dspx.engine.config import lang_subtag
     assert lang_subtag("zh-TW") == "zh"
     assert lang_subtag("en-US") == "en"
     assert lang_subtag("en") == "en"
@@ -74,7 +74,7 @@ def test_lang_subtag_normalizes():
 # ── detect_language / region_for（文件語言內容偵測；B1/B2 共同根因）─────
 
 def test_detect_language_from_content():
-    from dspx.config import detect_language
+    from dspx.engine.config import detect_language
     assert detect_language("這是一份中文文件，內含 RAG 與 LLM 等英文術語。") == "zh"  # 夾英文術語仍中文多數
     assert detect_language("This is an English document about retrieval.") == "en"
     assert detect_language("純英文 title\n本文大量中文內容散佈各處。") == "zh"
@@ -85,7 +85,7 @@ def test_detect_language_from_content():
 
 
 def test_region_for():
-    from dspx.config import region_for
+    from dspx.engine.config import region_for
     assert region_for("zh") == "tw"                      # house Traditional 預設
     assert region_for("zh", "zh-CN") == "cn"             # 明設簡體專案
     assert region_for("zh", "zh-TW") == "tw"

@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from dspx import change as chg
+from dspx.engine import change as chg
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
 
 NAME = "get"
@@ -28,7 +28,7 @@ _CATEGORIES = {
 
 def _skeleton(schema, artifact_id: str) -> str:
     """缺檔時回的空骨架：yaml 走 schema 導出的 `yaml_skeleton`；material（md）走其 template。"""
-    from dspx.schema import yaml_skeleton
+    from dspx.engine.schema import yaml_skeleton
     art = schema.by_id(artifact_id)
     if art is None:
         return ""
@@ -44,7 +44,7 @@ def _get_store(layout, schema, args, section: str, change) -> int:
     """store 篇 get：從記錄（change staging 優先、正式 store 補底）吐某分類；缺＝schema 空骨架。"""
     import yaml
 
-    from dspx import store as _store
+    from dspx.engine import store as _store
     _filename, artifact_id = _CATEGORIES[args.category]
     article = layout.article_of(section)
     rec = None
@@ -127,7 +127,7 @@ def run(argv: list[str]) -> int:
             return 2
 
     # ── backend 路由：store 篇由記錄吐內容（staging 優先、正式補底），非散檔 ──
-    from dspx import store as store_mod
+    from dspx.engine import store as store_mod
     if store_mod.article_has_store(layout, layout.article_of(section)):
         return _get_store(layout, schema, args, section, change)
 

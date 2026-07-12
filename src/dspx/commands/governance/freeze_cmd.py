@@ -21,7 +21,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from dspx import freeze
+from dspx.reports import freeze
 from dspx.commands._shared import BootstrapError, bootstrap
 
 NAME = "freeze"

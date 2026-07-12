@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dspx.commands.maintenance import init as init_cmd
-from dspx.config import load_config
+from dspx.engine.config import load_config
 
 
 def test_init_creates_project(tmp_path, monkeypatch):

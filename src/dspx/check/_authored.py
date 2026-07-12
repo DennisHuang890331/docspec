@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 
-from dspx.model import Leaf, ancestor_leaves
+from dspx.engine.model import Leaf, ancestor_leaves
 
 # brief 可比對子欄（differential brief；跨來源同欄異值＝矛盾）
 _BRIEF_FIELDS = ("audience", "depth", "breadth", "forbidden", "layout", "kind")
@@ -101,7 +101,7 @@ def check_authored_state(layout, leaves: list[Leaf]) -> list[str]:
                          "state; completeness is derived (agent-contract #6.2b)")
     # change notes.md（active changes）
     try:
-        from dspx import change as chg
+        from dspx.engine import change as chg
         for cid in chg.active_change_ids(layout):
             notes = chg.notes_path(chg.change_dir(layout, cid, chg.STATE_ACTIVE))
             if notes.is_file():

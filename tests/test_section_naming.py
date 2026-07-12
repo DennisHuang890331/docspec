@@ -6,7 +6,7 @@ import pytest
 
 from dspx.commands.corpus import new as new_cmd
 from dspx.commands.deliverable import render as render_cmd
-from dspx.render import (
+from dspx.engine.render import (
     GROUP_MARKER_RE,
     MARKER_RE,
     group_marker,
@@ -51,8 +51,8 @@ def test_parse_section_bodies_roundtrip_with_spaces():
 
 def test_render_preserves_prose_in_spaced_sections(make_project, write_leaf, monkeypatch):
     """帶空格路徑 end-to-end：render→寫散文→再 render，散文保留、前節 prose 指紋不變。"""
-    from dspx.layout import Layout
-    from dspx.render import read_ledger
+    from dspx.engine.layout import Layout
+    from dspx.engine.render import read_ledger
     home = make_project()
     write_leaf(home, "g/intro", concept={"id": "c1", "title": "概覽", "order": 1})
     write_leaf(home, "g/附錄 A", concept={"id": "c2", "title": "附錄 A", "order": 2})
@@ -84,7 +84,7 @@ def test_render_preserves_prose_in_spaced_sections(make_project, write_leaf, mon
 
 def test_lint_segments_attribute_spaced_sections():
     """lint 歸節與 render 同一 regex：帶空格路徑的段落歸對節（不回退檔案級）。"""
-    from dspx.lint import _split_marker_segments
+    from dspx.engine.lint import _split_marker_segments
     body = "\n".join([
         section_marker("g/附錄 A"), "## 附錄 A", "", "附錄文字。", "",
         group_marker("g/附 錄"), "### 附 錄", "",

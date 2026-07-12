@@ -12,8 +12,8 @@ import yaml
 from dspx.commands.deliverable import render as render_cmd
 from dspx.commands.corpus import retire as rs_cmd
 from dspx.commands.query import status as status_cmd
-from dspx.config import ConfigError, load_config
-from dspx.layout import Layout
+from dspx.engine.config import ConfigError, load_config
+from dspx.engine.layout import Layout
 
 
 def _write_prose(latest, heading: str, prose: str) -> None:
@@ -123,7 +123,7 @@ def test_render_rebaseline_after_corrupt_ledger(make_project, write_leaf, monkey
 
 
 def test_read_ledger_warning_no_longer_claims_next_render_fixes(make_project, capsys):
-    from dspx.render import read_ledger
+    from dspx.engine.render import read_ledger
     home = make_project()
     layout = Layout(home)
     led = layout.docs_ledger("g")
@@ -154,8 +154,8 @@ def test_group_yaml_malformed_warns_not_silent(make_project, write_leaf, monkeyp
 
 def _check_errors(home, write_leaf) -> list[str]:
     from dspx.check import run_check
-    from dspx.model import load_project
-    from dspx.schema import load_schema
+    from dspx.engine.model import load_project
+    from dspx.engine.schema import load_schema
     layout = Layout(home)
     return run_check(load_project(layout), load_schema(None), layout).errors
 
@@ -255,7 +255,7 @@ def test_truncated_yaml_friendly_error(make_project, write_leaf, monkeypatch, ca
 # ── 3.2 凍結區同步垃圾白名單 ────────────────────────────────────────
 
 def test_freeze_verify_whitelists_sync_junk(tmp_path):
-    from dspx import freeze
+    from dspx.reports import freeze
     home = tmp_path / "docspec"
     docs = tmp_path / "docs"
     archive = docs / "archive"
@@ -273,8 +273,8 @@ def test_freeze_verify_whitelists_sync_junk(tmp_path):
 
 def _check_warnings(home) -> list[str]:
     from dspx.check import run_check
-    from dspx.model import load_project
-    from dspx.schema import load_schema
+    from dspx.engine.model import load_project
+    from dspx.engine.schema import load_schema
     layout = Layout(home)
     return run_check(load_project(layout), load_schema(None), layout).warnings
 

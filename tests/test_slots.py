@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from dspx import slots as S
+from dspx.typeset import slots as S
 
 
 def test_build_slots_derived_and_text():

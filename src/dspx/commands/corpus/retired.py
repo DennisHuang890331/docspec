@@ -47,7 +47,7 @@ def _scan_sections(layout) -> list[dict]:
 
 def _scan_decisions(layout) -> list[dict]:
     """活節 history.yaml 的 entries＝per-decision 退場（不在 _archive，引擎可見）。"""
-    from dspx.model import load_project
+    from dspx.engine.model import load_project
     out: list[dict] = []
     try:
         leaves = load_project(layout)

@@ -21,9 +21,9 @@ from pathlib import Path
 
 import yaml
 
-from dspx import paths
+from dspx.engine import paths
 from dspx.commands._shared import BootstrapError, bootstrap
-from dspx.config import CONFIG_FILE_NAME
+from dspx.engine.config import CONFIG_FILE_NAME
 
 NAME = "template"
 HELP = "Manage the export template pack (eject: copy the bundled docspec-typst pack into the project for editing)"

@@ -11,13 +11,13 @@ import re
 import pytest
 import yaml
 
-from dspx import change as chg
-from dspx import store as st
+from dspx.engine import change as chg
+from dspx.engine import store as st
 from dspx.commands.change import change as change_cmd
 from dspx.commands.deliverable import render as render_cmd
 from dspx.commands.corpus import store as store_cmd
-from dspx.layout import Layout
-from dspx.schema import load_schema
+from dspx.engine.layout import Layout
+from dspx.engine.schema import load_schema
 
 
 def _project(make_project, write_leaf, monkeypatch=None, backend="tree"):
@@ -160,7 +160,7 @@ def test_g2_preview_seeded_only_changed_section_stale(make_project, write_leaf, 
 
     # preview 側帳本：g 與 g/usage synced（seed），g/intro stale-own（源變）
     from dspx.commands.query.status import _leaf_row
-    from dspx.model import decision_index
+    from dspx.engine.model import decision_index
     pv_ledger = chg._read_preview_ledger(change, "g")
     union = chg.load_union(layout, change)
     by = {lf.section: lf for lf in union}
@@ -219,12 +219,12 @@ def test_anticheat_synced_without_work_is_not_done(make_project, write_leaf, mon
     # 作弊模擬：把 preview 帳本的 g/intro re-stamp 成完全對齊現值（清 redraft）——但**散文一字未改**
     change = chg.load_change(layout, "chg-x")
     pv_ledger = chg._read_preview_ledger(change, "g")
-    from dspx.model import decision_index
+    from dspx.engine.model import decision_index
     union = chg.load_union(layout, change)
     by = {lf.section: lf for lf in union}
     lf = by["g/intro"]
     dindex = decision_index(union)
-    from dspx.model import (ancestor_brief_fingerprint, ancestor_normative_fingerprint,
+    from dspx.engine.model import (ancestor_brief_fingerprint, ancestor_normative_fingerprint,
                             deps_fingerprint, style_fingerprint)
     overlay = chg.OverlayLayout(layout, change)
     pv_ledger["g/intro"] = {
@@ -264,7 +264,7 @@ def test_contrast_staled_then_rewritten_is_done(make_project, write_leaf, monkey
 # ── ★8.1 P0 靜默資料遺失回歸：旁節逐 byte 存活、leaf 計數不減 ──────
 
 def _leaf_count(home):
-    from dspx.model import load_project
+    from dspx.engine.model import load_project
     return len(load_project(Layout(home, "per-article")))
 
 
@@ -521,7 +521,7 @@ def test_check_rejects_dead_target_ref(make_project, write_leaf, monkeypatch):
     chg.save_change(change)
 
     from dspx.check._changes import _validate_changes
-    from dspx.model import load_project
+    from dspx.engine.model import load_project
     leaves = load_project(layout)
     id_set = {lf.concept_id for lf in leaves if lf.concept_id} | {lf.section for lf in leaves}
     concept_ids = {lf.concept_id for lf in leaves if lf.concept_id}

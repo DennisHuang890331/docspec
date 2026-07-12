@@ -10,8 +10,8 @@ from pathlib import Path
 
 from dspx.commands.deliverable import render as render_cmd
 from dspx.commands.deliverable import rename_term as rt_cmd
-from dspx.layout import Layout
-from dspx.render import detect_drift
+from dspx.engine.layout import Layout
+from dspx.engine.render import detect_drift
 
 
 def _leaf(write_leaf, home, section="sc/a"):

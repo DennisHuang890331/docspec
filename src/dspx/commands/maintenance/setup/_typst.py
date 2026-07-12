@@ -12,7 +12,7 @@ import hashlib
 import platform
 import sys
 
-from dspx import paths
+from dspx.engine import paths
 
 from ._pandoc import _extract_pandoc_binary
 

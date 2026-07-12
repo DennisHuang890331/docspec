@@ -15,9 +15,9 @@ import re
 
 import yaml
 
-from dspx.frontmatter import FrontmatterError, parse_frontmatter, render_frontmatter
-from dspx.layout import LEDGER_DIR_NAME, Layout
-from dspx.model import (
+from dspx.env.frontmatter import FrontmatterError, parse_frontmatter, render_frontmatter
+from dspx.engine.layout import LEDGER_DIR_NAME, Layout
+from dspx.engine.model import (
     Leaf,
     ancestor_brief_fingerprint,
     ancestor_normative_fingerprint,
@@ -190,7 +190,7 @@ def groups_fingerprint(layout: Layout, article: str) -> str:
 
     title/order 變動＝「交付物骨架變了、需重新 render」（D4，與 concept 的 title/order 同性質）；
     只取這兩欄、不 hash 整檔——group.yaml 加註解不算骨架變動。store 篇由記錄枚舉 group（與散檔同構）。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     h = hashlib.sha256()
     if _store.article_has_store(layout, article):
         art = _store.cached_article(layout, article)
@@ -261,7 +261,7 @@ def _protected_mask(body: str) -> list[bool]:
     錨解析只在散文 span 動（spec：只在 prose span、code/URL/識別碼 byte-exact）——綁定所在的
     html_comment 刻意**不**遮（錨就住 comment 裡），但落在 fence/inline code/image/url 內的
     錨樣式字串一律跳過、byte 不動。"""
-    from dspx.spans import FENCE, IMAGE, INLINE_CODE, URL, classify_deliverable
+    from dspx.engine.spans import FENCE, IMAGE, INLINE_CODE, URL, classify_deliverable
     protected = [False] * len(body)
     byte_exact = {FENCE, INLINE_CODE, IMAGE, URL}
     for sp in classify_deliverable(body):
@@ -365,7 +365,7 @@ def _group_meta(layout: Layout, group_section: str) -> dict:
     默默降級成 humanize slug（機械 drift、人不會發現）。fallback 行為維持、不擋 render。"""
     import sys
 
-    from dspx import store as _store
+    from dspx.engine import store as _store
     smeta = _store.group_meta(layout, group_section)   # store-aware：該篇是 store→由記錄供 meta
     if smeta is not None:
         return smeta
@@ -824,7 +824,7 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     if not has_root:
         _cover_title = _group_meta(layout, article).get("title")
         if not (isinstance(_cover_title, str) and _cover_title.strip()):
-            from dspx.config import detect_language
+            from dspx.engine.config import detect_language
             if detect_language("\n".join(prose_bodies), "en") == "zh":
                 import sys
                 sys.stderr.write(

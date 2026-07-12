@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from dspx.spans import (
+from dspx.engine.spans import (
     FENCE,
     HTML_COMMENT,
     IMAGE,

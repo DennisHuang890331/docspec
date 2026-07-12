@@ -30,7 +30,7 @@ def test_audit_ids_are_global(make_project, write_leaf, monkeypatch):
     monkeypatch.chdir(home.parent)
     audit_cmd.run(["raise", "--target", "a/x", "--face", "logic", "--sev", "high", "--finding", "p1"])
     audit_cmd.run(["raise", "--target", "a/y", "--face", "clarity", "--sev", "low", "--finding", "p2"])
-    from dspx.audit import load_doc_audit
+    from dspx.reports.audit import load_doc_audit
     # 同文件 a → 都進 corpus/a/audit.yaml，全域 id 序列 F1/F2
     doc = load_doc_audit(home / "corpus" / "a", "a")
     ids = {f["id"] for f in doc.findings}

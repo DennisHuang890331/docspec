@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from dspx.layout import Layout, next_version, parse_semver
+from dspx.engine.layout import Layout, next_version, parse_semver
 
 
 def test_per_article_paths(tmp_path):

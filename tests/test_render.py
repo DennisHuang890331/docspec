@@ -7,8 +7,8 @@ import yaml
 from dspx.commands.query import lint as lint_cmd
 from dspx.commands.deliverable import publish as publish_cmd
 from dspx.commands.deliverable import render as render_cmd
-from dspx.frontmatter import parse_frontmatter
-from dspx.render import MARKER_RE, strip_markers
+from dspx.env.frontmatter import parse_frontmatter
+from dspx.engine.render import MARKER_RE, strip_markers
 
 
 def _setup(make_project, write_leaf):
@@ -24,8 +24,8 @@ def _latest(home):
 
 def test_ledger_lives_in_sidecar_not_frontmatter(make_project, write_leaf, monkeypatch):
     """ISSUE-3：指紋帳本住隱藏 sidecar，_latest frontmatter 只剩 article/version。"""
-    from dspx.layout import Layout
-    from dspx.render import read_ledger
+    from dspx.engine.layout import Layout
+    from dspx.engine.render import read_ledger
     home = _setup(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
     latest = _latest(home)
@@ -48,8 +48,8 @@ def test_ledger_migrates_from_old_frontmatter(make_project, write_leaf, monkeypa
     """更舊格式（sections 在 frontmatter、無 sidecar）＝fingerprint v1：read_ledger fallback
     仍讀得到；常規 render 拒跑（v1 值與 v2 算法不可比）、`--rebaseline` 一次遷移
     （sidecar 建立＋版本鍵、frontmatter sections 消失、散文保留）。"""
-    from dspx.layout import Layout
-    from dspx.render import read_ledger, read_ledger_version
+    from dspx.engine.layout import Layout
+    from dspx.engine.render import read_ledger, read_ledger_version
     home = _setup(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
     latest = _latest(home)
@@ -68,7 +68,7 @@ def test_ledger_migrates_from_old_frontmatter(make_project, write_leaf, monkeypa
     assert not Layout(home).docs_ledger("g").is_file()
     assert render_cmd.run(["g", "--rebaseline"]) == 0   # 顯式一次遷移
     assert Layout(home).docs_ledger("g").is_file()
-    from dspx.render import LEDGER_FINGERPRINT_VERSION
+    from dspx.engine.render import LEDGER_FINGERPRINT_VERSION
     assert read_ledger_version(Layout(home), "g") == LEDGER_FINGERPRINT_VERSION   # 遷移後＝現行版本
     meta, _ = parse_frontmatter(latest.read_text("utf-8"))
     assert "sections" not in meta               # frontmatter 已遷出
@@ -101,8 +101,8 @@ def test_render_preserves_written_prose(make_project, write_leaf, monkeypatch):
     text2 = latest.read_text(encoding="utf-8")
     assert "限流保護後端。" in text2
     # 指紋帳本現存隱藏 sidecar（ISSUE-3），不在 _latest frontmatter
-    from dspx.layout import Layout
-    from dspx.render import read_ledger
+    from dspx.engine.layout import Layout
+    from dspx.engine.render import read_ledger
     ledger = read_ledger(Layout(home), "g")
     assert "g/intro" in ledger      # 有散文 → 記 hash
     assert "g/usage" not in ledger  # 沒散文 → 不記
@@ -118,8 +118,8 @@ def test_status_synced_after_draft_and_render(make_project, write_leaf, monkeypa
         encoding="utf-8")
     render_cmd.run(["g"])
     from dspx.commands.query.status import _docs_hashes
-    from dspx.layout import Layout
-    from dspx.model import load_project
+    from dspx.engine.layout import Layout
+    from dspx.engine.model import load_project
     layout = Layout(home)
     leaves = {lf.section: lf for lf in load_project(layout)}
     hashes = _docs_hashes(layout, "g")
@@ -130,8 +130,8 @@ def test_two_flavor_staleness(make_project, write_leaf, monkeypatch):
     """父 brief 改→子節 stale-inherited；子節自己改→stale-own。"""
     from dspx.commands.deliverable import render as render_cmd
     from dspx.commands.query.status import _docs_hashes, _leaf_row
-    from dspx.layout import Layout
-    from dspx.model import load_project
+    from dspx.engine.layout import Layout
+    from dspx.engine.model import load_project
     home = make_project()
     # 父節 sec（有自己的 concept/brief）＋ 子末節 sec/a
     write_leaf(home, "doc/sec", concept={"id": "p1", "title": "Sec", "order": 1,
@@ -147,12 +147,12 @@ def test_two_flavor_staleness(make_project, write_leaf, monkeypatch):
     render_cmd.run(["doc"])
 
     def sync_of(section):
-        from dspx.model import decision_index
+        from dspx.engine.model import decision_index
         layout = Layout(home)
         leaves = load_project(layout)
         by = {lf.section: lf for lf in leaves}
         h = _docs_hashes(layout, "doc")
-        from dspx.schema import load_schema
+        from dspx.engine.schema import load_schema
         return _leaf_row(layout, by[section], load_schema(), True, h, by,
                          decision_index(leaves))["sync"]
 
@@ -168,8 +168,8 @@ def test_two_flavor_staleness(make_project, write_leaf, monkeypatch):
 def test_diff_detects_hand_edit(make_project, write_leaf, monkeypatch):
     """手改 _latest 散文 → diff 抓到；重 render 後 → 不再漂移。"""
     from dspx.commands.deliverable import render as render_cmd
-    from dspx.layout import Layout
-    from dspx.render import detect_drift
+    from dspx.engine.layout import Layout
+    from dspx.engine.render import detect_drift
     home = _setup(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
@@ -286,8 +286,8 @@ def test_render_output_locked_byte_for_byte(make_project, write_leaf, monkeypatc
 
     golden＝抽取**前**（d700c68）對本 fixture（group.yaml order＋concept.order＋非字典序末節
     ＋兩節散文）實跑的 `_latest.md` 全文與各節指紋——重構後 MUST 逐 byte 相同（行為不變）。"""
-    from dspx.layout import Layout
-    from dspx.render import read_ledger
+    from dspx.engine.layout import Layout
+    from dspx.engine.render import read_ledger
     home = make_project()
     write_leaf(home, "g/foreword", concept={"id": "c-fw", "title": "前言", "order": 0.5})
     write_leaf(home, "g/intro", concept={"id": "c-in", "title": "簡介", "order": 1})
@@ -355,14 +355,14 @@ def test_strip_markers():
 
 def test_find_image_refs_alt_with_bracket():
     """alt 含裸 `]`（如 errors[]）不再咬斷整條引用——V14/check ⑨/export 同時生效。"""
-    from dspx.render import find_image_refs
+    from dspx.engine.render import find_image_refs
     body = "前文。\n\n![errors[] 佇列圖](assets/q.png)\n\n後文。\n"
     assert find_image_refs(body) == ["assets/q.png"]
 
 
 def test_find_image_refs_plain_title_whitespace_unchanged():
     """一般引用（含 title、路徑前空白）行為不回歸。"""
-    from dspx.render import find_image_refs
+    from dspx.engine.render import find_image_refs
     body = '![系統架構圖](assets/arch.png "架構")\n\n![圖]( assets/b.png )\n'
     assert find_image_refs(body) == ["assets/arch.png", "assets/b.png"]
 
@@ -372,10 +372,10 @@ def test_lint_ignores_section_markers(make_project, write_leaf, monkeypatch):
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
     # _latest 滿是 <!-- dspx:section --> 標記，lint 不該因此報 ERROR
-    from dspx.layout import Layout
-    from dspx.lint import ERROR, run_lint
-    from dspx.model import load_project
-    from dspx.schema import load_schema
+    from dspx.engine.layout import Layout
+    from dspx.engine.lint import ERROR, run_lint
+    from dspx.engine.model import load_project
+    from dspx.engine.schema import load_schema
     layout = Layout(home)
     findings = run_lint(layout, load_project(layout), load_schema())
     assert [f for f in findings if f.level == ERROR] == []
@@ -413,9 +413,9 @@ def test_publish_aborts_when_nothing_drafted(make_project, write_leaf, monkeypat
 def _sync_of(home, article, section):
     """重算某節的 sync 狀態（同 status._leaf_row 邏輯）。"""
     from dspx.commands.query.status import _docs_hashes, _leaf_row
-    from dspx.layout import Layout
-    from dspx.model import decision_index, load_project
-    from dspx.schema import load_schema
+    from dspx.engine.layout import Layout
+    from dspx.engine.model import decision_index, load_project
+    from dspx.engine.schema import load_schema
     layout = Layout(home)
     leaves = load_project(layout)
     by = {lf.section: lf for lf in leaves}
@@ -427,8 +427,8 @@ def test_f2_source_change_without_prose_rewrite_keeps_stale_signal(
         make_project, write_leaf, monkeypatch):
     """F2 核心：源改了但散文未重寫，再 render（哪怕只重生骨架）也 MUST 保住 stale-own
     ——不被『現在源料』抹掉信號（修 false-green）。"""
-    from dspx.layout import Layout
-    from dspx.render import read_ledger
+    from dspx.engine.layout import Layout
+    from dspx.engine.render import read_ledger
     home = _setup(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
@@ -453,8 +453,8 @@ def test_f2_source_change_without_prose_rewrite_keeps_stale_signal(
 
 def test_f2_prose_rewrite_advances_fingerprints(make_project, write_leaf, monkeypatch):
     """F2 對偶：散文真的重寫（基於新源）→ 指紋前進、回 synced。"""
-    from dspx.layout import Layout
-    from dspx.render import read_ledger
+    from dspx.engine.layout import Layout
+    from dspx.engine.render import read_ledger
     home = _setup(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
@@ -536,8 +536,8 @@ def test_strip_markers_drops_closing_form_lines():
 def test_closing_marker_in_body_still_counts_as_prose_drift(make_project, write_leaf,
                                                             monkeypatch):
     """7.1b：手加關閉式標記行仍算該節散文（parse 刻意不剝）→ prose 指紋變、diff 報漂移。"""
-    from dspx.layout import Layout
-    from dspx.render import detect_drift
+    from dspx.engine.layout import Layout
+    from dspx.engine.render import detect_drift
     home = _setup(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
     render_cmd.run(["g"])
@@ -655,8 +655,8 @@ def test_f2_reorder_renumbers_without_staleness(make_project, write_leaf, monkey
     採「分組 order 調換」而非 leaf order：leaf 的 order 住 concept.yaml、屬 source_hash 輸入，
     改它本就是 stale-own（引擎既定契約、guide 指向 --ack-own）；分組 order 住 group.yaml、非 leaf
     源，重排它只改骨架呈現＝純章號 churn，正是本測要釘的「編號變動不誤標髒」。"""
-    from dspx.layout import Layout
-    from dspx.render import read_ledger
+    from dspx.engine.layout import Layout
+    from dspx.engine.render import read_ledger
     home = make_project()
     write_leaf(home, "g/alpha/x", concept={"id": "cx", "title": "X 節", "order": 1})
     write_leaf(home, "g/beta/y", concept={"id": "cy", "title": "Y 節", "order": 1})
@@ -729,12 +729,12 @@ def test_export09_denumber_recognizes_injected_forms(make_project, write_leaf, m
 def test_numbering_single_source_render_matches_topology(make_project, write_leaf, monkeypatch):
     """4.4：render 標題章號、aperture documentMap number、共用 outline 拓樸三處同源
     （outline_numbering 單一真相）。"""
-    from dspx.aperture import project
-    from dspx.config import load_config
-    from dspx.layout import Layout
-    from dspx.model import load_project
-    from dspx.render import outline_numbering
-    from dspx.schema import load_schema
+    from dspx.engine.aperture import project
+    from dspx.engine.config import load_config
+    from dspx.engine.layout import Layout
+    from dspx.engine.model import load_project
+    from dspx.engine.render import outline_numbering
+    from dspx.engine.schema import load_schema
     home = make_project()
     write_leaf(home, "g/intro", concept={"id": "c1", "title": "簡介", "order": 1,
                                          "concept": "界定"})
@@ -764,9 +764,9 @@ def test_numbering_single_source_render_matches_topology(make_project, write_lea
 
 def test_numbering_appendix_letters_and_none_not_consuming(make_project, write_leaf, monkeypatch):
     """4.5：附錄字母序（附錄 A／A.1）＋ none 不佔阿拉伯號＋附錄不佔阿拉伯號（D7）。"""
-    from dspx.layout import Layout
-    from dspx.model import load_project
-    from dspx.render import outline_numbering
+    from dspx.engine.layout import Layout
+    from dspx.engine.model import load_project
+    from dspx.engine.render import outline_numbering
     home = make_project()
     write_leaf(home, "doc/a", concept={"id": "c1", "title": "甲", "order": 1})
     write_leaf(home, "doc/hist", concept={"id": "c2", "title": "修訂歷史", "order": 2,

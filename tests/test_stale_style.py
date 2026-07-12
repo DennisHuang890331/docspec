@@ -10,9 +10,9 @@ from __future__ import annotations
 import yaml
 
 from dspx.commands.deliverable import render as render_cmd
-from dspx.layout import Layout
-from dspx.model import style_fingerprint
-from dspx.render import read_ledger
+from dspx.engine.layout import Layout
+from dspx.engine.model import style_fingerprint
+from dspx.engine.render import read_ledger
 
 GUIDE_A = "# Writing guide\n\n## Project conventions\n整體文體：論文／期刊標準語言，嚴謹精確。\n"
 GUIDE_B = "# Writing guide\n\n## Project conventions\n整體文體：口語化、平易近人。\n"
@@ -21,8 +21,8 @@ GUIDE_B = "# Writing guide\n\n## Project conventions\n整體文體：口語化�
 def _sync_of(home, article, section):
     """重算某節 sync 狀態（同 status._leaf_row）。"""
     from dspx.commands.query.status import _docs_hashes, _leaf_row
-    from dspx.model import decision_index, load_project
-    from dspx.schema import load_schema
+    from dspx.engine.model import decision_index, load_project
+    from dspx.engine.schema import load_schema
     layout = Layout(home)
     leaves = load_project(layout)
     by = {lf.section: lf for lf in leaves}
@@ -118,7 +118,7 @@ def test_stale_own_takes_precedence_over_style(make_project, write_leaf, monkeyp
 def test_old_ledger_without_style_baselines_then_detects(make_project, write_leaf, monkeypatch):
     """向後相容：本軸上線前寫的帳本沒有 style 欄 → 一次 render 補基準（不誤報 stale-style）；
     之後改 doctrine 才偵測得到。"""
-    from dspx.render import write_ledger
+    from dspx.engine.render import write_ledger
     home = _baseline_with_prose(make_project, write_leaf, monkeypatch)
     # 模擬舊帳本：移除 style 欄
     ledger = read_ledger(Layout(home), "g")

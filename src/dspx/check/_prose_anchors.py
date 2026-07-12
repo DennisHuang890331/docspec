@@ -10,7 +10,7 @@
 
 from __future__ import annotations
 
-from dspx.model import Leaf
+from dspx.engine.model import Leaf
 
 from ._types import IdRecord
 
@@ -37,7 +37,7 @@ def iter_article_prose_anchors(
 
     抽成單一 helper 讓「怎麼掃錨」只有一份實作——check 的死引用守門與 crossref 的
     reverse_anchor 反登記共用它，不會兩處各寫一套而漂移（同源）。"""
-    from dspx.render import iter_prose_anchor_ids, parse_section_bodies
+    from dspx.engine.render import iter_prose_anchor_ids, parse_section_bodies
 
     hits: list[tuple[str, str, str]] = []
     rendered: list[str] = []

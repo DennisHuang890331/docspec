@@ -9,8 +9,8 @@ import yaml
 
 from dspx.commands.deliverable import render as render_cmd
 from dspx.commands.deliverable import stale as stale_cmd
-from dspx.layout import Layout
-from dspx.render import parse_section_bodies, read_ledger, verdicts_path
+from dspx.engine.layout import Layout
+from dspx.engine.render import parse_section_bodies, read_ledger, verdicts_path
 
 
 def _project(tmp_path, name, write_leaf) -> Path:
@@ -37,8 +37,8 @@ def _write_prose(home, article, heading, prose):
 def _sync_of(home, article, section):
     """重算某節 sync 狀態（同 status._leaf_row 邏輯）。"""
     from dspx.commands.query.status import _docs_hashes, _leaf_row
-    from dspx.model import decision_index, load_project
-    from dspx.schema import load_schema
+    from dspx.engine.model import decision_index, load_project
+    from dspx.engine.schema import load_schema
     layout = Layout(home)
     leaves = load_project(layout)
     by = {lf.section: lf for lf in leaves}

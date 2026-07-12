@@ -485,10 +485,10 @@ def test_lint_flags_leaks(make_project, write_leaf, monkeypatch):
     (docs / "_latest.md").write_text("看 sec-leak 與 [TBD] 還有 {#m-a}", encoding="utf-8")
     monkeypatch.chdir(home.parent)
     rules = set()
-    import dspx.lint as lint_mod
-    from dspx.layout import Layout
-    from dspx.model import load_project
-    from dspx.schema import load_schema
+    import dspx.engine.lint as lint_mod
+    from dspx.engine.layout import Layout
+    from dspx.engine.model import load_project
+    from dspx.engine.schema import load_schema
     findings = lint_mod.run_lint(Layout(home), load_project(Layout(home)), load_schema())
     rules = {f.rule for f in findings}
     assert {"V1", "V2", "V4"} <= rules
@@ -502,10 +502,10 @@ def test_lint_v3_allows_domain_notation_flags_scaffold(make_project, write_leaf,
     docs = home.parent / "docs" / "g"
     docs.mkdir(parents=True)
     monkeypatch.chdir(home.parent)
-    import dspx.lint as lint_mod
-    from dspx.layout import Layout
-    from dspx.model import load_project
-    from dspx.schema import load_schema
+    import dspx.engine.lint as lint_mod
+    from dspx.engine.layout import Layout
+    from dspx.engine.model import load_project
+    from dspx.engine.schema import load_schema
 
     # 領域標記在 code 與散文裡都合法 → 不該觸發 V3
     (docs / "_latest.md").write_text(
@@ -538,8 +538,8 @@ def test_publish_gate_and_staleness(make_project, write_leaf, monkeypatch):
     meta = yaml.safe_load(latest.read_text("utf-8").split("---")[1])
     assert meta["version"] == "1.0.0"
     # 指紋帳本現存隱藏 sidecar（ISSUE-3），不在 _latest frontmatter
-    from dspx.layout import Layout
-    from dspx.render import read_ledger
+    from dspx.engine.layout import Layout
+    from dspx.engine.render import read_ledger
     assert "g/x" in read_ledger(Layout(home), "g")
 
 
@@ -575,7 +575,7 @@ def test_publish_first_version_not_labeled_patch(make_project, write_leaf, monke
     home = make_project()
     _render_and_draft(home, monkeypatch, write_leaf, "內文。")
     assert publish_cmd.run(["g"]) == 0
-    from dspx.layout import Layout
+    from dspx.engine.layout import Layout
     cl = Layout(home).docs_changelog("g").read_text("utf-8")
     assert "1.0.0" in cl
     assert "Patch" not in cl and "首版" in cl   # 首版不標自相矛盾的 Patch
@@ -595,7 +595,7 @@ def test_publish_english_changelog(make_project, write_leaf, monkeypatch):
     home = make_project("language: en\ndocs_layout: per-article\n")
     _render_and_draft(home, monkeypatch, write_leaf, "Body text.")
     assert publish_cmd.run(["g"]) == 0
-    from dspx.layout import Layout
+    from dspx.engine.layout import Layout
     cl = Layout(home).docs_changelog("g").read_text("utf-8")
     assert "| Version | Date | Level | Summary |" in cl
     assert "Initial" in cl
@@ -610,7 +610,7 @@ def test_publish_changelog_level_localized_by_content(make_project, write_leaf, 
     latest = docs / "_latest.md"
     latest.write_text(latest.read_text("utf-8").replace("第一版", "第二版"), encoding="utf-8")
     assert publish_cmd.run(["g", "--level", "patch", "--note", "修字"]) == 0  # v1.0.1
-    from dspx.layout import Layout
+    from dspx.engine.layout import Layout
     cl = Layout(home).docs_changelog("g").read_text("utf-8")
     assert "修訂" in cl              # 中文級別 map（patch→修訂）
     assert "Patch" not in cl        # 不冒英文
@@ -621,7 +621,7 @@ def test_publish_changelog_language_detected_not_config(make_project, write_leaf
     home = make_project()   # 預設 config.language = zh-TW
     _render_and_draft(home, monkeypatch, write_leaf, "This deliverable is written in English prose.")
     assert publish_cmd.run(["g"]) == 0
-    from dspx.layout import Layout
+    from dspx.engine.layout import Layout
     cl = Layout(home).docs_changelog("g").read_text("utf-8")
     assert "| Version | Date | Level | Summary |" in cl   # 英文表頭
     assert "版本" not in cl                                # 無中文殘留（雖 config 是 zh-TW）
@@ -637,7 +637,7 @@ def _watch_state(paths):
 
 def test_publish_dry_run_green_zero_writes(make_project, write_leaf, monkeypatch, capsys):
     """8.1a：全綠 → exit 0；_latest/帳本/changelog/快照夾全部位元不變。"""
-    from dspx.layout import Layout
+    from dspx.engine.layout import Layout
     home = make_project()
     docs = _render_and_draft(home, monkeypatch, write_leaf, "內文。")
     layout = Layout(home)

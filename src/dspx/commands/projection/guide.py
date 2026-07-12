@@ -14,7 +14,7 @@ import json
 import sys
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
-from dspx.schema import field_contract, required_field_names
+from dspx.engine.schema import field_contract, required_field_names
 
 NAME = "guide"
 HELP = ("agent contract: projects the workflow + every artifact's "

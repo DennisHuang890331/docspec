@@ -8,11 +8,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from dspx.audit import AuditError, AuditStore
-from dspx.glossary import load_glossary
-from dspx.layout import Layout
-from dspx.model import ModelError, _load_yaml, keyed_list
-from dspx.roadmap import _load_entries
+from dspx.reports.audit import AuditError, AuditStore
+from dspx.engine.glossary import load_glossary
+from dspx.engine.layout import Layout
+from dspx.engine.model import ModelError, _load_yaml, keyed_list
+from dspx.reports.roadmap import _load_entries
 
 
 # ── keyed_list 契約 ─────────────────────────────────────────────────
@@ -101,7 +101,7 @@ def test_load_yaml_clean_file_unchanged(tmp_path):
 # ── read_ledger 壞檔可見降級（非靜默） ──────────────────────────────
 
 def test_read_ledger_malformed_sidecar_warns_not_silent(make_project, capsys):
-    from dspx.render import read_ledger
+    from dspx.engine.render import read_ledger
     home = make_project()
     led = Layout(home).docs_ledger("g")
     led.parent.mkdir(parents=True, exist_ok=True)
@@ -111,7 +111,7 @@ def test_read_ledger_malformed_sidecar_warns_not_silent(make_project, capsys):
 
 
 def test_read_ledger_malformed_frontmatter_fallback_warns(make_project, capsys):
-    from dspx.render import read_ledger
+    from dspx.engine.render import read_ledger
     home = make_project()
     latest = Layout(home).docs_latest("g")
     latest.parent.mkdir(parents=True, exist_ok=True)

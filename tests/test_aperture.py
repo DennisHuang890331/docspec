@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from dspx.aperture import ApertureError, project
-from dspx.config import load_config
-from dspx.layout import Layout
-from dspx.model import load_project
-from dspx.schema import load_schema
+from dspx.engine.aperture import ApertureError, project
+from dspx.engine.config import load_config
+from dspx.engine.layout import Layout
+from dspx.engine.model import load_project
+from dspx.engine.schema import load_schema
 
 
 def _project(home, skill, section):
@@ -410,7 +410,7 @@ def test_document_map_only_for_draft(make_project, write_leaf):
 def test_image_change_does_not_stale_section(make_project, write_leaf):
     """Model A：圖移到交付側 docs/assets/、**不再折入 corpus source_hash** → 改圖不改 source_hash
     （圖是交付物、由 draft 流程刷新，非 corpus 源變動；corpus 源 hash 不得反向依賴交付物）。"""
-    from dspx.model import load_project as _lp
+    from dspx.engine.model import load_project as _lp
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     asset = _add_asset(home, "a/x", "d.png", data=b"\x89PNG\r\n\x1a\nAAA")

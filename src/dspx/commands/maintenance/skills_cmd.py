@@ -26,7 +26,7 @@ import shutil
 import sys
 from pathlib import Path
 
-from dspx.skills import Skill, SkillError, available_skills
+from dspx.env.skills import Skill, SkillError, available_skills
 
 NAME = "skills"
 HELP = "install the built-in skills to Claude / Antigravity / Codex"

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from dspx.commands.maintenance import skills_cmd as skills_cmd
-from dspx.frontmatter import parse_frontmatter
-from dspx.skills import available_skills
+from dspx.env.frontmatter import parse_frontmatter
+from dspx.env.skills import available_skills
 
 # 五個作者工作流 skill（裝成 skill＋command）——draft+edit 已併為單一 apply
 _EXPECTED = {
@@ -243,7 +243,7 @@ def test_every_skill_frontmatter_carries_uniform_license():
 def test_compatibility_survives_install(tmp_path):
     """skills.py .text preserves the full frontmatter — otherwise the compatibility field (the only
     home for the env recovery after the body block was removed) is dropped at install time."""
-    from dspx.frontmatter import parse_frontmatter
+    from dspx.env.frontmatter import parse_frontmatter
     assert skills_cmd.run(["install", "--tool", "claude", "--path", str(tmp_path)]) == 0
     md = tmp_path / ".claude" / "skills" / "dspx-apply" / "SKILL.md"
     meta, _ = parse_frontmatter(md.read_text(encoding="utf-8"), source=md)

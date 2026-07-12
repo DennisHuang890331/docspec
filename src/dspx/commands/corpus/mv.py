@@ -68,7 +68,7 @@ def _remap_target(target: object, old: str, new: str) -> str | None:
 
 def _rewrite_latest_markers(latest: Path, old: str, new: str) -> list[str]:
     """重寫 `_latest.md` 受影響的 section/group marker 行（只動 marker 行、散文 body 逐字保留）。"""
-    from dspx.render import GROUP_MARKER_RE, MARKER_RE, group_marker, section_marker
+    from dspx.engine.render import GROUP_MARKER_RE, MARKER_RE, group_marker, section_marker
 
     if not latest.is_file():
         return []
@@ -208,7 +208,7 @@ def _remove_created_dirs(created: list[Path]) -> None:
 def _check_result(layout, schema):
     """載入現行模型跑 check，回傳 CheckResult。"""
     from dspx.check import run_check
-    from dspx.model import load_project
+    from dspx.engine.model import load_project
     leaves = load_project(layout)
     return run_check(leaves, schema, layout)
 
@@ -239,7 +239,7 @@ def _run_section_mode(layout, schema, old_arg: str, new_arg: str) -> int:
         return 2
 
     # ── backend 路由：store 篇改的是記錄的 path 前綴（不搬資料夾），走結構化記錄搬移。 ──
-    from dspx import store as _store
+    from dspx.engine import store as _store
     if (_store.article_has_store(layout, layout.article_of(old))
             or _store.article_has_store(layout, layout.article_of(new))):
         return _run_store_section_mode(layout, schema, old, new)
@@ -342,7 +342,7 @@ def _run_section_mode(layout, schema, old_arg: str, new_arg: str) -> int:
 def _run_store_section_mode(layout, schema, old: str, new: str) -> int:
     """store 篇改名/搬移：改記錄的 path 前綴（不搬資料夾）＋同步重寫 docs marker/audit/roadmap
     路徑引用；revision+1、canonical dump、原子寫；自跑 check 驗引用完整，失敗回滾零半套。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
 
     old_art, new_art = layout.article_of(old), layout.article_of(new)
     # v1 範圍：article root 不搬、跨 article 不搬（同 tree 版；store 天生 per-article）。
@@ -452,7 +452,7 @@ def _resolve_asset(layout, arg: str) -> Path | None:
 
 def _rewrite_image_refs_file(path: Path, old_base: str, new_base: str) -> list[str]:
     """以 basename 比對重寫某檔的 `![](…old_base)` 圖引用（單一權威 IMAGE_REF_RE）。"""
-    from dspx.render import IMAGE_REF_RE
+    from dspx.engine.render import IMAGE_REF_RE
 
     if not path.is_file():
         return []
@@ -573,22 +573,22 @@ def _article_of_latest(layout, latest: Path) -> str:
 # ── audit/roadmap 路徑 helper（延後匯入避免循環）──────────────────────────
 
 def forest_audit_path(layout):
-    from dspx.audit import forest_audit_path as _f
+    from dspx.reports.audit import forest_audit_path as _f
     return _f(layout)
 
 
 def doc_audit_path(layout, article: str):
-    from dspx.audit import doc_audit_path as _f
+    from dspx.reports.audit import doc_audit_path as _f
     return _f(layout, article)
 
 
 def forest_roadmap_path(layout):
-    from dspx.roadmap import forest_roadmap_path as _f
+    from dspx.reports.roadmap import forest_roadmap_path as _f
     return _f(layout)
 
 
 def doc_roadmap_path(layout, article: str):
-    from dspx.roadmap import doc_roadmap_path as _f
+    from dspx.reports.roadmap import doc_roadmap_path as _f
     return _f(layout, article)
 
 

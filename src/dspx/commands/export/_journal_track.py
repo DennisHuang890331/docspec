@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from dspx import paths
+from dspx.engine import paths
 
 from ._config import _PANDOC_FROM
 
@@ -62,7 +62,7 @@ def _emit_journal(pandoc: str, template: Path, title: str, body_md: str,
     render-time slot 驗證：模板引用了 contract 沒有的變數＝印「unknown slot」（契約待 flex）；
     文件給了模板沒用到的 slot＝印「unused」（informational）。壞 slot 值在 build_slots 就拋。
     """
-    from dspx import slots as slots_mod
+    from dspx.typeset import slots as slots_mod
 
     # 作者/摘要進了 slot → 砍掉 body 開頭重複的作者列＋摘要/關鍵字節（匹配期刊範本、不重複）。
     if extra_slots.get("abstract") or extra_slots.get("authors"):

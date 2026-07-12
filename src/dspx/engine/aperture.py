@@ -13,10 +13,10 @@ from dataclasses import dataclass, field
 
 import yaml
 
-from dspx.forest import forest_view
-from dspx.glossary import GLOSSARY_INDEX_FIELDS, load_glossary
-from dspx.layout import Layout
-from dspx.model import (
+from dspx.engine.forest import forest_view
+from dspx.engine.glossary import GLOSSARY_INDEX_FIELDS, load_glossary
+from dspx.engine.layout import Layout
+from dspx.engine.model import (
     ACTIVE_DECISION_STATUSES,
     ASSET_DIR_NAME,
     Leaf,
@@ -26,7 +26,7 @@ from dspx.model import (
     docs_drawio_files,
     realized_statements,
 )
-from dspx.schema import Schema
+from dspx.engine.schema import Schema
 
 # apply（rewrite 模式）讀 concept 的准投欄位（治理欄 realizes 不投）
 _DRAFT_CONCEPT_FIELDS = ("concept", "brief", "must_cover", "sources")
@@ -184,7 +184,7 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
     # title/order、無 role），依共用 outline 排序器（同 render 交付物順序，含 group order 合併）；
     # 只含結構，絕不含 sibling 的散文/decisions/material——draft 用它寫「角色開場」、不指名鄰節。
     if skill in _DOCUMENT_MAP_SKILLS:
-        from dspx.render import (_group_order, _group_title, outline_group_nodes,
+        from dspx.engine.render import (_group_order, _group_title, outline_group_nodes,
                                  outline_numbering, outline_order_by_section,
                                  outline_sort_key)
         article = leaf.article

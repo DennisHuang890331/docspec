@@ -11,7 +11,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from dspx import paths
+from dspx.engine import paths
 
 # ── 字型 manifest（OFL 來源；每來源釘 version＋URL＋zip sha256）─────────────
 #

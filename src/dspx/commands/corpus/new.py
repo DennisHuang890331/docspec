@@ -9,7 +9,7 @@ import sys
 import yaml
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
-from dspx.layout import Layout
+from dspx.engine.layout import Layout
 
 NAME = "new"
 HELP = "create section folder + develop.md (concept/decisions are produced when develop crystallizes)"
@@ -121,7 +121,7 @@ def run(argv: list[str]) -> int:
         return exc.exit_code
 
     # ── backend 路由：store 篇的 develop 工作台住 docspec/work/<section>/（不進 store、結晶才進）──
-    from dspx import store as _store
+    from dspx.engine import store as _store
     is_store = _store.article_has_store(layout, layout.article_of(section))
     store_concept = None
     if is_store:
@@ -192,7 +192,7 @@ def run(argv: list[str]) -> int:
         print(f"  + {item}")
     print("  next: think in develop.md; once clear, crystallize into concept.yaml + decisions.yaml.")
     print("  ('develop stage' = the workflow phase; concept.status is a separate enum: draft|stable|deprecated)")
-    from dspx.schema import field_contract, required_field_names, yaml_skeleton
+    from dspx.engine.schema import field_contract, required_field_names, yaml_skeleton
     for aid in ("concept", "decisions"):
         art = schema.by_id(aid)
         if not (art and art.schema):

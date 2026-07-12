@@ -24,7 +24,7 @@ import re
 import sys
 from pathlib import Path
 
-from dspx import paths
+from dspx.engine import paths
 
 NAME = "reference"
 HELP = "Print craft or writing-style reference material (template-pack idioms + docspec's zh/en writing references)"

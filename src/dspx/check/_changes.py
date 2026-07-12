@@ -11,12 +11,12 @@
 
 from __future__ import annotations
 
-from dspx.model import Leaf
+from dspx.engine.model import Leaf
 
 
 def _validate_changes(layout, leaves: list[Leaf], id_set: set[str],
                       concept_ids: set[str]) -> list[str]:
-    from dspx import change as chg
+    from dspx.engine import change as chg
 
     errs: list[str] = []
 

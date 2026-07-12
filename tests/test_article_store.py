@@ -12,13 +12,13 @@ import copy
 import pytest
 import yaml
 
-from dspx import store as st
+from dspx.engine import store as st
 from dspx.commands.deliverable import render as render_cmd
 from dspx.commands.corpus import store as store_cmd
-from dspx.layout import Layout
-from dspx.model import (ancestor_brief_fingerprint, ancestor_normative_fingerprint,
+from dspx.engine.layout import Layout
+from dspx.engine.model import (ancestor_brief_fingerprint, ancestor_normative_fingerprint,
                         decision_index, deps_fingerprint, leaf_from_dir, load_project)
-from dspx.schema import load_schema
+from dspx.engine.schema import load_schema
 
 SCHEMA = load_schema()
 
@@ -173,7 +173,7 @@ def test_own_axis_v5_backend_neutral():
     decisions = [{"id": "dec-1", "kind": "normative", "status": "accepted",
                   "statement": "系統必須 X", "rationale": "因為\n多行\n理由"}]
     material = "## fact {#m1}\n- x = 1\n"
-    from dspx.model import Leaf
+    from dspx.engine.model import Leaf
     tree_leaf = Leaf(section="g/rules", dir=None, concept=concept,
                      decisions=decisions, has_material=True, material=material)
     store_art = st.Article(name="g", revision=1, records=[

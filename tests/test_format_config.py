@@ -12,12 +12,12 @@ from __future__ import annotations
 import pytest
 
 from dspx.commands import export as export_cmd
-from dspx.format_config import (
+from dspx.typeset.format_config import (
     FormatConfigError,
     pandoc_highlight_style,
     validate_format_config,
 )
-from dspx.layout import Layout
+from dspx.engine.layout import Layout
 
 
 # ── validate：補預設、未知鍵 warn 忽略 ──────────────────────────────
@@ -94,13 +94,13 @@ def test_pandoc_highlight_style_passthrough():
 
 
 def test_pandoc_table_metavars_default_is_status_quo():
-    from dspx.format_config import pandoc_table_metavars
+    from dspx.typeset.format_config import pandoc_table_metavars
     mv = pandoc_table_metavars(validate_format_config({}))
     assert mv == ["-M", "docspec-table-size=12", "-M", "docspec-table-colrules=on"]
 
 
 def test_pandoc_table_metavars_reflects_knobs():
-    from dspx.format_config import pandoc_table_metavars
+    from dspx.typeset.format_config import pandoc_table_metavars
     mv = pandoc_table_metavars(validate_format_config(
         {"table": {"size": 10, "column_rules": False}}))
     assert mv == ["-M", "docspec-table-size=10", "-M", "docspec-table-colrules=off"]
@@ -142,7 +142,7 @@ def test_export_rejects_missing_format_config_file(make_project, monkeypatch, ca
 # ── Typst 軌旋鈕映射（Stage B 2.4）────────────────────────────────
 
 def test_compile_typst_vars_maps_base_size_and_leading():
-    from dspx.format_config import compile_typst_vars, validate_format_config
+    from dspx.typeset.format_config import compile_typst_vars, validate_format_config
     v = compile_typst_vars(validate_format_config({"font": {"base_size": 12.0, "leading": 1.3}}))
     assert "-V" in v and "fontsize=12pt" in v
     assert any(x == "leading=0.8em" for x in v)   # 1.3 - 0.5 = 0.8
@@ -151,7 +151,7 @@ def test_compile_typst_vars_maps_base_size_and_leading():
 def test_compile_typst_vars_default_uses_typst_house_body():
     """預設 base_size＝LaTeX cas-sc 錨點(14.5pt，雙欄期刊用、Typst 單欄 A4 過大)→ 不發 fontsize，
     交給 docspec-typst 模板自己的 house 預設（單欄適中字級）。使用者調 base_size 才覆寫。"""
-    from dspx.format_config import compile_typst_vars, validate_format_config
+    from dspx.typeset.format_config import compile_typst_vars, validate_format_config
     v = compile_typst_vars(validate_format_config({}))
     assert not any(x.startswith("fontsize=") for x in v)   # 預設不發 → Typst house 預設生效
     # 明確調過 base_size 才發（且非錨點值）
@@ -162,45 +162,45 @@ def test_compile_typst_vars_default_uses_typst_house_body():
 # ── D4：page.margin / preset / par.first_line_indent 接線 ─────────────
 
 def test_compile_typst_vars_maps_page_margin():
-    from dspx.format_config import compile_typst_vars, validate_format_config
+    from dspx.typeset.format_config import compile_typst_vars, validate_format_config
     v = compile_typst_vars(validate_format_config({"page": {"margin": 25}}))
     assert "margin=25mm" in v
 
 
 def test_compile_typst_vars_preset_a4_normal_emits_equivalent_margin():
-    from dspx.format_config import compile_typst_vars, validate_format_config
+    from dspx.typeset.format_config import compile_typst_vars, validate_format_config
     v = compile_typst_vars(validate_format_config({"page": {"preset": "a4-normal"}}))
     assert "margin=25mm" in v
 
 
 def test_compile_typst_vars_preset_a4_wide_emits_no_margin():
     """a4-wide（預設）＝house 版心、不發 margin（行為不變）。"""
-    from dspx.format_config import compile_typst_vars, validate_format_config
+    from dspx.typeset.format_config import compile_typst_vars, validate_format_config
     v = compile_typst_vars(validate_format_config({}))                       # 預設 a4-wide
     assert not any(x.startswith("margin=") for x in v)
 
 
 def test_compile_typst_vars_preset_cas_native_warns_no_margin(capsys):
-    from dspx.format_config import compile_typst_vars, validate_format_config
+    from dspx.typeset.format_config import compile_typst_vars, validate_format_config
     v = compile_typst_vars(validate_format_config({"page": {"preset": "cas-native"}}))
     assert not any(x.startswith("margin=") for x in v)                       # 不映射
     assert "cas-native" in capsys.readouterr().err                          # 一行警告
 
 
 def test_compile_typst_vars_first_line_indent_set():
-    from dspx.format_config import compile_typst_vars, validate_format_config
+    from dspx.typeset.format_config import compile_typst_vars, validate_format_config
     v = compile_typst_vars(validate_format_config({"par": {"first_line_indent": 2}}))
     assert "first-line-indent=2em" in v
 
 
 def test_compile_typst_vars_first_line_indent_zero():
-    from dspx.format_config import compile_typst_vars, validate_format_config
+    from dspx.typeset.format_config import compile_typst_vars, validate_format_config
     v = compile_typst_vars(validate_format_config({"par": {"first_line_indent": 0}}))
     assert "first-line-indent=0em" in v                                     # 0＝明確關縮排（仍發）
 
 
 def test_compile_typst_vars_first_line_indent_unset():
-    from dspx.format_config import compile_typst_vars, validate_format_config
+    from dspx.typeset.format_config import compile_typst_vars, validate_format_config
     v = compile_typst_vars(validate_format_config({}))
     assert not any(x.startswith("first-line-indent=") for x in v)           # 未設＝交 profile、不發
 
@@ -217,7 +217,7 @@ def test_validate_rejects_bad_first_line_indent(bad):
 
 def test_typst_knob_followups_no_longer_names_page():
     """未映射 follow-up 只剩 table.*（page margin/preset 已接線、脫離清單）。"""
-    from dspx.format_config import _TYPST_KNOB_FOLLOWUPS
+    from dspx.typeset.format_config import _TYPST_KNOB_FOLLOWUPS
     joined = " ".join(_TYPST_KNOB_FOLLOWUPS)
     assert "page" not in joined and "margin" not in joined
     assert "table" in joined

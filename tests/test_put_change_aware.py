@@ -14,14 +14,14 @@ import re
 
 import yaml
 
-from dspx import change as chg
+from dspx.engine import change as chg
 from dspx.commands.change import change as change_cmd
 from dspx.commands.corpus import get as get_cmd
 from dspx.commands.corpus import put as put_cmd
 from dspx.commands.deliverable import render as render_cmd
 from dspx.commands.query import show as show_cmd
 from dspx.commands.query import status as status_cmd
-from dspx.layout import Layout
+from dspx.engine.layout import Layout
 
 
 # ── 共用專案（root g 擁 normative dec-1；g/intro realizes dec-1；旁節 g/usage）──

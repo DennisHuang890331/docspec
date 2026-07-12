@@ -10,7 +10,7 @@ import os
 
 import pytest
 
-from dspx import _install_source
+from dspx.env import _install_source
 from dspx import cli
 from dspx.commands.maintenance import init as init_cmd
 from dspx.commands.maintenance import self_update as su_cmd
@@ -112,7 +112,7 @@ def test_version_report_no_source_omits_line(monkeypatch):
 
 
 def test_typst_version_reads_subprocess(monkeypatch):
-    from dspx import paths
+    from dspx.engine import paths
     monkeypatch.setattr(paths, "resolve_typst", lambda: "typst")
 
     class _R:
@@ -122,7 +122,7 @@ def test_typst_version_reads_subprocess(monkeypatch):
 
 
 def test_typst_version_missing_hints(monkeypatch):
-    from dspx import paths
+    from dspx.engine import paths
     monkeypatch.setattr(paths, "resolve_typst", lambda: None)
     assert "docspec setup" in version_cmd._typst_version()
 

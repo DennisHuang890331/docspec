@@ -10,7 +10,7 @@ import argparse
 import json
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.render import detect_drift
+from dspx.engine.render import detect_drift
 
 NAME = "diff"
 HELP = "detect hand-edits to the deliverable (_latest prose != last render fingerprint)"

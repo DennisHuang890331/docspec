@@ -21,11 +21,11 @@ from pathlib import Path
 
 import yaml
 
-from dspx import change as chg
+from dspx.engine import change as chg
 from dspx.check import run_file_check
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
 from dspx.commands.corpus.new import _next_order, _stable_id, validate_section_path
-from dspx.model import Leaf, ModelError, _DupCheckLoader, _entries
+from dspx.engine.model import Leaf, ModelError, _DupCheckLoader, _entries
 
 NAME = "put"
 HELP = "the single validated write gate: validate then atomically write a section's concept/decisions/material"
@@ -42,7 +42,7 @@ _COMPLETENESS_MARKERS = ("missing or empty", "is a placeholder")
 
 def _parse_yaml_text(text: str, where: str):
     """解析 YAML 文字，重複 mapping key fail-loud（同 model._load_yaml 的 loader，同源）。"""
-    from dspx.model import _DuplicateKeyError
+    from dspx.engine.model import _DuplicateKeyError
     try:
         return yaml.load(text, Loader=_DupCheckLoader)
     except _DuplicateKeyError as exc:
@@ -117,7 +117,7 @@ def _build_candidate(sec_dir: Path, section: str, category: str, parsed) -> Leaf
 
 def _other_leaves(layout, section: str) -> list[Leaf]:
     """全專案除本節外的活節（供 id 唯一／relation 存在的宇宙）；壞的別節盡力略過。"""
-    from dspx.model import load_leaf
+    from dspx.engine.model import load_leaf
     out: list[Leaf] = []
     for leaf_dir in layout.leaf_dirs():
         if layout.section_id(leaf_dir) == section:
@@ -207,7 +207,7 @@ def _put_store(layout, schema, args, section: str, text: str, change) -> int:
     """store 篇 put：把分類寫進正式 store 記錄（無 --change）或 change 的 partial store staging 記錄
     （有 --change，official byte 凍結）。同一驗證管線（欄位 check＋重複 id＋relation 目標＋enum）；
     通過才 canonical dump 原子寫。first-write concept 帶入 id/order（取代 agent 手寫）。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     category = args.category
     article = layout.article_of(section)
 
@@ -217,7 +217,7 @@ def _put_store(layout, schema, args, section: str, text: str, change) -> int:
         art_obj = chg._load_staging_article(change.dir, article)
         others = [lf for lf in chg.load_union(layout, change) if lf.section != section]
     else:
-        from dspx.model import load_project
+        from dspx.engine.model import load_project
         art_obj = _store.load_article(_store.store_path(layout, article), verify=True)
         others = [lf for lf in load_project(layout) if lf.section != section]
     rec = art_obj.record_by_path(section)
@@ -351,7 +351,7 @@ def run(argv: list[str]) -> int:
         return 2
 
     # ── backend 路由：store 篇寫進 store 記錄（正式或 staging partial store），非散檔 ──
-    from dspx import store as store_mod
+    from dspx.engine import store as store_mod
     if store_mod.article_has_store(layout, layout.article_of(section)):
         return _put_store(layout, schema, args, section, text, change)
 

@@ -17,10 +17,10 @@ from pathlib import Path
 
 import yaml
 
-from dspx import store as st
+from dspx.engine import store as st
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
-from dspx.layout import Layout
-from dspx.model import (ancestor_brief_fingerprint, ancestor_normative_fingerprint,
+from dspx.engine.layout import Layout
+from dspx.engine.model import (ancestor_brief_fingerprint, ancestor_normative_fingerprint,
                         deps_fingerprint, decision_index, leaf_from_dir, load_leaf)
 
 NAME = "store"
@@ -66,7 +66,7 @@ def _leaf_truth(lf) -> tuple:
 
 def _parity_check(layout: Layout, article: str, schema) -> tuple[st.Article, list[str]]:
     """建 store Article、對散檔跑平價閘。回 (article_obj, mismatches)；mismatches 空＝過關。"""
-    from dspx.model import load_project
+    from dspx.engine.model import load_project
     tree_all = load_project(layout)          # 全專案（該篇仍散檔，尚未寫 store 檔）
     tree_x = [lf for lf in tree_all if layout.article_of(lf.section) == article]
     if not tree_x:
@@ -321,7 +321,7 @@ def run(argv: list[str]) -> int:
     if args.sub == "migrate":
         if args.all:
             # 掃全散檔文章（有 leaf 夾樹者；store 篇已遷、跳過）。
-            from dspx.model import load_project
+            from dspx.engine.model import load_project
             arts = sorted({layout.article_of(lf.section) for lf in load_project(layout)
                            if st.backend_of(layout, layout.article_of(lf.section)) == "tree"})
             rc = 0

@@ -19,8 +19,8 @@ from __future__ import annotations
 
 from itertools import combinations
 
-from dspx.layout import Layout
-from dspx.model import Leaf
+from dspx.engine.layout import Layout
+from dspx.engine.model import Leaf
 
 
 def forest_view(leaves: list[Leaf], layout: Layout | None = None) -> dict:
@@ -71,7 +71,7 @@ def forest_view(leaves: list[Leaf], layout: Layout | None = None) -> dict:
         else:
             # oneLiner＝corpus/<article>/group.yaml 的 title（與 render 封面標題同機制）、
             # 缺則 humanize slug；不偽造 concept。
-            from dspx.render import _group_title, _humanize_segment
+            from dspx.engine.render import _group_title, _humanize_segment
             one_liner = (_group_title(layout, article, article) if layout is not None
                          else _humanize_segment(article))
             documents.append({

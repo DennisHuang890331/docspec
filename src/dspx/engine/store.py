@@ -25,8 +25,8 @@ from pathlib import Path
 
 import yaml
 
-from dspx.layout import Layout
-from dspx.model import Leaf, ModelError, _normalize_newlines
+from dspx.engine.layout import Layout
+from dspx.engine.model import Leaf, ModelError, _normalize_newlines
 
 # store 檔格式版本（頭 `format:`）；與 ledger 指紋版本無關。
 STORE_FORMAT_VERSION = 1

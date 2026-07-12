@@ -11,7 +11,7 @@ import argparse
 import sys
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.render import (
+from dspx.engine.render import (
     LEDGER_FINGERPRINT_VERSION,
     parse_section_bodies,
     prose_hash,
@@ -20,7 +20,7 @@ from dspx.render import (
     read_ledger_version,
     write_ledger,
 )
-from dspx.spans import apply_conversions, propose_conversions
+from dspx.engine.spans import apply_conversions, propose_conversions
 
 NAME = "normalize"
 HELP = "convert half-width punctuation to full-width in a deliverable's prose (deterministic; code/URLs untouched)"

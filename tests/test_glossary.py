@@ -5,11 +5,11 @@ from __future__ import annotations
 import yaml
 
 from dspx.check import run_check
-from dspx.glossary import load_glossary, validate_glossary
-from dspx.layout import Layout
-from dspx.lint import run_lint
-from dspx.model import load_project
-from dspx.schema import load_schema
+from dspx.engine.glossary import load_glossary, validate_glossary
+from dspx.engine.layout import Layout
+from dspx.engine.lint import run_lint
+from dspx.engine.model import load_project
+from dspx.engine.schema import load_schema
 
 
 def _set_glossary(home, terms):

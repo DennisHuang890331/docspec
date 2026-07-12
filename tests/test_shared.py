@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import yaml
 
-from dspx.aperture import project
+from dspx.engine.aperture import project
 from dspx.commands.deliverable import render as render_cmd
 from dspx.commands.query.status import _docs_hashes, _leaf_row
-from dspx.crossref import build_reverse_indices
-from dspx.layout import Layout
-from dspx.model import decision_index, load_project
-from dspx.schema import load_schema
+from dspx.engine.crossref import build_reverse_indices
+from dspx.engine.layout import Layout
+from dspx.engine.model import decision_index, load_project
+from dspx.engine.schema import load_schema
 
 
 def _shared_project(make_project, write_leaf):
@@ -55,7 +55,7 @@ def test_change_shared_truth_makes_consumer_stale_upstream(make_project, write_l
         layout = Layout(home)
         leaves = load_project(layout)
         by = {lf.section: lf for lf in leaves}
-        from dspx.schema import load_schema
+        from dspx.engine.schema import load_schema
         return _leaf_row(layout, by[section], load_schema(), True, _docs_hashes(layout, "occ"),
                          by, decision_index(leaves))["sync"]
 
@@ -89,7 +89,7 @@ def test_deps_only_tracks_statement_not_rationale(make_project, write_leaf, monk
     layout = Layout(home)
     leaves = load_project(layout)
     by = {lf.section: lf for lf in leaves}
-    from dspx.schema import load_schema
+    from dspx.engine.schema import load_schema
     sync = _leaf_row(layout, by["occ/mirror"], load_schema(), True, _docs_hashes(layout, "occ"),
                      by, decision_index(leaves))["sync"]
     assert sync == "synced"   # rationale 變、statement 沒變 → 不觸發

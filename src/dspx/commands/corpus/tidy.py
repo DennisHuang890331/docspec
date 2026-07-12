@@ -4,7 +4,7 @@
   1. **刪空殼 decisions.yaml**：`entries: []`／空 mapping／空檔＝契約層非法空殼 → 刪檔逐一列出。
      壞檔（頂層 list、誤名 key）不是空殼——loader 本就 fail-loud，tidy 不碰。
   2. **剝逐字重複 brief 欄**：與「最近提供該欄的祖先」strip 後 byte 等值的子欄 → 刪欄改繼承。
-     判定原語＝`dspx.lint.brief_dup_fields`（與 lint V19 單一權威，不另寫副本）；改寫過的
+     判定原語＝`dspx.engine.lint.brief_dup_fields`（與 lint V19 單一權威，不另寫副本）；改寫過的
      特化（哪怕一字之差）永不觸發。article root 永不剝（hierarchy check 要求 root 信封完整；
      root 無祖先、本就不會命中——雙保險）。
   3. **剝 title 阿拉伯式章號前綴**：concept.yaml／group.yaml 的 title 以 `6.`／`6.1`／`6、`
@@ -35,7 +35,7 @@ import yaml
 from dspx.commands.corpus import mv as mv_cmd
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
 from dspx.commands.corpus.new import _ILLEGAL_CHARS, _segment_error
-from dspx.lint import _TITLE_ARABIC_PREFIX_RE, brief_dup_fields
+from dspx.engine.lint import _TITLE_ARABIC_PREFIX_RE, brief_dup_fields
 
 NAME = "tidy"
 HELP = ("deterministic, idempotent corpus migration: delete empty-shell decisions.yaml, strip "
@@ -185,7 +185,7 @@ def _compute_renames(layout) -> tuple[list[tuple[str, str]],
     valid=(old, new)；conflicts=([olds], new, 原因)；skips=(section, 原因)。
     article root（section 無 `/`）一律排除。slug 以「剝章號後的 title」為基準
     （dry-run 時動作 3 尚未落盤、實跑時已剝＝再剝是 no-op，兩態一致）。"""
-    from dspx.model import load_project
+    from dspx.engine.model import load_project
     leaves = load_project(layout)
     raw: list[tuple[str, str]] = []
     skips: list[tuple[str, str]] = []
@@ -267,7 +267,7 @@ def run(argv: list[str]) -> int:
             articles.add(leaf.article)
 
     # ── 2. 剝逐字重複 brief 欄（判定＝lint brief_dup_fields，單一權威）────
-    from dspx.model import _concept_by_id
+    from dspx.engine.model import _concept_by_id
     by_section = {lf.section: lf for lf in leaves}
     concept_by_id = _concept_by_id(by_section)
     for leaf in leaves:

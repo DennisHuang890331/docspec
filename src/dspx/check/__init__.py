@@ -7,8 +7,8 @@
 
 from __future__ import annotations
 
-from dspx.model import Leaf
-from dspx.schema import Schema
+from dspx.engine.model import Leaf
+from dspx.engine.schema import Schema
 
 from . import (
     _audit,
@@ -62,7 +62,7 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
         errors.extend(_audit._validate_audit(layout, leaves, id_set, concept_ids))  # ⑤ — own `if layout`
     errors.extend(_hierarchy._check_hierarchy(leaves))                       # ⑦ — unconditional
     if layout is not None:
-        from dspx.glossary import load_glossary, validate_glossary          # ⑥ — unchanged inline
+        from dspx.engine.glossary import load_glossary, validate_glossary          # ⑥ — unchanged inline
         errors.extend(validate_glossary(load_glossary(layout)))
         errors.extend(_roadmap._validate_roadmap(layout, leaves, id_set, concept_ids))  # ⑧ — same `if layout`
         errors.extend(_images._validate_image_refs(layout, leaves))         # ⑨ — same `if layout`

@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from dspx import paths
+from dspx.engine import paths
 from dspx.commands.maintenance import doctor as doctor_cmd
 from dspx.commands.maintenance import init as init_cmd
 from dspx.commands.maintenance import setup as setup_cmd
@@ -323,7 +323,7 @@ def test_init_no_tex_hint_flag_silences(monkeypatch, tmp_path, capsys):
 def test_init_degrades_on_broken_skills(monkeypatch, tmp_path, capsys):
     """init guards against an uncaught SkillError from broken packaged-skill data."""
     from dspx.commands.maintenance import skills_cmd
-    from dspx.skills import SkillError
+    from dspx.env.skills import SkillError
     proj = tmp_path / "pbroken"
     proj.mkdir()
     monkeypatch.chdir(proj)

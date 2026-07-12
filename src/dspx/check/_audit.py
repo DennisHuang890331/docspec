@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from dspx.model import Leaf
+from dspx.engine.model import Leaf
 
 from ._roadmap import _promoted_to_errors
 
@@ -15,9 +15,9 @@ _LINE_ANCHOR_RE = re.compile(r"(?:#L\d+\b|(?<![A-Za-z0-9])L\d+(?![A-Za-z0-9]))")
 
 def _audit_faces(layout) -> tuple[str, ...]:
     """從 project config 取 audit faces（core+packs）；不可用→DEFAULT_FACES。"""
-    from dspx.audit import DEFAULT_FACES
+    from dspx.reports.audit import DEFAULT_FACES
     try:
-        from dspx.config import load_config
+        from dspx.engine.config import load_config
         config = load_config(layout.planning_home)
         audit = config.get("audit") or {}
         core = tuple(audit.get("core") or ())
@@ -38,7 +38,7 @@ def _validate_audit(layout, leaves: list[Leaf], id_set: set[str],
     - promoted-to 反查（★G6：指向 roadmap id 或 active/archived change 健康、abandoned 孤兒 ERROR、
       死指標 ERROR）。
     放錯/死引會讓「audit→roadmap from-audit」與彙總算錯 → 違「引擎＝可信索引」，故 check 硬擋。"""
-    from dspx.audit import all_findings, distinct_articles, validate_finding
+    from dspx.reports.audit import all_findings, distinct_articles, validate_finding
 
     faces = _audit_faces(layout)
     findings = all_findings(layout, leaves)
@@ -48,8 +48,8 @@ def _validate_audit(layout, leaves: list[Leaf], id_set: set[str],
     # section 識別：concept id ∪ section 路徑（target 可是任一；§anchor 取 '#' 前段）。
     section_paths = {leaf.section for leaf in leaves}
 
-    from dspx import change as _chg
-    from dspx import roadmap as _roadmap
+    from dspx.engine import change as _chg
+    from dspx.reports import roadmap as _roadmap
     change_states = _chg.all_change_states(layout)
     roadmap_ids = {str(e["id"]) for e in _roadmap.all_entries(layout, leaves) if e.get("id")}
 

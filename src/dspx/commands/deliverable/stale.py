@@ -23,8 +23,8 @@ import shutil
 import sys
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_model
-from dspx.layout import LEDGER_DIR_NAME
-from dspx.render import (
+from dspx.engine.layout import LEDGER_DIR_NAME
+from dspx.engine.render import (
     append_verdicts,
     ledger_needs_migration,
     read_ledger,

@@ -10,9 +10,9 @@ import pytest
 import yaml
 
 from dspx.check import run_check
-from dspx.layout import Layout
-from dspx.model import ModelError, load_leaf, load_project
-from dspx.schema import field_contract, load_schema, yaml_skeleton
+from dspx.engine.layout import Layout
+from dspx.engine.model import ModelError, load_leaf, load_project
+from dspx.engine.schema import field_contract, load_schema, yaml_skeleton
 
 
 # ── HIGH#2：誤名頂層 key fail-loud ───────────────────────────────────────────

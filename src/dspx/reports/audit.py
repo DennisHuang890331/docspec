@@ -20,7 +20,7 @@ from pathlib import Path
 
 import yaml
 
-from dspx.layout import Layout
+from dspx.engine.layout import Layout
 
 STATUSES = ("open", "fixed", "rejected", "waived", "closed")
 SEVERITIES = ("high", "med", "low")
@@ -58,7 +58,7 @@ class AuditStore:
     def load(cls, path: Path, store: str = "") -> "AuditStore":
         if not path.is_file():
             return cls(path=path, findings=[], store=store)
-        from dspx.model import keyed_list
+        from dspx.engine.model import keyed_list
         try:
             raw = yaml.safe_load(path.read_text(encoding="utf-8"))
         except yaml.YAMLError as exc:

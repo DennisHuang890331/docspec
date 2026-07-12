@@ -11,7 +11,7 @@ import zipfile
 
 import pytest
 
-from dspx import paths
+from dspx.engine import paths
 from dspx.commands.maintenance import setup as setup_cmd
 
 

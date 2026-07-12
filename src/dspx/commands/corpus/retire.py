@@ -95,8 +95,8 @@ def _warn_back_references(layout, section: str, sub_ids: set[str]) -> None:
     roadmap entries 的 target，指向待退子樹者逐條列出（退役後 check 將報 target 死引用），
     然後照常執行——退役常是正當操作、記錄本該跟著改。sub_ids＝待退子樹的 concept.id 集
     （tree 由 rglob、store 由記錄收；target 可能是 id 而非路徑）。"""
-    from dspx.audit import load_doc_audit, load_forest_audit
-    from dspx.roadmap import load_doc_roadmap, load_forest_roadmap
+    from dspx.reports.audit import load_doc_audit, load_forest_audit
+    from dspx.reports.roadmap import load_doc_roadmap, load_forest_roadmap
 
     def _refers(target: object) -> bool:
         t = str(target).split("#", 1)[0]
@@ -181,7 +181,7 @@ def _section_entry(sec_id: str, note: str, archive_link: str, retired_in: str | 
 # ── store 篇退場：抽記錄→ dump 封存包（散檔形態）→活 store 移除、revision+1 ────────────
 
 def _retire_store(layout, schema, section: str, args) -> int:
-    from dspx import store as _store
+    from dspx.engine import store as _store
 
     article = layout.article_of(section)
     store_file = _store.store_path(layout, article)
@@ -372,7 +372,7 @@ def run(argv: list[str]) -> int:
     section = args.section.strip("/")
 
     # backend 路由：store 篇走結構化記錄退場、tree 篇搬資料夾。
-    from dspx import store as _store
+    from dspx.engine import store as _store
     if _store.article_has_store(layout, layout.article_of(section)):
         return _retire_store(layout, schema, section, args)
     return _retire_tree(layout, section, args)

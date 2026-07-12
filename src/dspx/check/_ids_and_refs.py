@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dspx.model import Leaf
+from dspx.engine.model import Leaf
 
 from ._types import IdRecord
 

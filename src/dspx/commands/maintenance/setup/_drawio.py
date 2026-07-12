@@ -20,7 +20,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from dspx import paths
+from dspx.engine import paths
 
 _DRAWIO_REPO = "jgraph/drawio-desktop"
 _DRAWIO_MANIFEST = {

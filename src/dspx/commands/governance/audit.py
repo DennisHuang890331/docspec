@@ -14,7 +14,7 @@ import json
 import sys
 from pathlib import Path
 
-from dspx.audit import (
+from dspx.reports.audit import (
     AuditError,
     all_findings,
     article_of_target,
@@ -164,7 +164,7 @@ def run(argv: list[str]) -> int:
         # 涵蓋規則＝mirror publish._count_open_findings：doc store ＝ doc:<article>，
         # **加上** targets 觸及該文章的 forest findings（distinct_articles）。刻意不沿用
         # 預設列表 `--article` 的 doc-store-only 過濾——那會漏算 factcheck 最需要看的跨文件 finding。
-        from dspx.audit import distinct_articles
+        from dspx.reports.audit import distinct_articles
         rows = []
         for f in all_findings(layout, leaves):
             if args.article:

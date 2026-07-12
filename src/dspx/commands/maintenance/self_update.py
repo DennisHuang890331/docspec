@@ -35,7 +35,7 @@ def run(argv: list[str]) -> int:
                              "(default: only print the command)")
     args = parser.parse_args(argv)
 
-    from dspx import _install_source
+    from dspx.env import _install_source
     source = _install_source.read_install_source()
     cmd = _install_source.update_command(source)
 

@@ -16,10 +16,10 @@ from datetime import date
 
 from dspx.check import run_check
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.frontmatter import parse_frontmatter, render_frontmatter
-from dspx.layout import Layout, next_version, parse_semver
-from dspx.lint import ERROR, run_lint
-from dspx.render import render_article, strip_anchor_bindings, strip_markers
+from dspx.env.frontmatter import parse_frontmatter, render_frontmatter
+from dspx.engine.layout import Layout, next_version, parse_semver
+from dspx.engine.lint import ERROR, run_lint
+from dspx.engine.render import render_article, strip_anchor_bindings, strip_markers
 
 NAME = "publish"
 HELP = "the only irreversible command: check+lint green -> render -> freeze a read-only, marker-stripped snapshot"
@@ -44,7 +44,7 @@ _ALL_HEADERS = tuple(_CHANGELOG_HEADERS.values())
 def _changelog_lang(clean_body: str, config: dict) -> str:
     """changelog 在地化＝偵測**文件語言**（從定稿內容 CJK 比例），非綁專案 config.language
     （單一專案級設定常忘了改、英文交付物洩中文表頭）。config.language 為內容無可判時的 fallback。"""
-    from dspx.config import detect_language
+    from dspx.engine.config import detect_language
     return detect_language(clean_body, config.get("language"))
 
 
@@ -174,7 +174,7 @@ def run(argv: list[str]) -> int:
     snapshot.parent.mkdir(parents=True, exist_ok=True)
     snapshot.write_text(clean_body, encoding="utf-8", newline="\n")
     # 凍結區 hash 抓包（主保證，跨工具、Drive 有效）＋ OS 唯讀（加分，Drive 可能失效）
-    from dspx import freeze
+    from dspx.reports import freeze
     freeze.record(layout.planning_home, layout.project_root, snapshot)
     frozen = True
     try:
@@ -222,7 +222,7 @@ def _dry_run(layout: Layout, schema, leaves, args) -> int:
     預覽非鎖定（spec：preview, not a reservation）：真 publish 會先 render 再算 coverage，
     dry-run 對現有 `_latest.md` 算——render 不寫散文，閘相關量（哪些節有散文）相同，
     但 dry-run 綠不保證之後真 publish 綠（中間檔案可能變）。"""
-    from dspx.render import detect_drift, parse_section_bodies
+    from dspx.engine.render import detect_drift, parse_section_bodies
 
     article = args.article
     print(f"pre-publish preview for \"{article}\" (--dry-run; nothing is written)")
@@ -280,7 +280,7 @@ def _dry_run(layout: Layout, schema, leaves, args) -> int:
 
     # ℹ 資訊行（永不阻塞——與真 publish 的非阻塞語義一致）
     from dspx.commands.query.status import _docs_hashes, _leaf_row
-    from dspx.model import decision_index
+    from dspx.engine.model import decision_index
     by_section = {lf.section: lf for lf in leaves}
     dindex = decision_index(leaves)
     hashes = _docs_hashes(layout, article)
@@ -315,8 +315,8 @@ def _dry_run(layout: Layout, schema, leaves, args) -> int:
 def _change_policy_gate(layout, leaves, article: str) -> int:
     """publish 命中 active change 時強制其 publish 政策（★#8）：advisory→WARN 放行；
     release-bound→拒（列擋路 change 與其未完成 targets、exit 非 0），直到該 change 收案/棄案。"""
-    from dspx import change as chg
-    from dspx.schema import load_schema
+    from dspx.engine import change as chg
+    from dspx.engine.schema import load_schema
     hitting = chg.changes_hitting_article(layout, article, leaves)
     if not hitting:
         return 0
@@ -345,7 +345,7 @@ def _change_policy_gate(layout, leaves, article: str) -> int:
 
 def _count_open_findings(layout, leaves, article: str) -> int:
     """該文件的未解 finding：自己 doc-root store ＋ 觸及它的 forest finding。"""
-    from dspx.audit import all_findings, distinct_articles
+    from dspx.reports.audit import all_findings, distinct_articles
     n = 0
     for f in all_findings(layout, leaves):
         if f.get("status") != "open":

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from dspx.model import Leaf
-from dspx.render import MAX_HEADING_LEVEL, _depth
+from dspx.engine.model import Leaf
+from dspx.engine.render import MAX_HEADING_LEVEL, _depth
 
 
 def _check_hierarchy(leaves: list[Leaf]) -> list[str]:

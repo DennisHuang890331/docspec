@@ -19,15 +19,15 @@ from dspx.commands.query import show as show_cmd
 from dspx.commands.query import status as status_cmd
 from dspx.commands.corpus.ready import _graduate
 from dspx.commands.query.status import section_state
-from dspx.layout import Layout
-from dspx.model import (
+from dspx.engine.layout import Layout
+from dspx.engine.model import (
     ModelError,
     decision_index,
     deps_fingerprint,
     load_project,
     realized_statements,
 )
-from dspx.schema import load_schema
+from dspx.engine.schema import load_schema
 
 
 def _leaf_dir(home, section):

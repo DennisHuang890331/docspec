@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from dspx.model import Leaf, ancestor_leaves
+from dspx.engine.model import Leaf, ancestor_leaves
 
 
 @dataclass

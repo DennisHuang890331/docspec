@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import subprocess
 
-from dspx import __version__, paths
+from dspx import __version__
+from dspx.engine import paths
 
 NAME = "version"
 HELP = "Print program version + install source + typst / pandoc versions + optional TinyTeX (offline, read-only)"
@@ -52,7 +53,7 @@ def _typst_version() -> str:
 
 def _install_source_line() -> str | None:
     """安裝來源行（PEP 610 direct_url.json）；來源不明 → None（靜默省略）。"""
-    from dspx import _install_source
+    from dspx.env import _install_source
     src = _install_source.read_install_source()
     if src is None:
         return None

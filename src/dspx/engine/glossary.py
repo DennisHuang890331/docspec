@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dspx.layout import Layout
+from dspx.engine.layout import Layout
 
 BUCKETS = ("module", "standard", "protocol")
 
@@ -31,7 +31,7 @@ def load_glossary(layout: Layout) -> list[dict]:
     path = glossary_path(layout)
     if not path.is_file():
         return []
-    from dspx.model import ModelError, _load_yaml, keyed_list
+    from dspx.engine.model import ModelError, _load_yaml, keyed_list
     raw = _load_yaml(path)   # 壞檔（Drive 截斷）→ ModelError 帶路徑，不裸 traceback
     return keyed_list(raw, path, "terms", error=ModelError)  # 誤名頂層 key fail-loud
 

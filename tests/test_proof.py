@@ -11,10 +11,10 @@ from __future__ import annotations
 
 import pytest
 
-from dspx import paths
+from dspx.engine import paths
 from dspx.commands import export as export_cmd
 from dspx.commands.export import proof as proof_cmd
-from dspx.layout import Layout
+from dspx.engine.layout import Layout
 
 _HAVE_PANDOC = export_cmd._pandoc_path() is not None
 # 受控 typst ＋ 受控字型皆備才能真 build PDF（皆移出 wheel；未 setup → skip）。

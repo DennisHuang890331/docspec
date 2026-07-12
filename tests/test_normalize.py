@@ -9,8 +9,8 @@ from pathlib import Path
 
 from dspx.commands.deliverable import normalize as normalize_cmd
 from dspx.commands.deliverable import render as render_cmd
-from dspx.layout import Layout
-from dspx.render import detect_drift, read_ledger
+from dspx.engine.layout import Layout
+from dspx.engine.render import detect_drift, read_ledger
 
 
 def _leaf(write_leaf, home, section="a/x"):

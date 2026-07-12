@@ -14,7 +14,7 @@ import json
 import sys
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.lint import ERROR, run_lint
+from dspx.engine.lint import ERROR, run_lint
 
 NAME = "lint"
 HELP = "deliverable cleanliness (leaked ids/anchors/scaffolding/[TBD], material chunking)"

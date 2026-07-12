@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from dspx.schema import DEFAULT_SCHEMA, SchemaError, load_schema
+from dspx.engine.schema import DEFAULT_SCHEMA, SchemaError, load_schema
 
 
 def test_load_builtin_section_driven():

@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import re
 
-from dspx.model import Leaf
-from dspx.schema import Schema
+from dspx.engine.model import Leaf
+from dspx.engine.schema import Schema
 
 # 佔位字（必填字串若整值是這些＝視同未填）：TODO/TBD/FIXME 整詞，或 <…>/{…} 整值包起來
 _PLACEHOLDER_RE = re.compile(r"^(?:TODO|TBD|FIXME|<.*>|\{.*\})$", re.IGNORECASE)

@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import pytest
 
-from dspx import paths
+from dspx.engine import paths
 from dspx.commands import export as export_cmd
-from dspx.layout import Layout
+from dspx.engine.layout import Layout
 
 _HAVE_PANDOC = export_cmd._pandoc_path() is not None
 # 受控 typst ＋ 受控字型（data_dir/fonts）皆備才跑真 PDF build（預設 Typst 軌）。
@@ -36,7 +36,7 @@ Mixed English sentence also survives the round trip.
 """
 
 
-# byte-lock 比對邏輯已抽成共用函式（dspx.paths.content_token_multiset），
+# byte-lock 比對邏輯已抽成共用函式（dspx.engine.paths.content_token_multiset），
 # export 指令的 runtime 驗證與本測試共用同一套。此 alias 維持既有測試呼叫點。
 _content_chars = paths.content_token_multiset
 
@@ -216,7 +216,7 @@ def _write_latest(layout, article: str, body: str):
 
 
 def test_lint_ve1_dead_anchor_link(make_project):
-    from dspx.lint import _lint_export_safety
+    from dspx.engine.lint import _lint_export_safety
     home = make_project()
     layout = Layout(home, "per-article")
     # 標題「§7.5 主動安全監控」slug=主動安全監控；連結手寫 #section-7-5 對不上→Ve1
@@ -229,7 +229,7 @@ def test_lint_ve1_dead_anchor_link(make_project):
 
 
 def test_lint_ve1_ignores_links_in_code(make_project):
-    from dspx.lint import _lint_export_safety
+    from dspx.engine.lint import _lint_export_safety
     home = make_project()
     layout = Layout(home, "per-article")
     # code fence 內的 ](#x) 是內容範例，不該誤報
@@ -240,7 +240,7 @@ def test_lint_ve1_ignores_links_in_code(make_project):
 
 
 def test_lint_ve2_mpe_import(make_project):
-    from dspx.lint import _lint_export_safety
+    from dspx.engine.lint import _lint_export_safety
     home = make_project()
     layout = Layout(home, "per-article")
     _write_latest(layout, "g", '# 文件\n\n@import "revision_history/x.md"\n\n## 章\n\n內容。\n')
@@ -249,7 +249,7 @@ def test_lint_ve2_mpe_import(make_project):
 
 
 def test_lint_ve3_mermaid_flagged(make_project):
-    from dspx.lint import _lint_export_safety
+    from dspx.engine.lint import _lint_export_safety
     home = make_project()
     layout = Layout(home, "per-article")
     _write_latest(layout, "g",
@@ -260,7 +260,7 @@ def test_lint_ve3_mermaid_flagged(make_project):
 
 
 def test_lint_ve3_raw_latex_tikz_flagged(make_project):
-    from dspx.lint import _lint_export_safety
+    from dspx.engine.lint import _lint_export_safety
     home = make_project()
     layout = Layout(home, "per-article")
     # raw `{=latex}` (舊 TikZ 寫法) 現在非 backend-neutral → Ve3 應 flag（預設 Typst 軌會剝掉）
@@ -271,7 +271,7 @@ def test_lint_ve3_raw_latex_tikz_flagged(make_project):
 
 
 def test_lint_ve_clean_doc_no_findings(make_project):
-    from dspx.lint import _lint_export_safety
+    from dspx.engine.lint import _lint_export_safety
     home = make_project()
     layout = Layout(home, "per-article")
     _write_latest(layout, "g",
@@ -901,7 +901,7 @@ def test_typst_template_table_breakable():
 # ── C5：文類版面 profile（typesetting-document-profiles）─────────────
 
 def test_export_profiles_enum_and_default():
-    from dspx.config import EXPORT_PROFILES, DEFAULTS
+    from dspx.engine.config import EXPORT_PROFILES, DEFAULTS
     assert set(EXPORT_PROFILES) == {"default", "academic", "paper", "manual", "essay", "novel"}
     assert DEFAULTS["export"]["profile"] == "default"
 

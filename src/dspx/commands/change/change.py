@@ -10,7 +10,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from dspx import change as chg
+from dspx.engine import change as chg
 from dspx.commands._shared import (BootstrapError, bootstrap, load_engine_schema,
                                     load_model)
 
@@ -139,7 +139,7 @@ def _generic_reference_autos(layout, leaves, autos: list, seeds: list[str]) -> l
 
     signal＝reverse_anchor[seed] 含該 auto target 的 (article, section)＝它的散文錨指向 seed。
     未 render 的文章算不出錨（reverse_anchor 空）＝不誤報（誠實不提示）。回傳 ref 清單。"""
-    from dspx.crossref import build_reverse_indices
+    from dspx.engine.crossref import build_reverse_indices
     seed_ids = [s for s in seeds if not s.startswith("term:")]
     if not seed_ids or not autos:
         return []
@@ -158,7 +158,7 @@ def _generic_reference_autos(layout, leaves, autos: list, seeds: list[str]) -> l
 def _promote_roadmap(layout, entry_id: str, change: "chg.Change") -> str | None:
     """晉升搬家：把 roadmap entry 的 what 搬進 change.notes、原 entry 收攏成 promoted-to。
     回傳搬進 notes 的一段文字（None＝找不到 entry）。"""
-    from dspx import roadmap as rm
+    from dspx.reports import roadmap as rm
     import yaml
     # 找 entry 所在檔（forest + per-doc）
     candidates = [rm.forest_roadmap_path(layout)]
@@ -226,7 +226,7 @@ def _cmd_add_target(argv: list[str]) -> int:
     if args.kind == "file":
         official = layout.project_root / args.ref
         t.baseline = None
-        from dspx.model import content_hash
+        from dspx.engine.model import content_hash
         if official.is_file():
             t.baseline = content_hash(official)
         t.validator = args.validator

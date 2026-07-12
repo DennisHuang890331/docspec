@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import sys
 
-from dspx.config import ConfigError, load_config
-from dspx.layout import Layout, LayoutError, find_planning_home
-from dspx.model import Leaf, ModelError, load_project
-from dspx.schema import Schema, SchemaError, load_schema
+from dspx.engine.config import ConfigError, load_config
+from dspx.engine.layout import Layout, LayoutError, find_planning_home
+from dspx.engine.model import Leaf, ModelError, load_project
+from dspx.engine.schema import Schema, SchemaError, load_schema
 
 
 class BootstrapError(Exception):

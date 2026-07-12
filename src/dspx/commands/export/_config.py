@@ -6,9 +6,9 @@ from pathlib import Path
 
 import yaml
 
-from dspx import paths
-from dspx.config import DEFAULTS
-from dspx.format_config import FormatConfigError, validate_format_config
+from dspx.engine import paths
+from dspx.engine.config import DEFAULTS
+from dspx.typeset.format_config import FormatConfigError, validate_format_config
 
 # pandoc 輸入格式：標準 markdown 但關掉兩個擴充（兩軌共用單一常數）：
 #   -citations         : @token（MPE @import、@提及）不被當成引用文獻。
@@ -28,7 +28,7 @@ _PANDOC_FROM = "markdown-citations-yaml_metadata_block"
 # ── 相依 probe（soft dependency）────────────────────────────────────
 
 def _pandoc_path() -> str | None:
-    """找得到的 pandoc（委派 dspx.paths；優先 pypandoc 自帶 binary、退回系統 PATH）。"""
+    """找得到的 pandoc（委派 dspx.engine.paths；優先 pypandoc 自帶 binary、退回系統 PATH）。"""
     return paths.resolve_pandoc()
 
 

@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from dspx import freeze
+from dspx.reports import freeze
 from dspx.commands.governance import freeze_cmd
 from dspx.commands.deliverable import publish as publish_cmd
 
@@ -27,10 +27,10 @@ def _render_and_draft(home, monkeypatch, write_leaf, prose="內文。"):
 
 def _v11(home):
     """跑 lint、回傳 V11 findings（per-article layout）。"""
-    import dspx.lint as lint_mod
-    from dspx.layout import Layout
-    from dspx.model import load_project
-    from dspx.schema import load_schema
+    import dspx.engine.lint as lint_mod
+    from dspx.engine.layout import Layout
+    from dspx.engine.model import load_project
+    from dspx.engine.schema import load_schema
     layout = Layout(home, "per-article")
     return [f for f in lint_mod.run_lint(layout, load_project(layout), load_schema())
             if f.rule == "V11"]
@@ -256,7 +256,7 @@ def test_record_legacy_single_manifest_write(tmp_path, monkeypatch):
 
 def test_legacy_folder_never_pollutes_version_chain(tmp_path):
     """6.8：legacy 子夾塞含版號字樣檔名 → existing_versions() 掃不到（flat＋per-article）。"""
-    from dspx.layout import Layout
+    from dspx.engine.layout import Layout
     home = tmp_path / "docspec"
     home.mkdir()
     (home / "config.yaml").write_text("language: zh-TW\n", encoding="utf-8")
@@ -312,7 +312,7 @@ def test_v11_not_registered_message_points_to_migration(make_project, write_leaf
 def test_set_version_seeds_chain_then_patch_continues(make_project, write_leaf, monkeypatch):
     """6.10：首次 publish --set-version 2.5.2 → 快照/changelog＝2.5.2、級別欄＝首版；
     下一次 --level patch → 2.5.3（版本鏈續接）。"""
-    from dspx.layout import Layout
+    from dspx.engine.layout import Layout
     home = make_project()
     docs = _render_and_draft(home, monkeypatch, write_leaf, "中文內文第一版。")
     assert publish_cmd.run(["g", "--set-version", "2.5.2"]) == 0
@@ -333,7 +333,7 @@ def test_set_version_non_first_refused_zero_writes(make_project, write_leaf, mon
     assert publish_cmd.run(["g"]) == 0                            # v1.0.0
     latest = docs / "_latest.md"
     before_latest = latest.read_bytes()
-    from dspx.layout import Layout
+    from dspx.engine.layout import Layout
     changelog = Layout(home, "per-article").docs_changelog("g")
     before_cl = changelog.read_bytes()
 
@@ -421,7 +421,7 @@ def test_guide_omits_migration_when_schema_lacks_key(make_project, monkeypatch, 
     """6.15b：schema 缺 workflow.migration 鍵 → guide 正常輸出、無遷移區塊、不報錯。"""
     import dataclasses
     from dspx.commands.projection import guide
-    from dspx.schema import load_schema
+    from dspx.engine.schema import load_schema
     s = load_schema()
     wf = {k: v for k, v in s.workflow.items() if k != "migration"}
     stripped = dataclasses.replace(s, workflow=wf)
@@ -436,7 +436,7 @@ def test_guide_omits_migration_when_schema_lacks_key(make_project, monkeypatch, 
 
 def test_publish_skill_carries_migration_stance():
     """6.15c：dspx-publish SKILL.md 帶遷移 stance、機制細節指向 docspec guide（不重抄旗標）。"""
-    from dspx.skills import available_skills
+    from dspx.env.skills import available_skills
     skill = next(s for s in available_skills() if s.name == "dspx-publish")
     text = skill.source.read_text("utf-8")
     assert "Migrating an existing project" in text

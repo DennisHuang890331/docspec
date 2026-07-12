@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from dspx.config import CONFIG_FILE_NAME
+from dspx.engine.config import CONFIG_FILE_NAME
 
 PLANNING_DIR_NAME = "docspec"
 CORPUS_DIR_NAME = "corpus"
@@ -173,7 +173,7 @@ class Layout:
 
     def docs_snapshot(self, article: str, version: str) -> Path:
         # version＝semver 字串（X.Y.Z）。凍結快照一律收進 archive/ 子夾（兩種 layout 皆然）
-        # ——凍結＝資料夾級規則（任何 archive/ 內禁改），不靠檔名 pattern。見 dspx.freeze。
+        # ——凍結＝資料夾級規則（任何 archive/ 內禁改），不靠檔名 pattern。見 dspx.reports.freeze。
         if self.docs_layout == "flat":
             return self.docs_dir / "archive" / f"{article}_v{version}.md"
         return self.docs_dir / article / "archive" / f"v{version}.md"

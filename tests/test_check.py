@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from dspx.check import run_check
-from dspx.layout import Layout
-from dspx.model import load_project
-from dspx.schema import load_schema
+from dspx.engine.layout import Layout
+from dspx.engine.model import load_project
+from dspx.engine.schema import load_schema
 
 
 def _check(home):

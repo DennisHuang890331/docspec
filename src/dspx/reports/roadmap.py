@@ -22,7 +22,7 @@ from __future__ import annotations
 import datetime
 from pathlib import Path
 
-from dspx.layout import Layout
+from dspx.engine.layout import Layout
 
 KINDS = ("gap", "task")
 ROADMAP_FILE = "roadmap.yaml"
@@ -41,7 +41,7 @@ def _load_entries(path: Path, store: str) -> list[dict]:
     """讀 {entries:[...]}；缺席→[]。標每筆 `_store`。"""
     if not path.is_file():
         return []
-    from dspx.model import ModelError, _load_yaml, keyed_list
+    from dspx.engine.model import ModelError, _load_yaml, keyed_list
     raw = _load_yaml(path)   # 壞檔（Drive 截斷）→ ModelError 帶路徑，不裸 traceback
     entries = keyed_list(raw, path, "entries", error=ModelError)  # 誤名頂層 key fail-loud
     out: list[dict] = []
@@ -159,7 +159,7 @@ def _write_entries(path: Path, entries: list[dict]) -> None:
 def _append_archive(path: Path, record: dict) -> None:
     """roadmap-archive.yaml 追加一行（append-only；不手改）。"""
     import yaml
-    from dspx.model import _load_yaml
+    from dspx.engine.model import _load_yaml
     existing: list[dict] = []
     if path.is_file():
         raw = _load_yaml(path) or {}
@@ -175,7 +175,7 @@ def mark_done(layout: Layout, leaves: list, rid: str, note: str) -> dict:
     """`docspec roadmap done <id> --note "..."`：把 entry 移出 roadmap.yaml、append 一行進
     同層 roadmap-archive.yaml（append-only，{id, title, note, date}）。找遍 forest + 各 doc
     article 的 roadmap.yaml；找不到該 id → RoadmapError。"""
-    from dspx.model import _load_yaml
+    from dspx.engine.model import _load_yaml
 
     candidates: list[tuple[Path, Path]] = [
         (forest_roadmap_path(layout), forest_roadmap_archive_path(layout)),

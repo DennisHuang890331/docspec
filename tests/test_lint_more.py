@@ -8,10 +8,10 @@ import yaml
 
 from dspx.check import run_check
 from dspx.commands.deliverable import render as render_cmd
-from dspx.layout import Layout
-from dspx.lint import run_lint
-from dspx.model import load_project
-from dspx.schema import load_schema
+from dspx.engine.layout import Layout
+from dspx.engine.lint import run_lint
+from dspx.engine.model import load_project
+from dspx.engine.schema import load_schema
 
 
 def _write_roadmap(path: Path, entries: list[dict]) -> None:

@@ -12,7 +12,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from dspx import paths
+from dspx.engine import paths
 
 from ._shared import (
     _download,

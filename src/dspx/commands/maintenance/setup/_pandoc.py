@@ -16,7 +16,7 @@ import tarfile
 import zipfile
 from pathlib import Path
 
-from dspx import paths
+from dspx.engine import paths
 
 # 來源＝jgm/pandoc release 的 standalone binary（靜態、無系統依賴）。直接組 release
 # 下載 URL（不查 API；釘了完整 asset 名＋sha256，URL pattern 穩定）。

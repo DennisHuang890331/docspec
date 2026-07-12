@@ -14,7 +14,7 @@ import yaml
 from dspx.commands.query import check as check_cmd
 from dspx.commands.deliverable import render as render_cmd
 from dspx.commands.corpus import tidy as tidy_cmd
-from dspx.layout import Layout
+from dspx.engine.layout import Layout
 
 
 def _leaf(write_leaf, home, section, *, cid, title, order=1, brief=None, **extra):

@@ -17,8 +17,8 @@ import yaml
 
 from dspx.commands.deliverable import render as render_cmd
 from dspx.commands.query import status as status_cmd
-from dspx.layout import Layout
-from dspx.model import (
+from dspx.engine.layout import Layout
+from dspx.engine.model import (
     ancestor_normative_fingerprint,
     content_hash,
     decision_index,
@@ -26,7 +26,7 @@ from dspx.model import (
     load_project,
     style_fingerprint,
 )
-from dspx.render import read_ledger, read_ledger_version
+from dspx.engine.render import read_ledger, read_ledger_version
 
 
 def _latest(home, article="g"):
@@ -36,7 +36,7 @@ def _latest(home, article="g"):
 def _row_of(home, article, section):
     """重算某節 status row（同 status._leaf_row；含 styleMoved 診斷欄）。"""
     from dspx.commands.query.status import _docs_hashes, _leaf_row
-    from dspx.schema import load_schema
+    from dspx.engine.schema import load_schema
     layout = Layout(home)
     leaves = load_project(layout)
     by = {lf.section: lf for lf in leaves}
@@ -118,7 +118,7 @@ def test_engine_writes_lf_only(make_project, write_leaf, monkeypatch):
 
 def test_crlf_worktree_to_lf_worktree_no_false_stale(make_project, write_leaf, monkeypatch):
     """1.4 整合：CRLF worktree render 入帳 → 全檔換行改 LF（模擬 LF 檢出）→ 全 synced、零漂移。"""
-    from dspx.render import detect_drift
+    from dspx.engine.render import detect_drift
     home = make_project()
     (home / "writing-guide.md").write_text("# Guide\n規則一。\n", encoding="utf-8")
     leaf_dir = write_leaf(home, "g/intro", concept={"id": "c1", "title": "概覽", "order": 1},
@@ -195,7 +195,7 @@ def test_second_hop_supersession_restales_consumer(make_project, write_leaf, mon
 
 def test_deps_item_live_decision_has_empty_successor(make_project, write_leaf):
     """2.1：活決策（無接替）succ 欄空值；指紋與 realized_statements 同源（第二跳指紋必變）。"""
-    from dspx.model import realized_statements
+    from dspx.engine.model import realized_statements
     home = make_project()
     write_leaf(home, "u/root", concept={"id": "cu", "title": "上游", "order": 1},
                decisions=[{"id": "A", "statement": "採方案A", "status": "accepted"}])
@@ -435,7 +435,7 @@ def test_write_ledger_carries_version_key(make_project, write_leaf, monkeypatch)
     """5.1：render 寫出的帳本頂層帶現行 `fingerprint:` 版本；read_ledger_version 回報。"""
     home = _baseline(make_project, write_leaf, monkeypatch)
     data = yaml.safe_load(Layout(home).docs_ledger("g").read_text(encoding="utf-8"))
-    from dspx.render import LEDGER_FINGERPRINT_VERSION
+    from dspx.engine.render import LEDGER_FINGERPRINT_VERSION
     assert data["fingerprint"] == LEDGER_FINGERPRINT_VERSION
     assert read_ledger_version(Layout(home), "g") == LEDGER_FINGERPRINT_VERSION
 
@@ -521,7 +521,7 @@ def test_rebaseline_migrates_v1_to_v2_in_one_shot(make_project, write_leaf, monk
     assert render_cmd.run(["g", "--rebaseline"]) == 0
     err = capsys.readouterr().err
     assert "absorbed" in err                                     # 吸收警語明講
-    from dspx.render import LEDGER_FINGERPRINT_VERSION
+    from dspx.engine.render import LEDGER_FINGERPRINT_VERSION
     assert read_ledger_version(Layout(home), "g") == LEDGER_FINGERPRINT_VERSION
     assert "限流保護後端。" in _latest(home).read_text("utf-8")   # 散文原樣保留
     assert _sync_of(home, "g", "g/intro") == "synced"

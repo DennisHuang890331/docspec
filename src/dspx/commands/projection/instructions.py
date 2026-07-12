@@ -7,7 +7,7 @@ import hashlib
 import json
 import sys
 
-from dspx.aperture import ApertureError, project
+from dspx.engine.aperture import ApertureError, project
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
 
 
@@ -102,7 +102,7 @@ def _sync_mode_verb(sync: str) -> tuple[str, str] | None:
 def _apply_mode(layout, schema, leaves, section: str) -> dict | None:
     """instructions apply <section> 的模式投影：change 內由 target action 選、change 外由
     staleness 型別選（同一套路由住 apply 內部，不外漏尾表）。回 {mode, verb, reason} 或 None。"""
-    from dspx import change as chg
+    from dspx.engine import change as chg
     from dspx.commands.query.status import compute_sync
 
     by_section = {lf.section: lf for lf in leaves}
@@ -121,8 +121,8 @@ def _apply_mode(layout, schema, leaves, section: str) -> dict | None:
     # change 外：staleness 型別定模式
     if leaf is None:
         return None
-    from dspx.model import decision_index
-    from dspx.render import ledger_needs_migration, read_ledger
+    from dspx.engine.model import decision_index
+    from dspx.engine.render import ledger_needs_migration, read_ledger
     ledger = read_ledger(layout, leaf.article)
     recorded = ledger.get(section)
     deliverable_missing = bool(ledger) and not layout.docs_latest(leaf.article).is_file()
@@ -191,7 +191,7 @@ def _print_authoring(auth: dict) -> None:
 
 def _change_context(layout, leaves, section: str) -> list[dict]:
     """本節命中的 active change context（多單全列；workflow-introspection 5.1）。"""
-    from dspx import change as chg
+    from dspx.engine import change as chg
     concept_id = None
     for lf in leaves:
         if lf.section == section and lf.concept_id:
@@ -233,7 +233,7 @@ def run(argv: list[str]) -> int:
     if not any(lf.section == args.section for lf in leaves):
         folder = layout.section_dir(args.section)
         if (folder / "develop.md").is_file() or (folder / "concept.yaml").is_file():
-            from dspx.model import load_leaf
+            from dspx.engine.model import load_leaf
             leaves = leaves + [load_leaf(layout, folder)]
 
     try:
@@ -244,7 +244,7 @@ def run(argv: list[str]) -> int:
 
     # Fill in {id}/{title}/{order} in the writes templates (at crystallization the agent just fills in the content)
     # + attach the "required-fields list" so the agent knows the full definition (2.4)
-    from dspx.schema import field_contract, required_field_names, yaml_skeleton
+    from dspx.engine.schema import field_contract, required_field_names, yaml_skeleton
     for w in proj.writes:
         w["template"] = _fill_template(w.get("template"), args.section, layout)
         art = schema.by_id(w.get("id", ""))

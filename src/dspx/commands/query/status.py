@@ -7,8 +7,8 @@ import json
 
 from dspx.check import run_check, run_file_check
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.layout import Layout
-from dspx.model import (
+from dspx.engine.layout import Layout
+from dspx.engine.model import (
     Leaf,
     ancestor_brief_fingerprint,
     ancestor_normative_fingerprint,
@@ -16,7 +16,7 @@ from dspx.model import (
     deps_fingerprint,
     style_fingerprint,
 )
-from dspx.schema import Schema
+from dspx.engine.schema import Schema
 
 NAME = "status"
 HELP = "section structure overview: per section files present / writable / synced or stale"
@@ -44,7 +44,7 @@ def section_state(leaf: Leaf, schema: Schema, check_ok: bool) -> str:
 def _docs_hashes(layout: Layout, article: str) -> dict[str, str]:
     """讀 render 記的各節投影源 hash（指紋帳本）。現行存隱藏 sidecar
     `docs/<article>/.sections.yaml`；舊交付物 fallback 讀 `_latest.md` frontmatter（ISSUE-3）。"""
-    from dspx.render import read_ledger
+    from dspx.engine.render import read_ledger
     return read_ledger(layout, article)
 
 
@@ -159,7 +159,7 @@ def _leaf_row(layout: Layout, leaf: Leaf, schema: Schema, check_ok: bool,
 def _print_active_changes_overview(layout: Layout, schema: Schema) -> None:
     """status 頂部顯示 active changes 概觀（task 5.2）：id｜完成數/總數｜archivable。
     無 active change 時零輸出差異。"""
-    from dspx import change as chg
+    from dspx.engine import change as chg
     changes = chg.iter_active_changes(layout)
     if not changes:
         return
@@ -203,7 +203,7 @@ def run(argv: list[str]) -> int:
     if args.section:
         shown = [lf for lf in shown if lf.section == args.section]
 
-    from dspx.render import (detect_drift, groups_fingerprint, ledger_needs_migration,
+    from dspx.engine.render import (detect_drift, groups_fingerprint, ledger_needs_migration,
                              read_ledger_groups)
     hashes_by_article: dict[str, dict] = {}
     drift_by_article: dict[str, set] = {}
@@ -254,7 +254,7 @@ def run(argv: list[str]) -> int:
 
     # 分組節點列（吸收原 `docspec list` 唯一多出的能力）：concept-less 的 group 目錄，
     # 帶 group.yaml 在地化標題/order。--section 指到單一 leaf 時不列 group。
-    from dspx.render import _group_order, _group_title, outline_group_nodes
+    from dspx.engine.render import _group_order, _group_title, outline_group_nodes
     group_rows: list[dict] = []
     if not args.section:
         for gs in outline_group_nodes(leaves):

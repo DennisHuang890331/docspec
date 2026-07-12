@@ -29,14 +29,14 @@ from pathlib import Path
 
 import yaml
 
-from dspx import paths
+from dspx.engine import paths
 from dspx.commands._shared import BootstrapError, bootstrap
-from dspx.format_config import (
+from dspx.typeset.format_config import (
     FormatConfigError,
     pandoc_highlight_style,
     validate_format_config,
 )
-from dspx.layout import Layout, parse_semver
+from dspx.engine.layout import Layout, parse_semver
 
 from ._assets import (
     _collect_referenced_assets,
@@ -201,7 +201,7 @@ def run(argv: list[str]) -> int:
 
     econf = _export_config(config)
     # 文類版面 profile：--profile 旗標 > 專案 export.profile config > default。
-    from dspx.config import EXPORT_PROFILES
+    from dspx.engine.config import EXPORT_PROFILES
     profile = args.profile or econf.get("profile") or "default"
     if profile not in EXPORT_PROFILES:
         sys.stderr.write(f"docspec: unknown export profile '{profile}' — valid: {', '.join(EXPORT_PROFILES)}.\n")
@@ -234,7 +234,7 @@ def run(argv: list[str]) -> int:
         return 1
 
     if engine == "typst" and args.format_config:
-        from dspx.format_config import _TYPST_KNOB_FOLLOWUPS
+        from dspx.typeset.format_config import _TYPST_KNOB_FOLLOWUPS
         sys.stderr.write(
             "docspec: ⚠ Typst track applies the font-size / leading / margin / first-line-indent / "
             "code-highlight knobs; still NOT mapped (house defaults used): "
@@ -288,7 +288,7 @@ def run(argv: list[str]) -> int:
         # journal 軌產物落 per-journal 子夾（不與 latest PDF 混、雙 adapter 不互蓋）。
         journal_id = args.journal or (template_dir.name if template_dir is not None else "journal")
         out = layout.docs_journal_export(args.article, label, journal_id, "tex")
-        from dspx.slots import SlotError
+        from dspx.typeset.slots import SlotError
         try:
             _emit_journal(pandoc, template, title, body_md, extra_slots, out)
         except SlotError as exc:
@@ -361,8 +361,8 @@ def run(argv: list[str]) -> int:
                     return 1
             if _check_pack_integrity(typst_template, is_bundled=is_bundled, allow=args.allow) != 0:
                 return 1
-            from dspx.format_config import compile_typst_vars
-            from dspx.config import detect_language, region_for
+            from dspx.typeset.format_config import compile_typst_vars
+            from dspx.engine.config import detect_language, region_for
             # 文件語言＝從定稿內容偵測（非綁專案 config.language；agent 常忘了改）。
             # title＋body 一起判（標題已被抽出，但仍是文件文字）。config.language 為 fallback。
             _lang = detect_language(f"{title}\n{body_md}", config.get("language"))

@@ -18,7 +18,7 @@ import json
 import sys
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_model
-from dspx.glossary import load_glossary
+from dspx.engine.glossary import load_glossary
 
 NAME = "show"
 HELP = ("Drill down an id's payload (decision/concept/history) or query REVERSE relations "
@@ -177,7 +177,7 @@ def _statement_head(text: object, width: int = 80) -> str:
 def _decisions_view(leaves: list, all_status: bool) -> dict:
     """整篇每節裁決（path/id/kind/status/statement）。預設只 active；--all-status 含死決策
     （superseded/deprecated，就地留在 decisions.yaml）＝取代已刪的 retire 報告。"""
-    from dspx.model import ACTIVE_DECISION_STATUSES
+    from dspx.engine.model import ACTIVE_DECISION_STATUSES
     sections: list[dict] = []
     total = 0
     dead = 0
@@ -297,7 +297,7 @@ def _print_material_view(payload: dict) -> None:
 
 def _active_decisions(leaf) -> list[dict]:
     """本節 active（proposed/accepted）決策條目。"""
-    from dspx.model import ACTIVE_DECISION_STATUSES
+    from dspx.engine.model import ACTIVE_DECISION_STATUSES
     return [e for e in leaf.decisions
             if str(e.get("status")) in ACTIVE_DECISION_STATUSES and e.get("id")]
 
@@ -313,7 +313,7 @@ def _unrendered_note(unrendered: list[str], what: str) -> str | None:
 
 def _impact_payload(leaves, layout, section: str) -> dict | None:
     """`show <section> --impact`：改這節之前跨全部文件的受影響節（反向 staleness 邊）。"""
-    from dspx.crossref import build_reverse_indices
+    from dspx.engine.crossref import build_reverse_indices
 
     by_section = {lf.section: lf for lf in leaves}
     leaf = by_section.get(section)
@@ -395,8 +395,8 @@ def _print_impact(payload: dict) -> None:
 
 def _realized_by_payload(leaves, decision_id: str) -> dict:
     """`show <decision-id> --realized-by`：跨全部文章、誰 realize 這條決策。"""
-    from dspx.crossref import build_reverse_indices
-    from dspx.model import decision_index
+    from dspx.engine.crossref import build_reverse_indices
+    from dspx.engine.model import decision_index
 
     ri = build_reverse_indices(leaves)
     realizers = sorted(lf.section for lf in ri.reverse_realizes.get(decision_id, []))
@@ -431,7 +431,7 @@ def _print_realized_by(payload: dict) -> None:
 
 def _referenced_by_payload(leaves, layout, section: str) -> dict | None:
     """`show <section> --referenced-by`：誰的散文錨指向這節（concept.id ∪ 本節決策 id）。"""
-    from dspx.crossref import build_reverse_indices
+    from dspx.engine.crossref import build_reverse_indices
 
     by_section = {lf.section: lf for lf in leaves}
     leaf = by_section.get(section)

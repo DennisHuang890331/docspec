@@ -76,13 +76,13 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _domain_error_types() -> tuple[type, ...]:
-    from dspx.audit import AuditError
-    from dspx.config import ConfigError
-    from dspx.format_config import FormatConfigError
-    from dspx.freeze import FreezeError
-    from dspx.frontmatter import FrontmatterError
-    from dspx.model import ModelError
-    from dspx.schema import SchemaError
+    from dspx.reports.audit import AuditError
+    from dspx.engine.config import ConfigError
+    from dspx.typeset.format_config import FormatConfigError
+    from dspx.reports.freeze import FreezeError
+    from dspx.env.frontmatter import FrontmatterError
+    from dspx.engine.model import ModelError
+    from dspx.engine.schema import SchemaError
     return (ModelError, SchemaError, AuditError, FrontmatterError, ConfigError,
             FormatConfigError, FreezeError)
 

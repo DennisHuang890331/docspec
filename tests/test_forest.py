@@ -5,14 +5,14 @@ from __future__ import annotations
 
 import yaml
 
-from dspx.aperture import project
+from dspx.engine.aperture import project
 from dspx.check import run_check
 from dspx.commands.query import show as show_cmd
-from dspx.crossref import build_reverse_indices
-from dspx.forest import forest_view
-from dspx.layout import Layout
-from dspx.model import load_project
-from dspx.schema import load_schema
+from dspx.engine.crossref import build_reverse_indices
+from dspx.engine.forest import forest_view
+from dspx.engine.layout import Layout
+from dspx.engine.model import load_project
+from dspx.engine.schema import load_schema
 
 
 def _leaves(home):
@@ -206,7 +206,7 @@ def test_governed_by_live_concept_not_flagged_deprecated(make_project, write_lea
 
 def test_governed_parent_brief_change_restales_child(make_project, write_leaf):
     """M1：跨樹治理父 brief 變 → 被 governed 子節 anc 指紋變（staleness 傳播）。"""
-    from dspx.model import ancestor_brief_fingerprint
+    from dspx.engine.model import ancestor_brief_fingerprint
     home = _two_tree_governed(make_project, write_leaf)
     by1 = {lf.section: lf for lf in _leaves(home)}
     fp1 = ancestor_brief_fingerprint("t2", by1)
@@ -218,7 +218,7 @@ def test_governed_parent_brief_change_restales_child(make_project, write_leaf):
 
 def test_single_tree_fingerprint_ignores_unrelated_tree(make_project, write_leaf):
     """M1 回歸：無 governed-by 的單樹節，anc 指紋不受他樹變動影響（單樹等價不變式）。"""
-    from dspx.model import ancestor_brief_fingerprint
+    from dspx.engine.model import ancestor_brief_fingerprint
     home = make_project()
     write_leaf(home, "doc", concept={"id": "r", "title": "Doc", "order": 1, "status": "draft",
                                      "concept": "root", "brief": {"a": "1"}})
@@ -236,7 +236,7 @@ def test_single_tree_fingerprint_ignores_unrelated_tree(make_project, write_leaf
 
 def test_realizes_superseded_changes_deps_fingerprint(make_project, write_leaf):
     """M2：被 realizes 的決策 supersede（只改 status）→ 消費節 deps 指紋變（觸發 stale-upstream）。"""
-    from dspx.model import deps_fingerprint, decision_index
+    from dspx.engine.model import deps_fingerprint, decision_index
     home = make_project()
     write_leaf(home, "auth", concept={"id": "c-auth", "title": "Auth", "order": 1, "status": "draft",
                                       "concept": "權威", "brief": {"a": "1"}},

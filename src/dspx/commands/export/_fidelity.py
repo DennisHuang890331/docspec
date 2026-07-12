@@ -6,7 +6,7 @@ import re
 import sys
 from pathlib import Path
 
-from dspx import paths
+from dspx.engine import paths
 
 
 def _sample(counter, n: int = 12) -> str:
@@ -34,7 +34,7 @@ def _source_anchored_stream(body_md: str) -> tuple[list[str], list[str]]:
     抽字前先把 markdown 圖片語法整體換空白（alt 不是本文內容，見 _IMAGE_MD_RE 註）。
     圖片遮蔽走 span 服務 `mask_non_prose(kinds={image})`（等長＝現行 `.sub(" ")` 同款、
     code-strip 單一權威）。"""
-    from dspx.spans import IMAGE, mask_non_prose
+    from dspx.engine.spans import IMAGE, mask_non_prose
     chars: list[str] = []
     anchors: list[str] = []
     heading = "(preamble)"

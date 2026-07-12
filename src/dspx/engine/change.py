@@ -24,8 +24,8 @@ from pathlib import Path
 
 import yaml
 
-from dspx.layout import CORPUS_DIR_NAME, LEDGER_DIR_NAME, Layout
-from dspx.model import Leaf, content_hash
+from dspx.engine.layout import CORPUS_DIR_NAME, LEDGER_DIR_NAME, Layout
+from dspx.engine.model import Leaf, content_hash
 
 CHANGES_DIR = "changes"
 ARCHIVE_DIR = "_archive"
@@ -226,7 +226,7 @@ def load_change_at(cdir: Path, state: str) -> Change:
     p = change_yaml_path(cdir)
     if not p.is_file():
         raise ChangeError(f"change container not found: {p}")
-    from dspx.model import ModelError, _load_yaml
+    from dspx.engine.model import ModelError, _load_yaml
     try:
         raw = _load_yaml(p)
     except ModelError as exc:
@@ -432,7 +432,7 @@ def staging_store_path(cdir: Path, article: str) -> Path:
 
 def _load_staging_article(cdir: Path, article: str):
     """讀 change 的 partial store（無 → None）；每次寫入都重封條，故 verify=True。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     p = staging_store_path(cdir, article)
     if not p.is_file():
         return None
@@ -440,9 +440,9 @@ def _load_staging_article(cdir: Path, article: str):
 
 
 def _save_staging_article(cdir: Path, article_obj, schema=None) -> None:
-    from dspx import store as _store
+    from dspx.engine import store as _store
     if schema is None:
-        from dspx.schema import load_schema
+        from dspx.engine.schema import load_schema
         schema = load_schema()
     _store.save_article_to(staging_store_path(cdir, article_obj.name), article_obj, schema)
 
@@ -454,7 +454,7 @@ def _store_fork_key(article: str, section: str, category: str) -> str:
 
 def _record_store_fork(change: Change, article: str, section: str, off_rec) -> None:
     """記正式記錄各分類 fork 當下的 hash（漂移守門逐節逐分類粒度）。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     for cat in (_store.CAT_CONCEPT, _store.CAT_DECISIONS, _store.CAT_MATERIAL):
         change.fork_hashes[_store_fork_key(article, section, cat)] = \
             _store.category_hash(off_rec, cat)
@@ -465,7 +465,7 @@ def _stage_store_section(change: Change, layout: Layout, section: str) -> None:
     正式面尚無此節（create）＝落 leaf 記錄 concept=None 佔位（未結晶＝不入 union）。"""
     import copy
 
-    from dspx import store as _store
+    from dspx.engine import store as _store
     article = layout.article_of(section)
     staging = _load_staging_article(change.dir, article)
     if staging is None:
@@ -484,7 +484,7 @@ def _stage_store_section(change: Change, layout: Layout, section: str) -> None:
 
 def _unstage_store_section(change: Change, layout: Layout, section: str) -> None:
     """store 篇 unstage：從 partial store 移除該記錄＋清該節三分類 fork key。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     article = layout.article_of(section)
     staging = _load_staging_article(change.dir, article)
     if staging is not None:
@@ -501,7 +501,7 @@ def stage_section(change: Change, layout: Layout, section: str) -> Path | None:
     散檔（★P0 檔案粒度）：首次改該節時只複製它**自己的來源檔**（concept/decisions/material/
     develop/history/group ＋ assets/）進 staging——**不遞迴子章節資料夾**。已 stage（含自己的檔）＝
     直接回、不覆蓋既有暫存編輯。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     if _store.article_has_store(layout, layout.article_of(section)):
         _stage_store_section(change, layout, section)
         return None
@@ -545,7 +545,7 @@ def unstage_section(change: Change, layout: Layout, section: str) -> None:
     """丟棄某節的 staging（★8.4 remove-target 用）。**backend 路由**：store 篇移除 partial store
     記錄＋清分類 fork key；散檔篇只刪它**自己的來源檔**＋assets/、清 fork_hashes 對應項——
     **不 rmtree staging 節夾**（該夾可能巢狀著子章節的 staging，rmtree 會誤刪子節暫存）。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     if _store.article_has_store(layout, layout.article_of(section)):
         _unstage_store_section(change, layout, section)
         _clear_preview_redraft(change, section)
@@ -614,7 +614,7 @@ def _resolved_section_dir(change: Change, layout: Layout, section: str) -> Path:
 def _load_leaf_from(section: str, leaf_dir: Path) -> Leaf:
     """從一個具體資料夾（正式或 staging）讀出 Leaf——section 由呼叫端明確給（staging 路徑
     無法 relative_to 正式 corpus）。委派 model.leaf_from_dir（含 material 讀入＝own 軸 v5 正確）。"""
-    from dspx.model import leaf_from_dir
+    from dspx.engine.model import leaf_from_dir
     return leaf_from_dir(section, leaf_dir)
 
 
@@ -651,7 +651,7 @@ def load_union(layout: Layout, change: Change) -> list[Leaf]:
 def _union_store_leaves(layout: Layout, change: Change) -> list[Leaf]:
     """每個 store 篇：正式記錄 dict ← staging overlay（整記錄蓋／tombstone 刪／pending-create 佔位）
     → 建 Leaf。concept=None（未結晶 create）＝不入 union（同散檔 develop-only 語義）。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     out: list[Leaf] = []
     for article in _store.store_articles(layout):
         official = _store.load_article(_store.store_path(layout, article), verify=False)
@@ -768,7 +768,7 @@ def seed_preview(layout: Layout, change: Change, article: str) -> None:
 
 
 def _write_preview_ledger(change: Change, article: str, sections: dict) -> None:
-    from dspx.render import LEDGER_FINGERPRINT_VERSION
+    from dspx.engine.render import LEDGER_FINGERPRINT_VERSION
     pv = preview_dir(change.dir)
     pv.mkdir(parents=True, exist_ok=True)
     data = {"article": article, "fingerprint": LEDGER_FINGERPRINT_VERSION, "sections": sections}
@@ -844,7 +844,7 @@ def changes_hitting_article(layout: Layout, article: str,
 def section_concept_id(layout: Layout, section: str) -> str | None:
     """讀某節正式 concept 的 id（供 put/get 判 target ref==concept.id）；缺/壞 → None。
     **backend 路由**：store 篇由記錄供（散檔篇無 concept.yaml，只能靠 section 路徑匹配 target）。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     article = layout.article_of(section)
     if _store.article_has_store(layout, article):
         art = _store.cached_article(layout, article)
@@ -966,7 +966,7 @@ def derive_change_status(layout: Layout, change: Change, schema) -> list[TargetS
     只讀本單 staging（preview 帳本＋preview 產物），別的單/零開單改的是正式面，互不污染（MOE R1
     由構造解掉）。"""
     from dspx.commands.query.status import _leaf_row
-    from dspx.model import decision_index
+    from dspx.engine.model import decision_index
 
     leaves = load_union(layout, change)
     by_section = {lf.section: lf for lf in leaves}
@@ -974,7 +974,7 @@ def derive_change_status(layout: Layout, change: Change, schema) -> list[TargetS
     overlay = OverlayLayout(layout, change)
 
     # 各 article 的 preview 帳本 ＋ 正式 baseline 帳本（偵測「散文真改過」）。
-    from dspx.render import read_ledger
+    from dspx.engine.render import read_ledger
     preview_ledgers: dict[str, dict] = {}
     official_ledgers: dict[str, dict] = {}
     verdict_sections: dict[str, set[str]] = {}
@@ -1097,7 +1097,7 @@ def fork_drift(layout: Layout, change: Change) -> list[dict]:
 
     **backend 路由**：store fork key（`<article>#<path>#<category>`，含 `#`）比對正式 store 記錄
     的分類 hash；散檔 fork key（workspace 相對路徑）比對檔內容 hash。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     drift: list[dict] = []
     for rel, forked in sorted(change.fork_hashes.items()):
         if "#" in rel:
@@ -1112,7 +1112,7 @@ def fork_drift(layout: Layout, change: Change) -> list[dict]:
 
 def _store_current_category_hash(layout: Layout, fork_key: str) -> str | None:
     """store fork key → 正式 store 該節該分類的現值 hash（記錄已不在＝退場等→回 None，觸發漂移）。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     article, section, category = fork_key.split("#", 2)
     if not _store.article_has_store(layout, article):
         return None
@@ -1132,7 +1132,7 @@ def land_corpus_section(layout: Layout, change: Change, section: str, schema=Non
 
     ★P0（兩 backend 皆然）：**只**動這個 target 節、非 target 節 byte 全程不變。散檔靠「根本不
     碰旁節的檔」；store 靠「旁節記錄全程同一物件、序列化冪等＝其序列化 block byte 不變」。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     if _store.article_has_store(layout, layout.article_of(section)):
         _land_store_section(layout, change, section, schema)
         return
@@ -1163,9 +1163,9 @@ def _land_store_section(layout: Layout, change: Change, section: str, schema=Non
     非 target 記錄全程是**正式 store 的同一 parse 物件**（無任何逐行操作）；序列化冪等＋store 永遠
     是 canonical 產物 ⇒ 其序列化 block byte 不變。錨是 path key、替換單位是完整記錄。staging 無
     此節記錄（未動）＝landing 對該節無操作（no-op）。"""
-    from dspx import store as _store
+    from dspx.engine import store as _store
     if schema is None:
-        from dspx.schema import load_schema
+        from dspx.engine.schema import load_schema
         schema = load_schema()
     article = layout.article_of(section)
     staging = _load_staging_article(change.dir, article)
@@ -1204,7 +1204,7 @@ def slot_patch_deliverable(layout: Layout, change: Change, article: str,
                            sections: set[str]) -> list[str]:
     """slot 補丁（G5 純內容路）：把 preview `_latest.md` 中受影響節的散文塞回正式 `_latest.md`
     對應 marker 格、其餘格 byte 不動。回傳被補的節清單。補丁前呼叫端須先做 drift 偵測。"""
-    from dspx.render import (GROUP_MARKER_RE, MARKER_RE, parse_section_bodies,
+    from dspx.engine.render import (GROUP_MARKER_RE, MARKER_RE, parse_section_bodies,
                              section_marker)
     official = layout.docs_latest(article)
     preview = preview_dir(change.dir) / f"{article}_latest.md"
