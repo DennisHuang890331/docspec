@@ -245,10 +245,18 @@ class Layout:
         return sorted(leaves, key=lambda p: self.section_id(p))
 
     def articles(self) -> list[str]:
-        """corpus/ 下的文章名（末節路徑的第一段）。"""
+        """corpus/ 下的文章名（散檔末節路徑的第一段 ∪ 一篇一檔 store 檔 `<article>.yaml`）。
+
+        store 篇無 leaf 夾（真相收在單檔），必須另從 `corpus/*.yaml` 補列——否則遍歷全文章的
+        指令（render/publish/mv/rename-term/change）會漏掉 store 篇。直接 glob（不 import store，避免
+        循環）：corpus 底下的頂層 `.yaml`（非 `_` 前綴）即 store 檔。"""
         seen: list[str] = []
         for leaf in self.leaf_dirs():
             art = self.article_of(self.section_id(leaf))
             if art and art not in seen:
                 seen.append(art)
+        if self.corpus_dir.is_dir():
+            for p in sorted(self.corpus_dir.glob("*.yaml")):
+                if p.is_file() and not p.name.startswith("_") and p.stem not in seen:
+                    seen.append(p.stem)
         return seen

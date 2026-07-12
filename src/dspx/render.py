@@ -31,9 +31,11 @@ from dspx.model import (
 # （contract-slimming：改 order/搬位不誤標 stale-own）；v4＝prose 軸把散文交叉引用錨後的 render
 # 注入號碼正規化掉（prose-crossref-anchors：`<!--@id-->§6.5<!--@-->` 的 §6.5 每次 render 重算、
 # 排除於 prose 指紋——重排刷新號碼不誤標 prose drift，與 v3 order-out-of-hash 同構）。無此鍵＝v1。
+# v5＝own 軸改讀「解析後結構」而非檔案位元（article-store-backend 階段 2）：decisions/material 的
+# 位元半邊搬到結構化 JSON/文字，own 值與 backend（散檔/store）無關；anc/deps/norm/style/prose 零改。
 # 任一低於現行版本的帳本＝不可比、需一次 `--rebaseline` 遷移（見 read_ledger_version /
 # ledger_needs_migration）。
-LEDGER_FINGERPRINT_VERSION = 4
+LEDGER_FINGERPRINT_VERSION = 5
 
 
 def read_ledger(layout: Layout, article: str) -> dict:
@@ -187,8 +189,15 @@ def groups_fingerprint(layout: Layout, article: str) -> str:
     """文章骨架的 group.yaml 比對面指紋：全部（非封存）group.yaml 的路徑＋title＋order。
 
     title/order 變動＝「交付物骨架變了、需重新 render」（D4，與 concept 的 title/order 同性質）；
-    只取這兩欄、不 hash 整檔——group.yaml 加註解不算骨架變動。"""
+    只取這兩欄、不 hash 整檔——group.yaml 加註解不算骨架變動。store 篇由記錄枚舉 group（與散檔同構）。"""
+    from dspx import store as _store
     h = hashlib.sha256()
+    if _store.article_has_store(layout, article):
+        art = _store.cached_article(layout, article)
+        for rec in (art.group_records() if art else []):
+            meta = rec.group or {}
+            h.update(f"{rec.path}\0{meta.get('title')!r}\0{meta.get('order')!r}\0".encode("utf-8"))
+        return h.hexdigest()[:16]
     art_dir = layout.section_dir(article)
     if art_dir.is_dir():
         for gy in sorted(art_dir.rglob("group.yaml")):
@@ -355,6 +364,11 @@ def _group_meta(layout: Layout, group_section: str) -> dict:
     壞檔（非法 YAML／讀取失敗）→ {} 但 **stderr 指名警告、非靜默**——否則中文標題會
     默默降級成 humanize slug（機械 drift、人不會發現）。fallback 行為維持、不擋 render。"""
     import sys
+
+    from dspx import store as _store
+    smeta = _store.group_meta(layout, group_section)   # store-aware：該篇是 store→由記錄供 meta
+    if smeta is not None:
+        return smeta
     gy = layout.section_dir(group_section) / "group.yaml"
     try:
         if gy.is_file():

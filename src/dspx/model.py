@@ -403,6 +403,9 @@ class Leaf:
     has_material: bool = False
     has_develop: bool = False
     has_history: bool = False
+    # material 全文（backend-neutral 窄腰）：散檔 backend 由 material.md 讀入、store backend 由記錄餵。
+    # own 軸 v5 與 aperture/lint 一律讀這裡，不再各自開檔——「換 parse 來源、指紋不變」的關鍵。
+    material: str | None = None
 
     @property
     def article(self) -> str:
@@ -450,25 +453,31 @@ class Leaf:
         return files
 
     def source_hash(self) -> str:
-        """投影輸入的彙總內容指紋（staleness／own 軸；fingerprint v3）。
+        """投影輸入的彙總內容指紋（staleness／own 軸；fingerprint v5）。
 
-        concept.yaml 的貢獻＝**解析後結構、去掉 `order` 鍵**的 canonical JSON——`order` 是
-        位置元資料（章號由 render 從 order＋樹位置推導、散文不重寫），顯式改 order／對調兄弟
-        不該誤標 stale-own（位置變、內容沒變）。這與 anc/deps/gloss 軸「hash 解析後結構、非整檔
-        位元」的既有做法一致。`title` 保留在 hash 內（它渲進標題＝內容）。decisions.yaml／
-        material.md 維持整檔位元 hash（換行正規化、CRLF 免疫；無位置元資料）。此為 own 軸的
-        v3 演算法——全 corpus own 值一次性改變，帳本版本閘（v3）＋`--rebaseline` 遷移吸收。"""
+        **v5＝hash 解析後結構、非檔案位元——與 backend 無關**：同內容的散檔 leaf 與 store leaf
+        算出同一 own 值（這是「換 parse 來源、指紋不變」的地基）。三分類各以固定標籤取代檔名字串
+        （檔名拓撲不再入 hash）：
+        - concept：**解析後結構、去掉 `order` 鍵**的 canonical JSON（order＝位置元資料，章號由 render
+          從 order＋樹位置推導、散文不重寫；改 order/對調兄弟不誤標 stale-own）。title 保留（渲進標題＝內容）。
+        - decisions：`decisions` entries 的 canonical JSON（v3 的整檔位元 → 結構化；YAML 註解/鍵序/
+          空殼容器不再擾動＝與 v3「order 去 hash」同向的順帶改進）。空＝不貢獻。
+        - material：`material` 全文（換行正規化、CRLF 免疫）。缺＝不貢獻。
+        anc/deps/norm/style/prose 五軸零改（本就 hash 解析後結構，只 own 軸的 decisions/material
+        位元半邊搬到結構）。全 corpus own 值一次性改變，帳本版本閘（v5）＋`--rebaseline` 遷移吸收。"""
         h = hashlib.sha256()
-        for f in self.source_files():
-            h.update(f.relative_to(self.dir).as_posix().encode("utf-8"))
+        concept = self.concept if isinstance(self.concept, dict) else {}
+        content = {k: v for k, v in concept.items() if k != "order"}
+        h.update(b"concept\0")
+        h.update(json.dumps(content, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+        h.update(b"\0")
+        if self.decisions:
+            h.update(b"decisions\0")
+            h.update(json.dumps(self.decisions, sort_keys=True, ensure_ascii=False).encode("utf-8"))
             h.update(b"\0")
-            if f.name == "concept.yaml":
-                # 結構化、排除位置元資料 order（其餘欄含 title 皆算內容）
-                concept = self.concept if isinstance(self.concept, dict) else {}
-                content = {k: v for k, v in concept.items() if k != "order"}
-                h.update(json.dumps(content, sort_keys=True, ensure_ascii=False).encode("utf-8"))
-            else:
-                h.update(_normalize_newlines(f.read_bytes()))
+        if self.material is not None:
+            h.update(b"material\0")
+            h.update(_normalize_newlines(self.material.encode("utf-8")))
             h.update(b"\0")
         return h.hexdigest()[:16]
 
@@ -512,26 +521,58 @@ def _entries(raw: object, path: Path) -> list[dict]:
     return out
 
 
-def load_leaf(layout: Layout, leaf_dir: Path) -> Leaf:
-    section = layout.section_id(leaf_dir)
+def leaf_from_dir(section: str, leaf_dir: Path) -> Leaf:
+    """從一個具體資料夾（正式或 staging）讀出 Leaf——section 由呼叫端明確給
+    （staging 路徑無法 relative_to 正式 corpus）。散檔 backend 的單一讀取源，material 一併讀入
+    （own 軸 v5 與 aperture/lint 由 leaf.material 供給、backend-neutral）。"""
     concept_raw = _load_yaml(leaf_dir / "concept.yaml")
     if concept_raw is not None and not isinstance(concept_raw, dict):
         raise ModelError(f"{leaf_dir / 'concept.yaml'} top level must be a mapping")
-
     decisions_path = leaf_dir / "decisions.yaml"
     history_path = leaf_dir / "history.yaml"
+    material_path = leaf_dir / "material.md"
     return Leaf(
         section=section,
         dir=leaf_dir,
         concept=concept_raw,
         decisions=_entries(_load_yaml(decisions_path), decisions_path),
         history=_entries(_load_yaml(history_path), history_path),
-        has_material=(leaf_dir / "material.md").is_file(),
+        has_material=material_path.is_file(),
         has_develop=(leaf_dir / "develop.md").is_file(),
         has_history=history_path.is_file(),
+        # read_bytes().decode（非 read_text）＝**不做 universal-newline 翻譯**：孤 `\r` 保留為內容
+        # 差異（own 軸 v5 只把 `\r\n`→`\n` 正規化，與 v3 一致；read_text 會把孤 `\r` 也翻成 `\n`）。
+        material=(material_path.read_bytes().decode("utf-8") if material_path.is_file() else None),
     )
 
 
+def load_leaf(layout: Layout, leaf_dir: Path) -> Leaf:
+    return leaf_from_dir(layout.section_id(leaf_dir), leaf_dir)
+
+
 def load_project(layout: Layout, schema: Schema | None = None) -> list[Leaf]:
-    """載入 corpus/ 下所有末節，依 section 路徑排序。"""
-    return [load_leaf(layout, d) for d in layout.leaf_dirs()]
+    """載入 corpus/ 下所有末節，依 section 路徑排序。
+
+    per-article backend 自動偵測（article-store-backend 階段 2）：某篇有 `corpus/<article>.yaml`
+    store 檔＝走 StoreBackend（記錄→Leaf）；否則散檔 leaf 夾樹＝TreeBackend；同篇兩者並存 fail-loud。
+    上層無感——兩路都吐同構的 Leaf 清單。"""
+    from dspx import store as _store
+
+    leaves: list[Leaf] = []
+    tree_dirs = layout.leaf_dirs()
+    store_arts = _store.store_articles(layout)
+    if not store_arts:
+        # 常態快路徑：全散檔（現行行為逐 byte 不變）。
+        return [load_leaf(layout, d) for d in tree_dirs]
+
+    store_set = set(store_arts)
+    for d in tree_dirs:
+        art = layout.article_of(layout.section_id(d))
+        if art in store_set:
+            # 同篇既有 store 檔又有散檔葉 → fail-loud（backend_of 給指路訊息）。
+            _store.backend_of(layout, art)
+        leaves.append(load_leaf(layout, d))
+    for art in store_arts:
+        leaves.extend(_store.load_store_leaves(layout, art))
+    leaves.sort(key=lambda lf: lf.section)
+    return leaves

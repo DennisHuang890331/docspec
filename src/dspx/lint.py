@@ -474,15 +474,19 @@ def _lint_numbers(layout: Layout, articles: list[str]) -> list[Finding]:
 
 
 def _lint_material(leaf: Leaf) -> list[Finding]:
-    path = leaf.dir / "material.md"
-    if not path.is_file():
-        return []
+    # backend-neutral：優先 leaf.material（store/散檔皆由此供給）、退回開檔（防禦）。
+    text = leaf.material
+    if text is None:
+        path = leaf.dir / "material.md"
+        if not path.is_file():
+            return []
+        text = path.read_text(encoding="utf-8")
     findings: list[Finding] = []
     where = f"{leaf.section}/material.md"
     prose_run = 0          # V6：連續純文字行（非條列/引文/表格/標題/空白/程式碼）計數
     prose_start = 0
     in_code = False        # 圍欄式程式碼區塊內＝結構化內容（draft 要逐字渲染），非散文
-    for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    for lineno, line in enumerate(text.splitlines(), 1):
         if line.lstrip().startswith("```"):
             in_code = not in_code
             prose_run = 0          # 圍欄行本身＝結構化、且重置散文計數

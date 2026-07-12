@@ -27,7 +27,9 @@ def section_state(leaf: Leaf, schema: Schema, check_ok: bool) -> str:
     ready 需「concept 齊、欄位完整（per-section run_file_check）、全專案 check 綠」；
     develop.md 還在 or 必填未齊 → developing（不擋寫、draft 不選）。
     decisions.yaml 缺席＝合法空（該節無自有裁決）＝不降級（contract-slimming D2）。"""
-    has_concept = (leaf.dir / "concept.yaml").is_file()
+    # backend-neutral：concept 存在＝模型有 concept（store leaf 無實體 concept.yaml，散檔 leaf
+    # 由 leaf_dirs 保證有）；develop 存在＝leaf.has_develop（散檔在 leaf.dir、store 在 work/）。
+    has_concept = leaf.concept is not None
     if leaf.has_develop:
         return "developing"
     if not has_concept:
@@ -126,8 +128,9 @@ def _leaf_row(layout: Layout, leaf: Leaf, schema: Schema, check_ok: bool,
               docs_hashes: dict, by_section: dict, dindex: dict,
               deliverable_missing: bool = False,
               needs_migration: bool = False) -> dict:
-    has_concept = (leaf.dir / "concept.yaml").is_file()
-    has_decisions = (leaf.dir / "decisions.yaml").is_file()
+    # backend-neutral 檔旗標：由模型判在（store leaf 無實體檔），不再靠 leaf.dir 存在性。
+    has_concept = leaf.concept is not None
+    has_decisions = bool(leaf.decisions)
     recorded = docs_hashes.get(leaf.section)
     sync, style_moved = compute_sync(layout, leaf, recorded, by_section, dindex,
                                      deliverable_missing=deliverable_missing,

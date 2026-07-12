@@ -59,6 +59,7 @@ from dspx.commands import template_cmd as _template_cmd  # noqa: E402
 from dspx.commands import tidy as _tidy  # noqa: E402
 from dspx.commands import skills_cmd as _skills  # noqa: E402
 from dspx.commands import status as _status  # noqa: E402
+from dspx.commands import store as _store  # noqa: E402
 from dspx.commands import upgrade as _upgrade  # noqa: E402
 from dspx.commands import version as _version  # noqa: E402
 
@@ -102,3 +103,4 @@ _register(_show)
 _register(_list_cmd)
 _register(_skills)
 _register(_template_cmd)
+_register(_store)

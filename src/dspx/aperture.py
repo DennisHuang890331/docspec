@@ -138,7 +138,8 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
             if content:
                 proj.reads["decisions"] = _yaml_text(content)
         elif art_id == "material":
-            content = _read_file(leaf, "material.md")
+            # backend-neutral：優先讀 leaf.material（store/散檔皆由此供給）、退回開檔（防禦）。
+            content = leaf.material if leaf.material is not None else _read_file(leaf, "material.md")
             if content:
                 proj.reads["material"] = content
         elif art_id == "develop":

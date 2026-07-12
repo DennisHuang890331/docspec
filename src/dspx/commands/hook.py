@@ -27,6 +27,24 @@ _BLOCK_MSG = (
     "To update content, edit docs/<article>/_latest.md, then `docspec publish` a new version."
 )
 
+_STORE_BLOCK_MSG = (
+    "[docspec] Blocked: corpus/<article>.yaml is an engine-owned single-file store guarded by an "
+    "integrity seal — a hand-edit corrupts it. Change a section through the engine: "
+    "`docspec get/put <section> <category>` or `docspec crystallize`. "
+    "(If you truly must edit externally, run `docspec store fsck --accept` afterwards.)"
+)
+
+
+def _is_store_file(token: str) -> bool:
+    """path 是否為 corpus store 檔（`.../corpus/<article>.yaml`、非 `_` 前綴、直接在 corpus 下）。
+
+    不尋根（保守、跨平台、快）：只認「父目錄名＝corpus、副檔名 .yaml、檔名非 `_` 開頭」的形。
+    corpus 底下唯一的頂層 .yaml 就是 store 檔（散檔的 concept/decisions 住更深的節夾裡）。"""
+    from pathlib import Path
+    p = Path(token.strip().strip("'\""))
+    return (p.suffix == ".yaml" and p.parent.name == "corpus"
+            and not p.name.startswith("_"))
+
 # 子指令切分（; && || | 換行）與重導目標擷取
 _SUBCMD_SPLIT = re.compile(r"&&|\|\||[;|\n]")
 _REDIRECT = re.compile(r"(?:\d*>>?|&>)\s*('[^']*'|\"[^\"]*\"|[^\s;|&]+)")
@@ -95,11 +113,42 @@ def _guard(data: object) -> int:
     if path and is_frozen_path(path):
         sys.stderr.write(_BLOCK_MSG + "\n")
         return 2
+    if path and _is_store_file(path):
+        sys.stderr.write(_STORE_BLOCK_MSG + "\n")
+        return 2
     command = tool_input.get("command") or ""
     if command and _command_modifies_archive(command):
         sys.stderr.write(_BLOCK_MSG + "\n")
         return 2
+    if command and _command_writes_store(command):
+        sys.stderr.write(_STORE_BLOCK_MSG + "\n")
+        return 2
     return 0
+
+
+def _command_writes_store(command: str) -> bool:
+    """bash/pwsh 指令是否會寫/改到 corpus store 檔（重導 or mutate cmdlet 目標）。"""
+    for sub in _SUBCMD_SPLIT.split(command):
+        sub = sub.strip()
+        if not sub:
+            continue
+        if any(_is_store_file(m.group(1)) for m in _REDIRECT.finditer(sub)):
+            return True
+        try:
+            toks = shlex.split(sub)
+        except ValueError:
+            if "corpus" in sub and ".yaml" in sub:
+                return True
+            toks = []
+        if toks:
+            cmd = toks[0].rsplit("/", 1)[-1]
+            paths = [t for t in toks[1:] if not t.startswith("-")]
+            if cmd in ("rm", "mv", "cp", "tee", "truncate", "sed", "dd", "unlink") \
+                    and any(_is_store_file(p) for p in paths):
+                return True
+        if _PWSH_MUTATE.search(sub) and any(_is_store_file(t) for t in sub.split()):
+            return True
+    return False
 
 
 def _postcheck(data: object) -> int:

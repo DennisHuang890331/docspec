@@ -317,16 +317,16 @@ def test_render_output_locked_byte_for_byte(make_project, write_leaf, monkeypatc
         "<!-- dspx:section g/annex-b -->\n## 4. 附錄B\n\n"
     )
     assert latest.read_text(encoding="utf-8") == golden          # 全文逐 byte
-    # 指紋 golden＝fingerprint v3 算法實跑值。v3＝own 軸把 concept.yaml 的 `order`（位置元資料）
-    # 排除於 hash 外（改 order/搬位不誤標 stale-own）——故 own 值自 v2 一次性跳點；anc/deps/norm/
-    # style/prose 算法未變（與 v2 同值）。own 經 CRLF 正規化後**跨 OS 位元一致**（同 fixture 在
-    # Windows/Linux 得同值）。
+    # 指紋 golden＝fingerprint v5 算法實跑值。v5＝own 軸改讀「解析後結構」而非檔案位元
+    # （article-store-backend：decisions/material 位元半邊搬結構、backend-neutral）；own 值自 v3
+    # 一次性跳點（f2fdde…→43a447…、b767e1…→fd718c…），**anc/deps/norm/style/prose 逐 bit 不變**
+    # （本測試即「五軸零改」的 golden 證據——重算後只有 own 兩欄變）。own 經換行正規化後跨 OS 位元一致。
     _style = {"guide": "e3b0c44298fc1c14", "gloss": "4f53cda18c2baa0c",
               "purpose": "e3b0c44298fc1c14"}
     golden_ledger = {
-        "g/foreword": {"own": "f2fdde6b035bcbe9", "anc": "e3b0c44298fc1c14", "deps": "",
+        "g/foreword": {"own": "43a447ccf6ab17e9", "anc": "e3b0c44298fc1c14", "deps": "",
                        "norm": "", "style": _style, "prose": "70bd4b9c2c6996e3"},
-        "g/methods/survey": {"own": "b767e1456cfe2672", "anc": "e3b0c44298fc1c14", "deps": "",
+        "g/methods/survey": {"own": "fd718c7fee60907c", "anc": "e3b0c44298fc1c14", "deps": "",
                              "norm": "", "style": _style, "prose": "3caa63c3965f8115"},
     }
     assert read_ledger(Layout(home), "g") == golden_ledger       # 各節指紋逐 byte

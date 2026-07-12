@@ -417,10 +417,27 @@ def record_fork(change: Change, layout: Layout, official: Path) -> None:
         change.fork_hashes[workspace_rel(layout, official)] = content_hash(official) or ""
 
 
+def assert_stageable(layout: Layout, section: str) -> None:
+    """★Phase C 邊界守門：store-backed 篇的節**尚未**支援結構化 staging（article-store-backend
+    階段 2 只落地 A/B/D＝地基＋讀端＋遷移；change 層的 merge-by-section-id＝階段 2 的 Phase C，
+    尚未實作）。現行檔案粒度 staging 會對 store 篇產生散檔、落地時撞 both-backends fail-loud＝
+    資料混亂。故此處**顯式擋下**、不靜默走錯路（誠實邊界，非假裝支援）。"""
+    from dspx import store as _store
+    article = layout.article_of(section)
+    if _store.article_has_store(layout, article):
+        raise ChangeError(
+            f"section \"{section}\" belongs to store-backed article \"{article}\" "
+            f"(corpus/{article}.yaml). The change-layer structured merge for store articles is not "
+            "implemented yet (article-store-backend Phase C). Until then, edit store sections "
+            "outside a change (`docspec put <section> <category>` with no --change), or "
+            f"`docspec store dump {article} <DIR>` to work on scattered files.")
+
+
 def stage_section(change: Change, layout: Layout, section: str) -> Path:
     """corpus 節 copy-on-write（★P0 檔案粒度）：首次改該節時只複製它**自己的來源檔**
     （concept/decisions/material/develop/history/group ＋ assets/）進 staging——**不遞迴子章節
     資料夾**。回傳 staging 內該節路徑。已 stage（含自己的檔）＝直接回、不覆蓋既有暫存編輯。"""
+    assert_stageable(layout, section)
     official = layout.section_dir(section)
     staged = staging_target(change.dir, layout, official)
     if _has_own_files(staged):
@@ -517,24 +534,10 @@ def _resolved_section_dir(change: Change, layout: Layout, section: str) -> Path:
 
 
 def _load_leaf_from(section: str, leaf_dir: Path) -> Leaf:
-    """從一個具體資料夾（正式或 staging）讀出 Leaf——不經 layout.section_id（staging 路徑
-    無法 relative_to 正式 corpus），section 由呼叫端明確給。鏡像 model.load_leaf 的讀取。"""
-    from dspx.model import ModelError, _entries, _load_yaml
-    concept_raw = _load_yaml(leaf_dir / "concept.yaml")
-    if concept_raw is not None and not isinstance(concept_raw, dict):
-        raise ModelError(f"{leaf_dir / 'concept.yaml'} top level must be a mapping")
-    decisions_path = leaf_dir / "decisions.yaml"
-    history_path = leaf_dir / "history.yaml"
-    return Leaf(
-        section=section,
-        dir=leaf_dir,
-        concept=concept_raw,
-        decisions=_entries(_load_yaml(decisions_path), decisions_path),
-        history=_entries(_load_yaml(history_path), history_path),
-        has_material=(leaf_dir / "material.md").is_file(),
-        has_develop=(leaf_dir / "develop.md").is_file(),
-        has_history=history_path.is_file(),
-    )
+    """從一個具體資料夾（正式或 staging）讀出 Leaf——section 由呼叫端明確給（staging 路徑
+    無法 relative_to 正式 corpus）。委派 model.leaf_from_dir（含 material 讀入＝own 軸 v5 正確）。"""
+    from dspx.model import leaf_from_dir
+    return leaf_from_dir(section, leaf_dir)
 
 
 def load_union(layout: Layout, change: Change) -> list[Leaf]:

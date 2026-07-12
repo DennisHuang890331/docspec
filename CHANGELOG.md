@@ -10,6 +10,34 @@ a minor bump.
 
 ## [Unreleased]
 
+### Added — one-file-per-article store backend (article-store-backend, stage 2: A/B/D)
+
+- An article's corpus truth can now live in a single engine-owned `corpus/<article>.yaml` **store
+  file** (a `format`/`article`/`revision`/`integrity` header plus a path-sorted flat `sections`
+  list, each carrying `concept`/`decisions`/`history`/`material` blocks and `kind: group` records)
+  instead of the scattered one-folder-per-section files. Both layouts coexist and are **auto-detected
+  per article**; one article having both a store file and a leaf tree fails loud.
+- New `dspx/store.py` access layer: a **canonical serializer** (key order from the schema fieldmap,
+  multi-line strings as literal block scalars, `allow_unicode`, atomic tmp+`os.replace`) that is
+  **idempotent** (`load→dump→load` fixpoint, `dump(dump(x))==dump(x)`), and an **integrity seal**
+  (sha256 over the canonical body) that makes a hand-edit fail loud on the next command, pointing at
+  `docspec store fsck`. The hook guard now also blocks writes to `corpus/*.yaml`.
+- New `docspec store` command group: `migrate <article>|--all` (tree→store, **parity-gated**: both
+  backends load, every leaf deep-equals, and anc/deps/norm fingerprints match per section, else it
+  rolls back), `dump` (store→scattered, read-only recovery export), `load` (scattered→store through
+  full validation), `fsck [--accept]` (verify/re-seal). Migration is reversible (dump + delete).
+- **Fingerprint own-axis v5**: the own-source hash now reads parsed structure (canonical concept
+  minus `order` + canonical decisions + material text + fixed category labels) instead of file
+  bytes, so it is backend-neutral — the same content hashes identically whether scattered or stored.
+  The other five faces (anc/deps/norm/style/prose) are byte-for-byte unchanged. Ledger fingerprint
+  version bumps 4→5; `--rebaseline` absorbs the one-time own-axis change.
+- `develop.md` moves out of the store to `docspec/work/<section-path>/develop.md` on migration
+  (pre-crystallization workbench). Read-end sites (aperture material, lint material, status flags,
+  render group titles/order) are now backend-neutral (they read the model, not the filesystem).
+- Not yet in this stage: the change-layer structured merge for store articles (Phase C) and
+  full dual-backend test parametrization (Phase E). Staging a store-backed section fails loud with
+  a pointer until Phase C lands; scattered articles are unaffected.
+
 ### Fixed — `put` now routes into a change's staging instead of the frozen official corpus
 
 - A stress test surfaced a P0 workflow trap: while a change was active, `docspec put` on a
