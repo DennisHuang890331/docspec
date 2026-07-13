@@ -1,4 +1,4 @@
-"""export-dx-batch 散布層：安裝來源（PEP 610）、version 輸出、init 非阻塞更新檢查、self-update。
+"""export-dx-batch 散布層：安裝來源（PEP 610）、version 輸出、init 非阻塞更新檢查、update。
 
 網路相關一律 mock（urlopen／direct_url.json 讀取），不打真 GitHub。
 """
@@ -13,7 +13,7 @@ import pytest
 from dspx.env import _install_source
 from dspx import cli
 from dspx.commands.maintenance import init as init_cmd
-from dspx.commands.maintenance import self_update as su_cmd
+from dspx.commands.maintenance import update as su_cmd
 from dspx.commands.maintenance import version as version_cmd
 
 
@@ -242,22 +242,22 @@ def test_self_update_run_launches_detached_not_waited(monkeypatch, capsys):
     assert "docspec version" in capsys.readouterr().out
 
 
-# ── 兩層 help：self-update 露、template 藏 ─────────────────────────
+# ── 兩層 help：update 露、template 藏 ─────────────────────────
 
-def test_default_help_lists_self_update(capsys):
+def test_default_help_lists_update(capsys):
     cli.main(["--help"])
     out = capsys.readouterr().out
-    assert "self-update" in out
+    assert "\n  update" in out
     assert "\n  template" not in out           # agent-facing、預設 help 不列
 
 
-def test_help_all_lists_template_and_self_update(capsys):
+def test_help_all_lists_template_and_update(capsys):
     cli.main(["--help-all"])
     out = capsys.readouterr().out
-    assert "template" in out and "self-update" in out
+    assert "template" in out and "\n  update" in out
 
 
-def test_self_update_runnable_by_direct_dispatch(monkeypatch, capsys):
+def test_update_runnable_by_direct_dispatch(monkeypatch, capsys):
     monkeypatch.setattr(_install_source, "read_install_source", lambda *a, **k: None)
-    assert cli.main(["self-update"]) == 0
+    assert cli.main(["update"]) == 0
     assert "uv tool upgrade docspec" in capsys.readouterr().out

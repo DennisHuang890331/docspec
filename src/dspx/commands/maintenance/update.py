@@ -1,4 +1,4 @@
-r"""docspec self-update — 檢查安裝來源、印精確更新指令；`--run` 才以 detached 子行程真跑。
+r"""docspec update — 檢查安裝來源、印精確更新指令；`--run` 才以 detached 子行程真跑。
 
 ★預設（無旗標）＝唯讀：讀 PEP 610 安裝來源 → 印對應精確更新指令、exit 0，不碰任何東西
 （已覆蓋 90% 需求、零風險）。
@@ -17,7 +17,7 @@ import os
 import subprocess
 import sys
 
-NAME = "self-update"
+NAME = "update"
 HELP = "Check the install source and print the exact update command (--run launches it in a detached process)"
 
 _WIN_LOCK_NOTE = (
@@ -29,7 +29,7 @@ _WIN_LOCK_NOTE = (
 
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        prog="docspec self-update", description=HELP, epilog=_WIN_LOCK_NOTE)
+        prog="docspec update", description=HELP, epilog=_WIN_LOCK_NOTE)
     parser.add_argument("--run", action="store_true",
                         help="actually launch the update in a detached child process "
                              "(default: only print the command)")

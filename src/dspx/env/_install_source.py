@@ -1,6 +1,6 @@
 r"""安裝來源解析（PEP 610 `direct_url.json`）＋更新指令組裝。
 
-version / init / self-update 三處共用：讀自身 dist（`dspx`）的 `direct_url.json`
+version / init / update 三處共用：讀自身 dist（`dspx`）的 `direct_url.json`
 （`importlib.metadata`）判斷安裝來源——
   - vcs_info（git 安裝）→ `{"kind": "git", "commit": <sha>, "url": <repo url>}`
   - dir_info（本地目錄安裝）→ `{"kind": "dir", "path": <解出的本地路徑>}`
@@ -69,7 +69,7 @@ def update_command(source: dict | None) -> str:
 
 
 def update_argv(source: dict | None) -> list[str]:
-    """update_command 的 argv 版（self-update --run 的 detached 子行程用）。"""
+    """update_command 的 argv 版（update --run 的 detached 子行程用）。"""
     if source and source.get("kind") == "git":
         return ["uv", "tool", "install", "--from", GIT_REMOTE, "docspec",
                 "--reinstall", "--no-cache"]
