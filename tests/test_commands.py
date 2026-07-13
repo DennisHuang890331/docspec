@@ -39,9 +39,9 @@ def test_instructions_apply_projects_authoring_three_blocks(make_project, write_
     assert "── Verdict verbs ──" in out
     assert "--ack-own" in out and "This whitelist is EXHAUSTIVE" in out
     assert "Brief-envelope handling" in out and "ack-or-rewrite" in out
-    # 3) dispatch exclusions：逐條（punctuation→normalize、V18、grep banned openers）
+    # 3) dispatch exclusions：逐條（punctuation→edit --punct、V18、grep banned openers）
     assert "── Dispatch exclusions ──" in out
-    assert "docspec normalize" in out and "V18" in out
+    assert "docspec edit --punct" in out and "V18" in out
     assert "SEMANTIC work only" in out and "grep" in out
 
     # 只投 apply：develop/factcheck 不帶這三塊

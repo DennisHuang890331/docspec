@@ -317,7 +317,7 @@ def run(argv: list[str]) -> int:
         gitattributes.write_text(_GITATTRIBUTES_TEMPLATE, encoding="utf-8", newline="\n")
 
     # 載入/刷新 skill 到選定 agent（重 init＝刷新，force 覆寫舊 skill 檔）
-    from dspx.commands.maintenance.skills_cmd import _install
+    from dspx.commands.maintenance._skills import _install
     from dspx.env.skills import SkillError
     try:
         _install(project_root, tools, force=True)
@@ -325,7 +325,7 @@ def run(argv: list[str]) -> int:
         sys.stderr.write(
             f"docspec: project scaffold created, but skill install failed — {exc}\n"
             "The packaged skill data may be incomplete; reinstall docspec, then run "
-            "`docspec skills install`.\n")
+            "`docspec init` again.\n")
         return 1
 
     print(f"{'Settings updated' if is_reinit else 'docspec project initialized'}: {project_root}")

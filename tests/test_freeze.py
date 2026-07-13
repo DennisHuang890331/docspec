@@ -112,7 +112,7 @@ def test_hook_guard_blocks_on_bad_json(monkeypatch):
 
 
 def test_claude_install_writes_freeze_hook(tmp_path):
-    from dspx.commands.maintenance.skills_cmd import _install
+    from dspx.commands.maintenance._skills import _install
     _install(tmp_path, ("claude",), force=True)
     settings = tmp_path / ".claude" / "settings.json"
     assert settings.is_file()
@@ -130,7 +130,7 @@ def test_claude_install_writes_freeze_hook(tmp_path):
 
 
 def test_claude_install_preserves_existing_settings(tmp_path):
-    from dspx.commands.maintenance.skills_cmd import _install
+    from dspx.commands.maintenance._skills import _install
     settings = tmp_path / ".claude" / "settings.json"
     settings.parent.mkdir(parents=True)
     settings.write_text(json.dumps({"permissions": {"allow": ["Bash(ls)"]}}), encoding="utf-8")

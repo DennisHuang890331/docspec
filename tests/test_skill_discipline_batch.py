@@ -180,7 +180,7 @@ def test_apply_punctuation_guardrail_points_to_normalize():
     點名），但長文寫作原則已搬進投影。"""
     body = _skill_body("dspx-apply")
     dont = body[body.rindex("**Guardrails**"):]
-    assert "docspec normalize" in dont
+    assert "docspec edit --punct" in dont
     assert "byte-exact" in dont.lower()
     assert "width sweep" in dont.lower() or "blind regex" in dont.lower()
     assert "no punctuation auto-fix today" not in body       # 誠實版已過時、不得殘留

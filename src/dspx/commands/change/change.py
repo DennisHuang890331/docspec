@@ -130,7 +130,7 @@ def _cmd_new(argv: list[str]) -> int:
           "(docspec change add-target).")
     if blind_terms:
         print(f"  ↳ term seed(s) {', '.join(blind_terms)}: run "
-              f"`docspec rename-term <old> <new> --dry-run` to find prose hits, then add-target them.")
+              f"`docspec edit --term <old> <new> --dry-run` to find prose hits, then add-target them.")
     return 0
 
 

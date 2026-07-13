@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from dspx.commands.deliverable import normalize as normalize_cmd
+from dspx.commands.deliverable import _normalize as normalize_cmd
 from dspx.commands.deliverable import render as render_cmd
 from dspx.engine.layout import Layout
 from dspx.engine.render import detect_drift, read_ledger

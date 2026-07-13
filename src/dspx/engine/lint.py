@@ -16,7 +16,7 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   V15 docs 殘留撰寫工具/治理詞彙   ERROR  ← forest/governed-by/治理父/fan-in/factcheck/Tier-N/L2a/§回引…＝後台詞洩進交付物（補 V1 覆蓋缺口）
   V16 規範語句逃避詞（同句 應/不得）WARN  ← 最好／儘量／酌情／如有可能／視情況／最大限度（必要時故意排除，見下）
   V17 英文 AI-ism 詞彙            WARN  ← delve/tapestry/seamless…封閉 13 組＋句首 In today's；robust 刻意排除（見下）
-  V18 散文殘留半形標點           WARN  ← 散文面 span 內 normalize 會轉的半形標點（`,`/`.`/`:`/`;`/`?`/`!`）→ 指向 `docspec normalize`（不教手改）
+  V18 散文殘留半形標點           WARN  ← 散文面 span 內 normalize 會轉的半形標點（`,`/`.`/`:`/`;`/`?`/`!`）→ 指向 `docspec edit --punct`（不教手改）
   V19 brief 欄逐字複述祖先        WARN  ← concept.brief 子欄 strip 後 byte 等於最近提供該欄的祖先值（沿 aperture 祖先鏈）→ 指向刪欄改繼承／`docspec store tidy`
   V20 title 章號前綴             WARN  ← concept/group title 以大綱編號起頭（阿拉伯 `6.`／全形／頓號 `6、`／附錄字母 `A.`）→ 章號 render 推導、指向 `docspec store tidy`
   V21 散文未綁錨字面章號          WARN  ← 散文 `§9.2`／`第 6 章`／`見 §12` 未綁穩定錨（重排即漂）→ 改綁交叉引用錨（號碼 render 注入）；外部標準條號（`ISO … §4.2`）豁免
@@ -328,7 +328,7 @@ def _lint_docs(layout: Layout, articles: list[str], all_ids: set[str]) -> list[F
 
 
 def _lint_punctuation(layout: Layout, articles: list[str]) -> list[Finding]:
-    """V18 散文殘留半形標點（WARN、非阻塞）：散文面 span 內 `docspec normalize` 會轉換的
+    """V18 散文殘留半形標點（WARN、非阻塞）：散文面 span 內 `docspec edit --punct` 會轉換的
     半形標點 → 指向指令、不教手改。判定與 normalize 共用 `spans.propose_conversions`
     （單一權威、報必可修的閉環）；byte-exact span 與識別碼尾隨標點天然不觸發。
 
@@ -348,7 +348,7 @@ def _lint_punctuation(layout: Layout, articles: list[str]) -> list[Finding]:
             where = f"{file_where} § {section}" if section else file_where
             findings.append(Finding("V18", WARN, where,
                 f"{n} half-width punctuation mark(s) in prose that would normalize to full-width "
-                f"-- run `docspec normalize {article}` (deterministic; do not hand-edit)"))
+                f"-- run `docspec edit {article} --punct` (deterministic; do not hand-edit)"))
     return findings
 
 

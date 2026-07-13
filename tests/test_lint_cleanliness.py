@@ -469,7 +469,7 @@ def test_v18_prose_halfwidth_punct_warns_and_points_to_normalize(make_project, w
     v18 = [f for f in _lint(layout) if f.rule == "V18"]
     assert v18 and all(f.level == WARN for f in v18)
     assert all(f.where == "docs/a/_latest.md § a/x" for f in v18)
-    assert all("docspec normalize a" in f.detail for f in v18)
+    assert all("docspec edit a --punct" in f.detail for f in v18)
 
 
 def test_v18_code_span_and_identifier_do_not_trigger(make_project, write_leaf, monkeypatch):

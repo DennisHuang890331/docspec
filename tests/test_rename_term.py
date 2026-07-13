@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from dspx.commands.deliverable import render as render_cmd
-from dspx.commands.deliverable import rename_term as rt_cmd
+from dspx.commands.deliverable import _rename_term as rt_cmd
 from dspx.engine.layout import Layout
 from dspx.engine.render import detect_drift
 

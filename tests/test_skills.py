@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dspx.commands.maintenance import skills_cmd as skills_cmd
+from dspx.commands.maintenance import _skills as skills_cmd
 from dspx.env.frontmatter import parse_frontmatter
 from dspx.env.skills import available_skills
 
@@ -179,11 +179,10 @@ def test_install_tool_all_installs_every_agent(tmp_path):
         assert (tmp_path / d / "skills" / "dspx-develop" / "SKILL.md").is_file()
 
 
-def test_skills_registered_in_cli():
+def test_skills_folded_into_init():
+    """skills 退場：安裝併進 `docspec init`（含 reinit 冪等補裝、--tool 選家）；不再是頂層指令。"""
     from dspx.commands import REGISTRY
-
-    assert "skills" in REGISTRY
-    assert REGISTRY["skills"].NAME == "skills"
+    assert "skills" not in REGISTRY
 
 
 # skill-redesign: every workflow SKILL.md is a thin drive-through driver — the rules live in the
