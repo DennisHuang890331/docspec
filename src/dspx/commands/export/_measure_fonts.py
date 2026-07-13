@@ -22,8 +22,8 @@ NAME = "measure-fonts"
 HELP = "Print a PDF's actual rendered font sizes (dominant size = body text; settles release typesetting without eyeballing)"
 
 _INSTALL_HINT = (
-    "Install the measure-fonts dependency: pdfplumber (uv pip install pdfplumber, "
-    "or it's in the export extra: uv run --no-editable docspec measure-fonts)"
+    "Install pdfplumber for font diagnostics (uv pip install pdfplumber, "
+    "or it's in the export extra)"
 )
 
 
@@ -69,7 +69,33 @@ def _print_page(idx: int, total: int, result) -> None:
     print(f"    If this is mono/code (Scale=0.90), logical size = {body_size / 0.9:.1f} pt")
 
 
-# ── 主流程 ────────────────────────────────────────────────────────
+# ── proof 尾附診斷（soft-dep：缺 pdfplumber 只印一行、不擋 proof）──────
+
+def diagnose(pdf_path: Path, pages: str = "1") -> None:
+    """`docspec proof` render 完呼叫：量測已解析 PDF 的字級、尾附版面診斷。
+    pdfplumber 缺＝印一行提示後返回（proof 核心＝PNG，診斷是加值、絕不擋）。"""
+    if not _have_pdfplumber():
+        print(f"\n  (font diagnostics skipped — pdfplumber not installed; {_INSTALL_HINT})")
+        return
+    import pdfplumber  # type: ignore
+    try:
+        page_nums = [int(p.strip()) - 1 for p in pages.split(",") if p.strip()]
+    except ValueError:
+        return
+    try:
+        with pdfplumber.open(str(pdf_path)) as pdf:
+            total = len(pdf.pages)
+            print(f"\n── Layout diagnostics (fonts) — {total} pages ──")
+            for idx in page_nums:
+                if 0 <= idx < total:
+                    result = _measure_page(pdf.pages[idx])
+                    if result is not None:
+                        _print_page(idx, total, result)
+    except Exception as exc:  # noqa: BLE001 — 診斷絕不擋 proof
+        print(f"\n  (font diagnostics skipped — {exc})")
+
+
+# ── 主流程（standalone 單元邏輯；proof 走 diagnose()）─────────────────
 
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec measure-fonts", description=HELP)

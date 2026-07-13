@@ -13,7 +13,7 @@ import yaml
 
 from dspx.commands.query import check as check_cmd
 from dspx.commands.deliverable import render as render_cmd
-from dspx.commands.corpus import tidy as tidy_cmd
+from dspx.commands.corpus import store as store_cmd
 from dspx.engine.layout import Layout
 
 
@@ -95,7 +95,7 @@ def test_store_never_persists_empty_shell_decisions(make_project, write_leaf, mo
     store_text = (home / "corpus" / "sc.yaml").read_text(encoding="utf-8")
     assert "d1" in store_text and store_text.count("decisions:") == 1   # 只有實節那一塊
 
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     out = capsys.readouterr().out
     assert "delete empty-shell" not in out                    # 該動作已消滅
     assert _art(home, "sc").record_by_path("sc/實節").decisions[0]["id"] == "d1"  # 真決策仍在
@@ -117,7 +117,7 @@ def test_tidy_strips_verbatim_dup_brief_field_keeps_specialized(
           brief={"audience": "現場工程師"})
 
     monkeypatch.chdir(home.parent)
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     out = capsys.readouterr().out
     assert "sc/child/concept.yaml brief.audience" in out
 
@@ -145,7 +145,7 @@ def test_tidy_strips_hierarchical_arabic_title_prefixes(
     _leaf(write_leaf, home, "sc/群組/子節", cid="c6", title="子節", order=1)
 
     monkeypatch.chdir(home.parent)
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     out = capsys.readouterr().out
 
     c = lambda sec: _store_concept(home, sec)["title"]
@@ -170,7 +170,7 @@ def test_tidy_renames_folder_to_delivery_language_slug(
     capsys.readouterr()
 
     monkeypatch.chdir(home.parent)
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     out = capsys.readouterr().out
     assert "sc/safety/protective-zone -> sc/safety/防撞防護區域安全機能" in out
 
@@ -194,7 +194,7 @@ def test_tidy_renames_group_folder_from_group_yaml_title(
     capsys.readouterr()
 
     monkeypatch.chdir(home.parent)
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     assert "sc/安全機能/zone" in _store_sections(home, "sc")
     assert "sc/safety" not in _store_sections(home, "sc")
     assert check_cmd.run([]) == 0
@@ -209,7 +209,7 @@ def test_tidy_sibling_slug_collision_keeps_both_and_reports(
     capsys.readouterr()
 
     monkeypatch.chdir(home.parent)
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     out = capsys.readouterr().out
     assert "rename conflict" in out and "sc/同名節" in out
     assert "sc/alpha" in _store_sections(home, "sc")   # 兩者原地保留
@@ -226,7 +226,7 @@ def test_tidy_never_renames_article_root(make_project, write_leaf, monkeypatch, 
     capsys.readouterr()
 
     monkeypatch.chdir(home.parent)
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     assert "sc" in _store_sections(home, "sc")             # root 記錄不動（未改名）
     # ★store-only：root 未被改名成 title slug（無 corpus/跨運車控制架構.yaml store 檔）
     assert not (home / "corpus" / "跨運車控制架構.yaml").exists()
@@ -241,7 +241,7 @@ def test_tidy_slug_strips_slash_without_extra_dir_level(
     capsys.readouterr()
 
     monkeypatch.chdir(home.parent)
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     assert "sc/輸入輸出介面" in _store_sections(home, "sc")
     assert "sc/輸入" not in _store_sections(home, "sc")                  # 不產生額外層級
     assert check_cmd.run([]) == 0
@@ -261,7 +261,7 @@ def test_tidy_dry_run_lists_everything_and_writes_nothing(
     before = _snapshot_tree(home.parent)
 
     monkeypatch.chdir(home.parent)
-    assert tidy_cmd.run(["--dry-run"]) == 0
+    assert store_cmd.run(["tidy", "--dry-run"]) == 0
     out = capsys.readouterr().out
     # ★store-only：空殼 decisions 結構性消滅，無「delete empty-shell」動作
     assert "brief.audience" in out
@@ -281,7 +281,7 @@ def test_tidy_leaves_store_history_untouched(make_project, write_leaf, monkeypat
           history=[{"id": "h1", "statement": "退場理由", "status": "superseded", "kind": "normative"}])
 
     monkeypatch.chdir(home.parent)
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     rec = _art(home, "sc").record_by_path("sc/舊節")   # 章號剝除後改名 sc/old→sc/舊節
     assert rec.history == [{"id": "h1", "statement": "退場理由", "status": "superseded",
                             "kind": "normative"}]   # history 一字不動
@@ -301,17 +301,17 @@ def test_tidy_is_idempotent_second_run_zero_actions(
     capsys.readouterr()
 
     monkeypatch.chdir(home.parent)
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     first = capsys.readouterr().out
     assert "action(s) applied" in first
     assert "sc/防撞防護" in _store_sections(home, "sc")
 
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     second = capsys.readouterr().out
     assert "nothing to do" in second and "0 actions" in second
     # 二跑後磁碟不再變動（冪等的實體斷言）
     snap = _snapshot_tree(home.parent)
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     assert _snapshot_tree(home.parent) == snap
 
 
@@ -327,7 +327,7 @@ def test_tidy_rename_then_render_preserves_prose(make_project, write_leaf, monke
     capsys.readouterr()
 
     monkeypatch.chdir(home.parent)
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     capsys.readouterr()
 
     render_cmd.run(["sc"])                                # 改名後重 render
@@ -349,7 +349,7 @@ def test_tidy_red_check_skips_renames_but_does_other_actions(
     _leaf(write_leaf, home, "sc/b", cid="dup", title="乙節", order=2)
 
     monkeypatch.chdir(home.parent)
-    assert tidy_cmd.run([]) == 0
+    assert store_cmd.run(["tidy"]) == 0
     out = capsys.readouterr().out
     assert "SKIPPED all record renames" in out
     assert "sc/a -> sc/甲節" in out                        # 列出本會執行的清單
@@ -361,11 +361,12 @@ def test_tidy_red_check_skips_renames_but_does_other_actions(
 
 # ── CLI 面 ─────────────────────────────────────────────────────────────────
 
-def test_tidy_registered_and_help_exits_zero(capsys):
+def test_tidy_folded_into_store_and_help_exits_zero(capsys):
     from dspx.commands import REGISTRY
-    assert "tidy" in REGISTRY
+    assert "tidy" not in REGISTRY          # folded into `store tidy`
+    assert "store" in REGISTRY
     import pytest
     with pytest.raises(SystemExit) as exc:
-        tidy_cmd.run(["--help"])
+        store_cmd.run(["tidy", "--help"])
     assert exc.value.code == 0
     assert "--dry-run" in capsys.readouterr().out

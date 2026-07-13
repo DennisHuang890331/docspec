@@ -1,4 +1,4 @@
-"""docspec store — 一篇一檔儲存的維修/遷移門（dump / load / fsck / migrate）。
+"""docspec store — 一篇一檔儲存的維修/遷移門（dump / load / fsck / migrate / tidy）。
 
 「全走引擎」的鎖入風險（設計 §4.4）由三層維修門緩解：
 - `store dump <article>`  ：store → 散檔唯讀匯出（除錯/災難救援）。
@@ -24,7 +24,7 @@ from dspx.engine.model import (ancestor_brief_fingerprint, ancestor_normative_fi
                         deps_fingerprint, decision_index, leaf_from_dir, load_leaf)
 
 NAME = "store"
-HELP = "one-file-per-article store maintenance: dump / load / fsck / migrate (parity-gated)"
+HELP = "one-file-per-article store maintenance: dump / load / fsck / migrate (parity-gated) / tidy"
 
 # migrate/dump 認得的每節檔（其餘檔一律 fail-loud，永不靜默刪資料）。
 _FOLD_FILES = ("concept.yaml", "decisions.yaml", "material.md", "history.yaml", "group.yaml")
@@ -311,6 +311,12 @@ def run(argv: list[str]) -> int:
     p_fsck.add_argument("article", nargs="?", help="article name (default: all store articles)")
     p_fsck.add_argument("--accept", action="store_true", help="adopt external changes and re-seal")
 
+    p_tidy = sub.add_parser("tidy", help="deterministic idempotent corpus cleanup: strip verbatim-"
+                            "duplicate brief fields / chapter-number title prefixes, rename folders "
+                            "to delivery-language slugs")
+    p_tidy.add_argument("--dry-run", action="store_true", dest="dry_run",
+                        help="print the complete action list without touching any store file")
+
     args = parser.parse_args(argv)
 
     try:
@@ -344,4 +350,7 @@ def run(argv: list[str]) -> int:
             print("store fsck: no store articles")
             return 0
         return _fsck(layout, arts, args.accept, schema)
+    if args.sub == "tidy":
+        from dspx.commands.corpus import _tidy
+        return _tidy.run(["--dry-run"] if args.dry_run else [])
     return 2

@@ -1,4 +1,4 @@
-"""docspec freeze — 凍結區維運（agent-facing；子動詞制，仿 `hook guard|check` 前例）。
+"""publish register-legacy 的實作（併自舊 `freeze` 指令；子動詞制，仿 `hook guard|check` 前例）。
 
 目前唯一子動詞 `register-legacy`：把 pre-docspec 歷版登記進凍結區的**第二張白名單**
 （`.freeze.yaml` 頂層 `legacy:`，與 publish 鑄造的 `frozen:` 平行——出處可稽）。
@@ -11,7 +11,7 @@
 - 失敗原子性：先搬完檔案、最後才**一次**批次寫 manifest——manifest 沒寫＝全部未登記，
   V11 把已搬進 archive 的檔標紅並指路重跑（原地登記模式天然收尾）。
 
-模組名 freeze_cmd.py 避開與 dspx/freeze.py（資料模組）同名混淆（仿 skills_cmd.py 前例）。
+模組名 _freeze.py：`_` 前綴＝非頂層指令（併進 publish register-legacy），亦避開與 reports/freeze.py 混淆。
 """
 
 from __future__ import annotations
@@ -25,11 +25,11 @@ from dspx.reports import freeze
 from dspx.commands._shared import BootstrapError, bootstrap
 
 NAME = "freeze"
-HELP = ("frozen-area operations: `freeze register-legacy <src-dir>` registers "
+HELP = ("frozen-area operations: `publish register-legacy <src-dir>` registers "
         "pre-docspec legacy versions into the tamper-detection hash net")
 
 _USAGE = (
-    "Usage: docspec freeze register-legacy <src-dir> [--into <name>]\n"
+    "Usage: docspec publish register-legacy <src-dir> [--into <name>]\n"
     "  register-legacy  register pre-docspec legacy versions into the frozen area:\n"
     "                   moves the files into docs/archive/legacy/<name>/ and records\n"
     "                   their hashes in .freeze.yaml (src-dir already inside an\n"
@@ -52,7 +52,7 @@ def run(argv: list[str]) -> int:
 
 def _register_legacy(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        prog="docspec freeze register-legacy",
+        prog="docspec publish register-legacy",
         description="register pre-docspec legacy versions into the frozen-area hash net")
     parser.add_argument("src_dir", help="folder holding the pre-docspec legacy version files")
     parser.add_argument("--into", default=None, metavar="NAME",
@@ -67,11 +67,11 @@ def _register_legacy(argv: list[str]) -> int:
 
     src = Path(args.src_dir)
     if not src.is_dir():
-        sys.stderr.write(f"docspec: freeze register-legacy: not a directory: {src}\n")
+        sys.stderr.write(f"docspec: publish register-legacy: not a directory: {src}\n")
         return 1
     files = sorted(p for p in src.rglob("*") if p.is_file() and not freeze.is_sync_junk(p.name))
     if not files:
-        sys.stderr.write(f"docspec: freeze register-legacy: no files to register under {src}\n")
+        sys.stderr.write(f"docspec: publish register-legacy: no files to register under {src}\n")
         return 1
 
     root = layout.project_root.resolve()
@@ -98,7 +98,7 @@ def _register_legacy(argv: list[str]) -> int:
     collisions = sorted(r for r in rels.values() if r in frozen or r in legacy)
     if collisions:
         sys.stderr.write(
-            "docspec: freeze register-legacy refused -- path(s) already registered in "
+            "docspec: publish register-legacy refused -- path(s) already registered in "
             ".freeze.yaml (the frozen area is append-only; re-registering would launder a "
             "tampered hash). Nothing was moved or written:\n")
         for c in collisions:
@@ -108,7 +108,7 @@ def _register_legacy(argv: list[str]) -> int:
         clobber = sorted(str(t) for t in targets.values() if t.exists())
         if clobber:
             sys.stderr.write(
-                "docspec: freeze register-legacy refused -- destination file(s) already exist "
+                "docspec: publish register-legacy refused -- destination file(s) already exist "
                 "(will not overwrite). Nothing was moved or written:\n")
             for c in clobber:
                 sys.stderr.write(f"  ✗ {c}\n")
@@ -136,7 +136,7 @@ def _register_legacy(argv: list[str]) -> int:
             layout.planning_home, layout.project_root, list(targets.values()))
     except freeze.LegacyCollisionError as exc:
         sys.stderr.write(
-            "docspec: freeze register-legacy refused -- path(s) already registered:\n")
+            "docspec: publish register-legacy refused -- path(s) already registered:\n")
         for c in exc.collisions:
             sys.stderr.write(f"  ✗ {c}\n")
         return 1

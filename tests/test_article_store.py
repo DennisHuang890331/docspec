@@ -450,7 +450,7 @@ def test_store_mv_repoints_records_sidesections_survive(make_project, monkeypatc
 def test_store_retire_extracts_record_and_archives(make_project, monkeypatch, capsys):
     """retire 對 store 篇＝抽記錄→ dump 封存包、活 store 移除記錄、revision+1；retired 查得到、旁節存活。"""
     from dspx.commands.corpus import retire as retire_cmd
-    from dspx.commands.corpus import retired as retired_cmd
+    from dspx.commands.query import status as status_cmd
     home = make_project()
     _wl(home, "g", concept={"id": "c-root", "title": "根", "order": 1,
                             "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
@@ -480,7 +480,7 @@ def test_store_retire_extracts_record_and_archives(make_project, monkeypatch, ca
     assert "g/intro" not in {lf.section for lf in load_project(Layout(home))}
     # retired 查得到
     capsys.readouterr()
-    assert retired_cmd.run([]) == 0
+    assert status_cmd.run(["--retired"]) == 0
     assert "g/intro" in capsys.readouterr().out
 
 

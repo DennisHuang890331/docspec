@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from dspx.commands.export import measure_fonts as mf_cmd
+from dspx.commands.export import _measure_fonts as mf_cmd
 from dspx.commands.projection import reference as ref_cmd
 
 
@@ -18,7 +18,8 @@ from dspx.commands.projection import reference as ref_cmd
 def test_reference_registered():
     from dspx.commands import REGISTRY
     assert REGISTRY.get("reference") is ref_cmd
-    assert REGISTRY.get("measure-fonts") is mf_cmd
+    # measure-fonts folded into `proof` (font diagnostics); no longer a top-level command
+    assert "measure-fonts" not in REGISTRY
 
 
 def test_reference_bundled_pack_is_advisory_or_lists(capsys):

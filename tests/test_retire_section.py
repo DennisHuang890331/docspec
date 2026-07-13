@@ -7,7 +7,6 @@ import json
 import yaml
 
 from dspx.commands.corpus import retire as rs_cmd
-from dspx.commands.corpus import retired as retired_cmd
 from dspx.commands.query import status as status_cmd
 from dspx.engine.layout import Layout
 from dspx.engine.model import load_project
@@ -46,7 +45,7 @@ def test_retire_section_moves_and_records(make_project, write_leaf, monkeypatch,
     assert "zenoh/arch" in secs
 
     # retired 查得到（顯示還原的原路徑＋一句話）
-    assert retired_cmd.run([]) == 0
+    assert status_cmd.run(["--retired"]) == 0
     out = capsys.readouterr().out
     assert "zenoh/hello-world" in out and "新手第一個 pub/sub" in out
 
@@ -59,7 +58,7 @@ def test_retire_section_prefix_filter(make_project, write_leaf, monkeypatch, cap
     assert rs_cmd.run(["a/x"]) == 0
     assert rs_cmd.run(["b/y"]) == 0
     capsys.readouterr()                       # 清掉退場輸出
-    assert retired_cmd.run(["a"]) == 0
+    assert status_cmd.run(["--retired", "a"]) == 0
     out = capsys.readouterr().out
     assert "a/x" in out and "b/y" not in out
 

@@ -9,13 +9,13 @@
   舊的「死決策搬 live 樹 history.yaml」流程已撤除（死決策就地留在 decisions.yaml，查用 `docspec show <article> --decisions --all-status`）。
 - **整節退場**（`docspec retire` 寫、住封存包內）：`id` ＝**該節的 `concept.id`（不是路徑！）**、
   `kind: section`、`status: retired`、`statement`(一句)、`archive`(→封存資料夾的 link)、`retired-in`。
-- 舊專案若仍有 live 樹 history.yaml：引擎照讀不炸（向後相容）；`docspec tidy` 會報告它為可遷移項。
+- 舊專案若仍有 live 樹 history.yaml：引擎照讀不炸（向後相容）；`docspec store tidy` 會報告它為可遷移項。
 
 對應與查詢：
 - 決策的散文 rationale 在 history.md 的**乾淨 `## <id>` 段**（純 id，不帶標題、不夾破折號）；`docspec show <id>` 撈。
 - **非硬綁**：靠同一個 id 對應、不存指向字串；孤兒散文段最多 lint 提醒，**不是 check 硬閘**
   （舊的「`## <id> — …` 破折號雙向綁定 check」已移除）。
 - 整節退場**不寫 history.md**（細節＝archive 資料夾本身）。
-- 查詢：`docspec retired`（摘要清單，含 archive link 是否解析得到）、`docspec show <id>`（單筆下鑽）。
+- 查詢：`docspec status --retired`（摘要清單，含 archive link 是否解析得到）、`docspec show <id>`（單筆下鑽）。
 
 draft 不讀；develop（re-open 回顧「為何丟」）、factcheck（判脈絡）讀。

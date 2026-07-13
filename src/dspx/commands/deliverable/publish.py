@@ -55,6 +55,12 @@ def _next_version(layout: Layout, article: str, level: str) -> str:
 
 
 def run(argv: list[str]) -> int:
+    # register-legacy 子動詞（併自舊 `freeze` 指令）：seed pre-docspec 歷版進凍結區。
+    # 早期委派——它自解析/自 bootstrap，與正常 publish（發行一篇）不同路。
+    if argv and argv[0] == "register-legacy":
+        from dspx.commands.governance import _freeze
+        return _freeze.run(argv)
+
     parser = argparse.ArgumentParser(prog="docspec publish", description=HELP)
     parser.add_argument("article", help="name of the article to publish")
     parser.add_argument(

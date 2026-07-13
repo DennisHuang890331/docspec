@@ -161,4 +161,8 @@ def run(argv: list[str]) -> int:
     print(f"Proofed {args.article} v{label} ({len(pages)} pages) → {out_dir}")
     for p in pages:
         print(f"  {p}")
+
+    # 版面診斷（字級；併自舊 measure-fonts）——render 後尾附，soft-dep 不擋 proof。
+    from dspx.commands.export import _measure_fonts
+    _measure_fonts.diagnose(pdf)
     return 0

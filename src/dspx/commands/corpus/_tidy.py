@@ -1,4 +1,4 @@
-"""docspec tidy — 確定性、冪等的 corpus 遷移指令（contract-slimming；★store-only）。
+"""docspec store tidy — 確定性、冪等的 corpus 遷移指令（contract-slimming；★store-only）。
 
 三個機械動作，依序執行（`--dry-run` 先看完整清單、零寫入）——全部對 `corpus/<article>.yaml`
 store 記錄操作，不再碰散檔：
@@ -244,7 +244,7 @@ def _apply_inplace_edits(layout, leaves, dry: bool, tag: str) -> tuple[int, set[
 # ── 主流程 ──────────────────────────────────────────────────────────────────
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec tidy", description=HELP)
+    parser = argparse.ArgumentParser(prog="docspec store tidy", description=HELP)
     parser.add_argument(
         "--dry-run", action="store_true", dest="dry_run",
         help="print the complete action list (field strips / prefix strips / renames, "
@@ -284,7 +284,7 @@ def run(argv: list[str]) -> int:
             if not pre.ok:
                 print(f"{tag}: SKIPPED all record renames — `docspec check` is not green, and "
                       "renames run through the mv transaction which self-verifies with check. "
-                      "Fix the check errors, then re-run `docspec tidy`. Would have renamed:")
+                      "Fix the check errors, then re-run `docspec store tidy`. Would have renamed:")
                 for old, new in valid:
                     print(f"{tag}:   {old} -> {new}")
                 valid = []
@@ -307,7 +307,7 @@ def run(argv: list[str]) -> int:
 
     for olds, new, reason in conflicts:
         print(f"{tag}: rename conflict (kept original): {', '.join(olds)} -> {new} — {reason}; "
-              "fix the title(s), then re-run `docspec tidy`")
+              "fix the title(s), then re-run `docspec store tidy`")
     for section, reason in skips:
         print(f"{tag}: rename skipped: {section} — {reason}")
 

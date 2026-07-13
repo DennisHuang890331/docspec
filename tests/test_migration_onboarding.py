@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 from dspx.reports import freeze
-from dspx.commands.governance import freeze_cmd
+from dspx.commands.governance import _freeze as freeze_cmd
 from dspx.commands.deliverable import publish as publish_cmd
 
 
@@ -39,15 +39,13 @@ def _v11(home):
 # ── 2.x 指令面：註冊/可見性/子動詞分派 ─────────────────────────────────
 
 
-def test_freeze_registered_agent_facing():
-    """freeze 進 REGISTRY、不入 HUMAN_COMMANDS（--help 不列、--help-all 可見）。"""
-    from dspx.cli import _help_text
-    from dspx.commands import HUMAN_COMMANDS, REGISTRY
-    assert "freeze" in REGISTRY
-    assert REGISTRY["freeze"].NAME == "freeze"
-    assert "freeze" not in HUMAN_COMMANDS
-    assert "freeze" not in _help_text()
-    assert "freeze" in _help_text(show_all=True)
+def test_register_legacy_folded_into_publish():
+    """freeze 退場：register-legacy 併進 `publish register-legacy`；freeze 不再是指令。"""
+    from dspx.commands import REGISTRY
+    from dspx.commands.deliverable import publish as publish_cmd
+    assert "freeze" not in REGISTRY
+    # publish 把 register-legacy 子動詞路由到 freeze 邏輯（非目錄 → 1，證明委派生效）
+    assert publish_cmd.run(["register-legacy", "/no/such/dir"]) == 1
 
 
 def test_freeze_help_and_unknown_subverb(capsys):
@@ -302,7 +300,7 @@ def test_v11_not_registered_message_points_to_migration(make_project, write_leaf
     findings = _v11(home)
     assert findings
     detail = findings[0].detail
-    assert "docspec freeze register-legacy" in detail
+    assert "docspec publish register-legacy" in detail
     assert "docs/legacy/" in detail
 
 
@@ -400,7 +398,7 @@ def test_guide_projects_migration_recipe(make_project, monkeypatch, capsys):
     assert guide.run([]) == 0
     out = capsys.readouterr().out
     assert "Migration onboarding" in out                          # 含 ToC 條目＋區塊
-    i1 = out.index("freeze register-legacy")
+    i1 = out.index("publish register-legacy")
     i2 = out.index("revision history")
     i3 = out.index("--set-version")
     assert i1 < i2 < i3                                           # 三步依序

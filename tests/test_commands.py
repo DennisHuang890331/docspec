@@ -175,13 +175,13 @@ def test_show_decision_and_concept_payload(make_project, write_leaf, monkeypatch
 
 def test_retired_lists_active_decision_retirements(make_project, write_leaf, monkeypatch, capsys):
     import json
-    from dspx.commands.corpus import retired as retired_cmd
+    from dspx.commands.query import status as status_cmd
     home = make_project()
     write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1},
                history=[{"id": "d-old", "kind": "normative", "status": "superseded",
                          "statement": "old rule", "retired-in": "v2"}])
     monkeypatch.chdir(home.parent)
-    assert retired_cmd.run(["--json"]) == 0
+    assert status_cmd.run(["--retired", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
     assert any(d["id"] == "d-old" and d["section"] == "g/x" for d in data["retiredDecisions"])
 

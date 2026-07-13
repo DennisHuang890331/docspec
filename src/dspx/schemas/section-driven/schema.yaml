@@ -175,7 +175,7 @@ workflow:
     steps:
       - >-
         Register the pre-docspec legacy versions into the freeze hash net:
-        docspec freeze register-legacy <dir> [--into <name>]. The engine moves them under
+        docspec publish register-legacy <dir> [--into <name>]. The engine moves them under
         docs/archive/legacy/<name>/ (a source already inside an archive/ folder is registered
         in place) and records their hashes in the `legacy:` table of .freeze.yaml — the same
         tamper/deletion protection as published snapshots. Already-registered paths are refused
