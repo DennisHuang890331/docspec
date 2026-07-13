@@ -10,6 +10,18 @@ a minor bump.
 
 ## [Unreleased]
 
+### Changed — command-surface round 2: renames, regrouping, a new `edit` primitive, setup folded into `init`
+
+- **`self-update` → `update`** (the freed-up name; `upgrade` was already gone). Pure rename.
+- **Four standalone commands folded into their conceptual home** (each old module became an underscore-prefixed helper; behavior unchanged, callers/lint messages/schema/skills updated):
+  - `retired` → `status --retired` (querying retired sections is a status view).
+  - `tidy` → `store tidy` (deterministic corpus cleanup is store maintenance, alongside dump/migrate/fsck).
+  - `measure-fonts` → appended to `proof` output (font/layout diagnostics after the PDF renders; no separate command).
+  - `freeze register-legacy` → `publish register-legacy` (seeding legacy versions into the frozen area is a publish-time operation; the standalone `freeze` command retires, the freeze *report*/hash-net stays).
+- **New `edit` primitive** — one entry point for mechanical prose edits: `edit <article> --punct` (= old `normalize`), `edit <article> --term OLD NEW` (= old `rename-term`), and the new `edit <section> --replace OLD NEW` (literal replace scoped to ONE section). All three touch prose spans only (code/URLs/markers stay byte-exact) and self-maintain the prose fingerprint; `--replace` is section-scoped, refuses on zero matches (exit 1), and has `--dry-run`. `normalize`/`rename-term` retire as top-level commands. (Semantic fidelity is not mechanically enforceable — the primitive guarantees the mechanical boundary only; whether an edit is *correct* is the human's / factcheck's call.)
+- **`skills` command folded into `init`** — `init` already installs the skills (with `--tool` selection and idempotent re-install on re-run), so the standalone `skills` command retires; re-run `init` to (re)install.
+- **`instructions` and `reference` kept as independent top-level commands** — an earlier plan merged them into `guide`; on inspection both are low-frequency but distinct, discoverable, and referenced from calibrated lint messages / onboarding text (10+ user-facing strings), so merging was high-churn for marginal gain. They stay independent (matching how OpenSpec keeps `instructions` separate).
+
 ### Removed — the scattered per-section file layout retires; one-file store is the only corpus format
 
 - The one-file `corpus/<article>.yaml` store is now the ONLY live corpus format. The old scattered
