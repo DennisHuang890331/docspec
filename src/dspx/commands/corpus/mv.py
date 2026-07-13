@@ -9,7 +9,7 @@
      （root 牽動交付檔名/publish 凍結/journal，屬後續擴充）。身份（concept.id）不動、
      指紋帳本不手改——收尾提示 `render --rebaseline` 以新 key 重生。
      **store 篇**（`corpus/<article>.yaml`）走結構化記錄搬移：改記錄的 path 前綴（不搬資料夾）、
-     revision+1、canonical 原子重寫，其餘（引用重寫、check 自驗、回滾）與 tree 版一致。
+     revision+1、canonical 原子重寫，其餘（引用重寫、check 自驗、回滾）一併原子完成。
   2. **資產模式** `docspec mv docs/assets/old.png new.png`：改圖檔名＋以 basename 比對重寫所有
      `docs/*_latest.md` 與 corpus `material.md` 的 `![](…old.png)` 引用；同樣原子/回滾。
 """
@@ -215,19 +215,6 @@ def _check_result(layout, schema):
 
 # ── 節模式 ────────────────────────────────────────────────────────────────
 
-def _is_section_folder(layout, src: Path) -> bool:
-    """src 是 leaf（含 concept.yaml/develop.md）或 group（子樹含節）＝可搬移的節資料夾。"""
-    if not src.is_dir():
-        return False
-    if (src / "concept.yaml").is_file() or (src / "develop.md").is_file():
-        return True
-    for name in ("concept.yaml", "develop.md"):
-        for f in src.rglob(name):
-            if not layout.is_archived_path(f.parent):
-                return True
-    return False
-
-
 def _run_section_mode(layout, schema, old_arg: str, new_arg: str) -> int:
     """★store-only：改名/搬移一個 leaf/group＝改 store 記錄的 path 前綴（不搬資料夾），走結構化
     記錄搬移。基本非空/自等檢查後委派 `_run_store_section_mode`（tidy 也走這個入口）。"""
@@ -250,7 +237,7 @@ def _run_store_section_mode(layout, schema, old: str, new: str) -> int:
     from dspx.engine import store as _store
 
     old_art, new_art = layout.article_of(old), layout.article_of(new)
-    # v1 範圍：article root 不搬、跨 article 不搬（同 tree 版；store 天生 per-article）。
+    # v1 範圍：article root 不搬、跨 article 不搬（store 天生 per-article）。
     if "/" not in old:
         sys.stderr.write(
             f"docspec: refusing to move article root \"{old}\" — the store file is keyed by the "

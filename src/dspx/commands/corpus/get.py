@@ -3,8 +3,9 @@
 把某節某分類（concept | decisions | material）的內容吐到 stdout 或 `--out FILE`，供 agent 編輯後
 再 `docspec put` 寫回。缺檔＝回一份**依 schema 的空骨架**（agent 從骨架填起，取代盲寫）。
 
-get/put 是「全走引擎」的最小讀寫對：agent 改文章細節走指令、引擎驗證後才收，而不是手改散檔。
-本 change 不動儲存拓撲（仍讀現行散檔）、不改任何指令名——只補「讀出＋（put 的）驗證寫入」這道門。
+get/put 是「全走引擎」的最小讀寫對：agent 改文章細節走指令、引擎驗證後才收，而不是手改真相。
+讀寫皆落在一篇一檔 store（`corpus/<article>.yaml`，引擎擁有＋封條）——get 從 store 記錄取出、
+put 驗證後寫回；agent 不手改 store 檔。
 """
 
 from __future__ import annotations

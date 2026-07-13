@@ -19,6 +19,12 @@ a minor bump.
   render / status / check all operate on the store — the dual-backend branching in the normal path
   is gone; `change.py`'s file-granular tree staging is gone (only the structured store staging
   remains). `develop.md` stays outside the store in `work/<section>/`.
+- Cleanup pass: removed the dead `mv._is_section_folder` (no callers left after the store rewrite),
+  and swept the last scattered-world docstrings (`get`/`put`/`new`/`mv`/`retire`/`change` help text that
+  still said "reads/writes scattered files" or compared to "the tree version"). The `hook check`
+  (`_postcheck`) completeness reminder is deliberately kept — it now serves edits to scattered
+  concept/decisions files that only exist via `store dump` / migration source / `_archive` snapshots;
+  the live store is guarded against hand-edits and written through `put`, so it never routes here.
 - The engine core was regrouped into subpackages by responsibility: `dspx/engine/` (the coupled
   core — model, render, change, store, aperture, crossref, forest, spans, schema, layout, paths,
   lint, config, glossary), `dspx/reports/` (audit, roadmap, freeze), `dspx/typeset/` (slots,

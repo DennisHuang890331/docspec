@@ -226,7 +226,7 @@ def _retire_store(layout, schema, section: str, args) -> int:
     if any(r.kind == "leaf" for r in keep):
         _store.save_article(layout, art, schema)
     else:
-        # 整篇退役：活 store 已無任何 leaf → 刪 store 檔（文章從活樹消失，對稱 tree 版），
+        # 整篇退役：活 store 已無任何 leaf → 刪 store 檔（文章從活樹消失），
         # 交付檔＋帳本搬進封存包（D6：content is recoverable）。
         store_file.unlink()
         moved_deliverables = _migrate_orphan_deliverable(layout, article, dest)

@@ -10,7 +10,7 @@ from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
 from dspx.engine.layout import Layout
 
 NAME = "new"
-HELP = "create section folder + develop.md (concept/decisions are produced when develop crystallizes)"
+HELP = "create a section's develop.md workbench (concept/decisions land in the store when develop crystallizes)"
 
 # develop 階段只有 develop.md；concept/decisions 由 develop agent 在「結晶」時產出、
 # material 可選、history 由 retire 建。（不預建空 stub——否則 status 會把未結晶的空節誤報 ready。）

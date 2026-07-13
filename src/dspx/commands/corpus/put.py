@@ -1,14 +1,14 @@
 """docspec put <section> <category> <FILE|-> — corpus 真相的**唯一驗證寫入門**。
 
-今天 concept/decisions/material 由 agent 直接 Write 檔，引擎只在事後 lint/check 抓錯。put 把
+concept/decisions/material 的寫入本該只有一道驗證門，不是 agent 各自寫再事後 lint/check 抓錯。put 把
 「寫入」變成一道引擎交易：收 agent 編輯後的內容 → 先過 `run_file_check`（既有欄位驗證）＋結構
-驗證（重複 id、entries 形狀、enum、relation 目標存在）→ 通過才**原子寫**（tmp + os.replace）回散檔；
-任一驗證失敗＝拒收、報錯、**原檔一個 byte 不動**（不寫半套）。首寫 concept（該節原無 concept.yaml）
-時帶入 id/order，取代「agent 手寫 concept.yaml」。
+驗證（重複 id、entries 形狀、enum、relation 目標存在）→ 通過才**原子寫**（tmp + os.replace）回 store；
+任一驗證失敗＝拒收、報錯、**原檔一個 byte 不動**（不寫半套）。首寫 concept（該節原無 concept 記錄）
+時帶入 id/order，取代「agent 手寫真相」。
 
 刻意**不**在寫入當下擋「完整性」（必填未齊）：completeness 閘在晉升（ready/publish），不在寫入
 （schema boundaries 明文）——put 只擋結構壞掉（壞 enum／重複 id／斷 relation／壞形狀），半成品
-concept 照收（該節停在 developing）。本 change backend 仍寫現行散檔，建立的是**寫入 GATE**。
+concept 照收（該節停在 developing）。寫入落在一篇一檔 store（`corpus/<article>.yaml`），這道門是唯一寫入口。
 """
 
 from __future__ import annotations

@@ -254,7 +254,7 @@ def _cmd_add_target(argv: list[str]) -> int:
     if t.kind == "file":
         print(f"  staged a copy of {t.ref} (baseline hash recorded; official file untouched).")
     elif args.action == "create":
-        print(f"  staged an empty section folder for {t.ref} (crystallize it in staging).")
+        print(f"  staged an empty section for {t.ref} (crystallize it in staging).")
     else:
         print("  staged the section's own files into staging + enlist-staled "
               "(status derives it not-done until the prose is rewritten in the preview).")
