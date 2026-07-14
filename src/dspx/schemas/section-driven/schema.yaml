@@ -334,7 +334,7 @@ project-files:
       the working context, visible via `docspec guide`); with multiple roots and no apex document, it is purpose's only home.
       Writing doctrine → writing-guide.md; term identity → glossary.yaml.
   - id: roadmap
-    file: corpus/<article>/roadmap.yaml (per-doc, travels with the tree) | docspec/roadmap.yaml (forest, cross-document); completion
+    file: corpus/<article>.roadmap.yaml (per-doc sibling sealed store) | docspec/roadmap.yaml (forest, cross-document); completion
       record (append-only) lives alongside as roadmap-archive.yaml
     meaning: >
       Planned-work backlog — holds only work that is "planned, not yet done, about this forest's documents". **Stateless model: present
@@ -359,7 +359,7 @@ project-files:
       Holds only "planned, not yet done" backlog. Does not draw the forest map (forest_view derived), does not store completed work
       (revision_history/history/roadmap-archive), does not hold flaws in existing content (audit) — those each have their own home.
   - id: audit
-    file: corpus/<article>/audit.yaml (per-doc) | docspec/audit.yaml (forest, cross-document)
+    file: corpus/<article>.audit.yaml (per-doc sibling sealed store) | docspec/audit.yaml (forest, cross-document)
     meaning: >
       Red-team audit log of attack and response (factcheck's non-blocking findings). finding = {id, face(5 core + packs), severity,
       status, finding, suggestion, targets(list of sections touched — stable section identifiers only, e.g. a section path or

@@ -66,11 +66,6 @@ def forest_roadmap_path(layout: Layout) -> Path:
     return layout.planning_home / ROADMAP_FILE
 
 
-def doc_roadmap_archive_path(layout: Layout, article: str) -> Path:
-    """per-doc 完成記錄檔＝該文件 root section dir 下的 roadmap-archive.yaml（append-only）。"""
-    return layout.section_dir(article) / ROADMAP_ARCHIVE_FILE
-
-
 def forest_roadmap_archive_path(layout: Layout) -> Path:
     return layout.planning_home / ROADMAP_ARCHIVE_FILE
 

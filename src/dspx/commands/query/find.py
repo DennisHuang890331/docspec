@@ -140,19 +140,18 @@ def _search_audit(layout, leaves, query, regex, hits):
                                  "snippet": _snippet(val, s, e), "id": f.get("id")})
 
 
-def _referent_of(text: str, pos: int, glossary_terms: list[str], lf, sec: str) -> str:
-    """值層呈現器的分組鍵（#3）：數字前 60 字內**最靠近**的 glossary canonical 詞 → concept.title
-    → section。用 glossary 當鍵才能讓跨文件同一個量（標題不同、但都用同一術語稱呼）聚成一組、
-    「>1 distinct value」旗標才亮得起來。"""
-    window = text[max(0, pos - 60):pos]
-    best, best_i = None, -1
-    for term in glossary_terms:
-        if term:
-            i = window.rfind(term)
-            if i > best_i:
-                best, best_i = term, i
-    if best is not None:
-        return best
+def _referent_of(text: str, pos: int, glossary_terms: list[tuple[str, str]], lf, sec: str) -> str:
+    """值層呈現器的分組鍵（#3）：數字前 60 字內**最靠近**的 glossary 詞（canonical **或別名**、
+    case-insensitive）→ 回其 canonical → concept.title → section。用 glossary 當鍵才能讓跨文件
+    同一個量（標題不同、稱呼含別名）聚成一組、「>1 distinct value」旗標才亮得起來。"""
+    window = text[max(0, pos - 60):pos].lower()
+    best_canon, best_i = None, -1
+    for name_lower, canonical in glossary_terms:
+        i = window.rfind(name_lower)
+        if i > best_i:
+            best_canon, best_i = canonical, i
+    if best_canon is not None:
+        return best_canon
     if lf is not None and isinstance(lf.concept, dict):
         title = lf.concept.get("title")
         if isinstance(title, str) and title.strip():
@@ -160,11 +159,19 @@ def _referent_of(text: str, pos: int, glossary_terms: list[str], lf, sec: str) -
     return sec
 
 
-def _run_numbers(layout, leaves, articles, as_json) -> int:
+def _run_numbers(layout, leaves, articles, as_json, scope_sections=None) -> int:
     """`find --numbers`：森林級聚合 number+unit → 依指涉分組攤出所有值＋出處。只攤不判。"""
     from dspx.engine.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
                                     classify_deliverable, mask_non_prose)
-    glossary_terms = [str(t.get("canonical", "")) for t in load_glossary(layout) if t.get("canonical")]
+    glossary_terms: list[tuple[str, str]] = []          # (name_lower, canonical)；含 canonical＋別名
+    for t in load_glossary(layout):
+        canon = str(t.get("canonical", ""))
+        if not canon:
+            continue
+        glossary_terms.append((canon.lower(), canon))
+        for a in (t.get("aliases") or []):
+            if str(a).strip():
+                glossary_terms.append((str(a).lower(), canon))
     by_section = {lf.section: lf for lf in leaves}
     groups: dict[str, list[dict]] = {}
     for art in articles:
@@ -177,6 +184,8 @@ def _run_numbers(layout, leaves, articles, as_json) -> int:
         for m in _NUM_UNIT_RE.finditer(masked):
             value, unit = m.group(1), m.group(2)
             sec = _prose_section_at(spans, m.start()) or art
+            if scope_sections is not None and sec not in scope_sections:
+                continue   # #12：scope 限定時，別列 scope 外同篇節的數字（與 prose 搜同一過濾）
             ref = _referent_of(text, m.start(), glossary_terms, by_section.get(sec), sec)
             key = f"{ref} · {unit}"
             line = text.count("\n", 0, m.start()) + 1
@@ -233,9 +242,10 @@ def run(argv: list[str]) -> int:
     for lf in leaves:
         if lf.article and lf.article not in articles:
             articles.append(lf.article)
+    scope_sections = {lf.section for lf in leaves} if args.scope else None
 
     if args.numbers:
-        return _run_numbers(layout, leaves, articles, args.as_json)
+        return _run_numbers(layout, leaves, articles, args.as_json, scope_sections)
 
     if not args.query:
         sys.stderr.write("docspec find: give a QUERY (or use --numbers)\n")
@@ -247,7 +257,6 @@ def run(argv: list[str]) -> int:
         sys.stderr.write(f"docspec find: unknown --in face(s) {sorted(unknown)}; "
                          f"valid: {', '.join(_ALL_FACES)}\n")
         return 2
-    scope_sections = {lf.section for lf in leaves} if args.scope else None   # #12：prose 過濾到 scope 內
     hits: list[dict] = []
     try:
         if "prose" in faces:
