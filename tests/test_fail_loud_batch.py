@@ -333,7 +333,7 @@ def test_retire_warns_on_audit_and_roadmap_back_references(make_project, write_l
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     write_leaf(home, "a/keep", concept={"id": "c9", "title": "K", "order": 9})
     (home / "corpus" / "a").mkdir(parents=True, exist_ok=True)   # ★store-only：per-doc 檔夾另建
-    (home / "corpus" / "a" / "audit.yaml").write_text(yaml.safe_dump({"findings": [
+    (home / "corpus" / "a.audit.yaml").write_text(yaml.safe_dump({"findings": [
         {"id": "F1", "face": "logic", "severity": "med", "status": "open",
          "targets": ["a/x"], "finding": "指著待退節"},
     ]}, allow_unicode=True), encoding="utf-8")

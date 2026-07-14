@@ -33,28 +33,33 @@ FOREST_TARGET = "forest"
 _RETIRED_FIELDS = ("status", "done-to")
 
 
-class RoadmapError(Exception):
-    """roadmap 操作失敗（id 不存在等）。"""
+from dspx.engine.model import ModelError
+
+
+class RoadmapError(ModelError):
+    """roadmap 操作失敗（id 不存在等）。ModelError 子類＝既有 fail-loud/CLI 友善錯誤路徑一體。"""
+
+
+def _roadmap_scope(path: Path) -> str:
+    """密封 scope 標籤（自 path.name 推得）：forest 檔＝roadmap.yaml、doc 檔＝<article>.roadmap.yaml。"""
+    n = path.name
+    if n == ROADMAP_FILE:
+        return "forest"
+    suffix = ".roadmap.yaml"
+    return f"doc:{n[:-len(suffix)]}" if n.endswith(suffix) else f"doc:{n}"
 
 
 def _load_entries(path: Path, store: str) -> list[dict]:
-    """讀 {entries:[...]}；缺席→[]。標每筆 `_store`。"""
-    if not path.is_file():
-        return []
-    from dspx.engine.model import ModelError, _load_yaml, keyed_list
-    raw = _load_yaml(path)   # 壞檔（Drive 截斷）→ ModelError 帶路徑，不裸 traceback
-    entries = keyed_list(raw, path, "entries", error=ModelError)  # 誤名頂層 key fail-loud
-    out: list[dict] = []
-    for e in entries:
-        tagged = dict(e)
-        tagged["_store"] = store
-        out.append(tagged)
-    return out
+    """讀密封 roadmap 檔（{entries:[...]}）；缺席→[]。標每筆 `_store`。封條不符 fail-loud 指路 fsck。"""
+    from dspx.engine.sealed import load_sealed
+    _rev, entries = load_sealed(path, list_key="entries", error_cls=RoadmapError)
+    return [{**e, "_store": store} for e in entries]
 
 
 def doc_roadmap_path(layout: Layout, article: str) -> Path:
-    """per-doc roadmap 檔＝該文件 root section dir 下的 roadmap.yaml。"""
-    return layout.section_dir(article) / ROADMAP_FILE
+    """per-doc roadmap 檔＝**sibling 密封檔** `corpus/<article>.roadmap.yaml`（一篇一檔 store 兄弟；
+    形狀命中 hook `_is_store_file`＝自動守手改）。"""
+    return layout.corpus_dir / f"{article}.roadmap.yaml"
 
 
 def forest_roadmap_path(layout: Layout) -> Path:
@@ -70,10 +75,9 @@ def forest_roadmap_archive_path(layout: Layout) -> Path:
     return layout.planning_home / ROADMAP_ARCHIVE_FILE
 
 
-def load_doc_roadmap(article_root_dir: Path, article: str | None = None) -> list[dict]:
-    """讀某文件 root dir 下的 roadmap.yaml；缺席→[]。標 `_store="doc:<article>"`。"""
-    name = article if article is not None else article_root_dir.name
-    return _load_entries(article_root_dir / ROADMAP_FILE, f"doc:{name}")
+def load_doc_roadmap(layout: Layout, article: str) -> list[dict]:
+    """讀 `corpus/<article>.roadmap.yaml`；缺席→[]。標 `_store="doc:<article>"`。"""
+    return _load_entries(doc_roadmap_path(layout, article), f"doc:{article}")
 
 
 def load_forest_roadmap(layout: Layout) -> list[dict]:
@@ -90,7 +94,7 @@ def all_entries(layout: Layout, leaves: list) -> list[dict]:
         if art and art not in seen_articles:
             seen_articles.append(art)
     for art in seen_articles:
-        out.extend(load_doc_roadmap(layout.section_dir(art), art))
+        out.extend(load_doc_roadmap(layout, art))
     return out
 
 
@@ -144,16 +148,15 @@ def now_date() -> str:
 
 
 def _write_entries(path: Path, entries: list[dict]) -> None:
-    """寫回 roadmap.yaml；entries 淨空＝整檔刪除（按需生成慣例：沒待辦就無檔）。"""
-    import yaml
+    """寫回密封 roadmap 檔（`_store` 標籤不落盤，寫入前剝除）；entries 淨空＝整檔刪除。"""
     if not entries:
         if path.is_file():
             path.unlink()
         return
-    path.parent.mkdir(parents=True, exist_ok=True)
-    body = yaml.safe_dump({"entries": entries}, allow_unicode=True, sort_keys=False,
-                          width=10000)
-    path.write_text(body, encoding="utf-8", newline="\n")
+    from dspx.engine.sealed import write_sealed
+    clean = [{k: v for k, v in e.items() if k != "_store"} for e in entries]
+    write_sealed(path, kind="roadmap", scope=_roadmap_scope(path), revision=1,
+                 list_key="entries", items=clean)
 
 
 def _append_archive(path: Path, record: dict) -> None:
@@ -175,23 +178,20 @@ def mark_done(layout: Layout, leaves: list, rid: str, note: str) -> dict:
     """`docspec roadmap done <id> --note "..."`：把 entry 移出 roadmap.yaml、append 一行進
     同層 roadmap-archive.yaml（append-only，{id, title, note, date}）。找遍 forest + 各 doc
     article 的 roadmap.yaml；找不到該 id → RoadmapError。"""
-    from dspx.engine.model import _load_yaml
+    from dspx.engine.sealed import load_sealed
 
-    candidates: list[tuple[Path, Path]] = [
-        (forest_roadmap_path(layout), forest_roadmap_archive_path(layout)),
-    ]
+    candidates: list[Path] = [forest_roadmap_path(layout)]
     seen_articles: list[str] = []
     for leaf in leaves:
         art = leaf.article
         if art and art not in seen_articles:
             seen_articles.append(art)
-            candidates.append((doc_roadmap_path(layout, art), doc_roadmap_archive_path(layout, art)))
+            candidates.append(doc_roadmap_path(layout, art))
 
-    for roadmap_path, archive_path in candidates:
+    for roadmap_path in candidates:
         if not roadmap_path.is_file():
             continue
-        raw = _load_yaml(roadmap_path) or {}
-        entries = list(raw.get("entries") or [])
+        _rev, entries = load_sealed(roadmap_path, list_key="entries", error_cls=RoadmapError)
         match: dict | None = None
         remaining: list[dict] = []
         for e in entries:
@@ -204,7 +204,51 @@ def mark_done(layout: Layout, leaves: list, rid: str, note: str) -> dict:
         _write_entries(roadmap_path, remaining)
         record = {"id": match.get("id"), "title": match.get("title"), "note": note,
                   "date": now_date()}
-        _append_archive(archive_path, record)
+        # 完工紀錄一律進單一 forest archive（純 append、不封條；roadmap-archive 收斂）。
+        _append_archive(forest_roadmap_archive_path(layout), record)
         return record
 
     raise RoadmapError(f"no roadmap entry \"{rid}\" found (searched forest + per-doc stores)")
+
+
+def next_roadmap_id(layout: Layout, leaves: list) -> str:
+    """全庫下一個 `R<n>` id（掃 forest + 各 doc，避免撞號）。"""
+    nums: list[int] = []
+    for e in all_entries(layout, leaves):
+        rid = str(e.get("id", ""))
+        if rid.startswith("R") and rid[1:].isdigit():
+            nums.append(int(rid[1:]))
+    return f"R{(max(nums) + 1) if nums else 1}"
+
+
+def add_entry(layout: Layout, leaves: list, *, kind: str, title: str, target: str,
+              what: str = "", priority: str = "") -> dict:
+    """`docspec roadmap add`＝roadmap 的唯一引擎寫入門（甲案；取代 agent 手編 roadmap.yaml）。
+    驗欄位 → 路由（target=forest→forest 檔、target=section→該篇 doc 檔）→ 生 id → append + 密封 save。"""
+    if kind not in KINDS:
+        raise RoadmapError(f"kind \"{kind}\" not in {KINDS}")
+    if not title.strip():
+        raise RoadmapError("title must be non-empty")
+    if not target.strip():
+        raise RoadmapError("target must be non-empty (a section path/id, or 'forest')")
+    if target == FOREST_TARGET:
+        path = forest_roadmap_path(layout)
+    else:
+        from dspx.reports.audit import article_of_target
+        art = article_of_target(target, leaves)
+        if art is None:
+            raise RoadmapError(
+                f"target \"{target}\" does not resolve to any section "
+                "(use a full section path/id, or 'forest' for a cross-document item)")
+        path = doc_roadmap_path(layout, art)
+    entry: dict = {"id": next_roadmap_id(layout, leaves), "kind": kind,
+                   "title": title.strip(), "target": target}
+    if what.strip():
+        entry["what"] = what.strip()
+    if priority.strip():
+        entry["priority"] = priority.strip()
+    from dspx.engine.sealed import load_sealed
+    _rev, existing = load_sealed(path, list_key="entries", error_cls=RoadmapError)
+    existing.append(entry)
+    _write_entries(path, existing)
+    return entry

@@ -109,6 +109,16 @@ def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec roadmap", description=HELP)
     sub = parser.add_subparsers(dest="op")
 
+    p_add = sub.add_parser(
+        "add", help="record a backlog entry (engine write gate; validated + sealed)")
+    p_add.add_argument("--kind", required=True, choices=list(roadmap.KINDS),
+                       help="gap = a hole you can't fill now; task = planned work")
+    p_add.add_argument("--title", required=True, help="one-line title")
+    p_add.add_argument("--target", required=True,
+                       help="the section path/id this belongs to, or 'forest' for a cross-document item")
+    p_add.add_argument("--what", default="", help="optional detail of the work")
+    p_add.add_argument("--priority", default="", help="optional priority tag")
+
     p_done = sub.add_parser(
         "done", help="🟢 small direct work, no change needed: move the entry into roadmap-archive.yaml")
     p_done.add_argument("id")
@@ -122,6 +132,16 @@ def run(argv: list[str]) -> int:
         leaves = load_model(layout)
     except BootstrapError as exc:
         return exc.exit_code
+
+    if args.op == "add":
+        try:
+            entry = roadmap.add_entry(layout, leaves, kind=args.kind, title=args.title,
+                                      target=args.target, what=args.what, priority=args.priority)
+        except roadmap.RoadmapError as exc:
+            sys.stderr.write(f"docspec: {exc}\n")
+            return 1
+        print(f"roadmap add: {entry['id']} ({entry['kind']}) \"{entry['title']}\" -> target {entry['target']}")
+        return 0
 
     if args.op == "done":
         try:

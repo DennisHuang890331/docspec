@@ -223,8 +223,8 @@ def _run_validator(cmd: str, path) -> None:
 
 def _prune_promoted_roadmap(layout, change) -> str | None:
     """收案時 prune 指向本 change 的 roadmap promoted-to entry（案卷即完工紀錄）。"""
-    import yaml
     from dspx.reports import roadmap as rm
+    from dspx.engine.sealed import load_sealed
     candidates = [rm.forest_roadmap_path(layout)]
     if layout.corpus_dir.is_dir():
         for art in layout.articles():
@@ -232,21 +232,13 @@ def _prune_promoted_roadmap(layout, change) -> str | None:
     for path in candidates:
         if not path.is_file():
             continue
-        try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except yaml.YAMLError:
-            continue
-        entries = data.get("entries") if isinstance(data, dict) else None
-        if not isinstance(entries, list):
-            continue
+        _rev, entries = load_sealed(path, list_key="entries", error_cls=rm.RoadmapError)
         keep = [e for e in entries
                 if not (isinstance(e, dict) and str(e.get("promoted-to")) == change.id)]
         if len(keep) != len(entries):
             pruned_id = next((str(e.get("id")) for e in entries
                               if isinstance(e, dict) and str(e.get("promoted-to")) == change.id), None)
-            data["entries"] = keep
-            path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
-                            encoding="utf-8", newline="\n")
+            rm._write_entries(path, keep)   # ★store-native：經封條 save，不裸寫
             return pruned_id
     return None
 

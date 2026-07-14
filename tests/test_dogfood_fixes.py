@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dspx.engine.layout import Layout
+
 from dspx.commands.governance import audit as audit_cmd
 from dspx.commands.deliverable import publish as publish_cmd
 from dspx.commands.deliverable import render as render_cmd
@@ -32,7 +34,7 @@ def test_audit_ids_are_global(make_project, write_leaf, monkeypatch):
     audit_cmd.run(["raise", "--target", "a/y", "--face", "clarity", "--sev", "low", "--finding", "p2"])
     from dspx.reports.audit import load_doc_audit
     # 同文件 a → 都進 corpus/a/audit.yaml，全域 id 序列 F1/F2
-    doc = load_doc_audit(home / "corpus" / "a", "a")
+    doc = load_doc_audit(Layout(home), "a")
     ids = {f["id"] for f in doc.findings}
     assert ids == {"F1", "F2"}               # 全域唯一，不再都是 F1
     # resolve / show 免指定 store（用 id 反查）

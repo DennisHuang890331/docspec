@@ -24,7 +24,7 @@ def _write_roadmap(path: Path, entries: list[dict]) -> None:
 
 
 def _doc_root(home: Path, article: str) -> Path:
-    return home / "corpus" / article / "roadmap.yaml"
+    return home / "corpus" / f"{article}.roadmap.yaml"
 
 
 def _forest(home: Path) -> Path:
@@ -167,7 +167,7 @@ def test_done_subcommand_removes_entry_and_writes_archive(make_project, write_le
     ids_after = {e["id"] for items in _view(home)["groups"].values() for e in items}
     assert "r-open" not in ids_after
 
-    archive = yaml.safe_load((home / "corpus" / "art1" / "roadmap-archive.yaml")
+    archive = yaml.safe_load((home / "roadmap-archive.yaml")
                              .read_text(encoding="utf-8"))
     assert archive["entries"][0]["id"] == "r-open"
     assert archive["entries"][0]["note"] == "已直接處理完"

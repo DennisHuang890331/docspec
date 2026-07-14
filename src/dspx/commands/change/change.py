@@ -159,8 +159,8 @@ def _promote_roadmap(layout, entry_id: str, change: "chg.Change") -> str | None:
     """晉升搬家：把 roadmap entry 的 what 搬進 change.notes、原 entry 收攏成 promoted-to。
     回傳搬進 notes 的一段文字（None＝找不到 entry）。"""
     from dspx.reports import roadmap as rm
-    import yaml
-    # 找 entry 所在檔（forest + per-doc）
+    from dspx.engine.sealed import load_sealed
+    # 找 entry 所在檔（forest + per-doc）；★store-native：讀寫皆走密封 API，不裸寫。
     candidates = [rm.forest_roadmap_path(layout)]
     if layout.corpus_dir.is_dir():
         for art in layout.articles():
@@ -168,22 +168,14 @@ def _promote_roadmap(layout, entry_id: str, change: "chg.Change") -> str | None:
     for path in candidates:
         if not path.is_file():
             continue
-        try:
-            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        except yaml.YAMLError:
-            continue
-        entries = data.get("entries") if isinstance(data, dict) else None
-        if not isinstance(entries, list):
-            continue
-        for e in entries:
+        _rev, entries = load_sealed(path, list_key="entries", error_cls=rm.RoadmapError)
+        for i, e in enumerate(entries):
             if isinstance(e, dict) and str(e.get("id")) == entry_id:
                 what = str(e.get("what") or e.get("title") or "")
                 # 收攏：只留 id/title/promoted-to（搬家不複製）
-                collapsed = {"id": e.get("id"), "title": e.get("title"),
-                             "promoted-to": change.id}
-                entries[entries.index(e)] = collapsed
-                path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False),
-                                encoding="utf-8", newline="\n")
+                entries[i] = {"id": e.get("id"), "title": e.get("title"),
+                              "promoted-to": change.id}
+                rm._write_entries(path, entries)
                 return f"## promoted from roadmap {entry_id}\n\n{what}\n"
     return None
 

@@ -193,5 +193,5 @@ def test_develop_teaches_reopen_and_fractional_order():
     assert "Reversal is normal" in body
     assert "--reopen" in body
     assert "central workbench" in body
-    assert "roadmap" in body and "doing" in body
+    assert "roadmap" in body and "task" in body
     assert "order: 2.5" in body                        # fractional order（task 1.3）

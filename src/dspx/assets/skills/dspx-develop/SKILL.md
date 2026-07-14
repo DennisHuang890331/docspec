@@ -22,7 +22,7 @@ Build and refine the outline — structure and briefs only; the words come later
 
 2. **Interrogate → WAIT** — ask who reads this and when, how deep (gate or teach), the one takeaway, and what is explicitly OUT of scope. Get answers before descending; never assume audience or scope — the cheapest fixes now, the most expensive after prose exists. (Running end-to-end without pausing is a TEST-ONLY mode.)
 
-3. **Name the axis, grow a MECE skeleton** — say the ORGANIZING AXIS out loud and let the human correct it (often NOT topic: contradiction-tracking, a timeline, claim→evidence, a mandated clause order). Frame the whole with an orienting OVERVIEW (root or leading scope section) that states what the document defines, its boundary, and its audience, anchored on the subject's core framing idea — NOT a prose table of contents. Walk the tree once per reader perspective (operator / auditor / newcomer / integrator) for coverage; a real gap you can't fill now becomes a roadmap `gap` entry.
+3. **Name the axis, grow a MECE skeleton** — say the ORGANIZING AXIS out loud and let the human correct it (often NOT topic: contradiction-tracking, a timeline, claim→evidence, a mandated clause order). Frame the whole with an orienting OVERVIEW (root or leading scope section) that states what the document defines, its boundary, and its audience, anchored on the subject's core framing idea — NOT a prose table of contents. Walk the tree once per reader perspective (operator / auditor / newcomer / integrator) for coverage; a real gap you can't fill now becomes a roadmap `gap` entry via `docspec roadmap add --kind gap --title "…" --target <section>`.
 
 4. **Name section folders in the deliverable language** — `docspec new <article>/<chapter name>` (a Chinese document gets `適用範圍/`, not an English slug). NEVER prefix a chapter number — ordering's single source is the `order` field and render derives the outline number (`concept.title` carries the bare name). To INSERT between `order: 2` and `3`, give `order: 2.5` (order is a number) — no sibling is renumbered. Renames/moves go through `docspec mv` (atomic); migrate a slug tree with `docspec store tidy`.
 
@@ -30,7 +30,7 @@ Build and refine the outline — structure and briefs only; the words come later
 
 6. **Open a change when the work touches a normative ruling or spans sections** — `docspec change new <id> --seed <dec-id> --publish advisory|release-bound`, AT THAT MOMENT (mid-develop, not an upfront ceremony); the enlistment line is "touches a ruling?", not section count. Edits then land in `changes/<id>/staging/`; `docspec change status <id>` DERIVES per-target acceptance (never hand-check a task); the human's one gate is `docspec change archive <id>`. Cross-section reasoning lives in the change's `notes.md`, never in the blind-render aperture.
 
-**Reversal is normal** — re-open a settled section with `docspec new <section> --reopen` (rebuilds `develop.md` from its `concept.yaml`; reason lands in `develop.md` as you think, not after). A cross-section restructure reopens the ROOT's `develop.md` as the single central workbench; register it as a roadmap `doing` entry.
+**Reversal is normal** — re-open a settled section with `docspec new <section> --reopen` (rebuilds `develop.md` from its `concept.yaml`; reason lands in `develop.md` as you think, not after). A cross-section restructure reopens the ROOT's `develop.md` as the single central workbench; register it via `docspec roadmap add --kind task --title "…" --target <root-section>` (roadmap is engine-written now; never hand-edit the roadmap store).
 
 **Pause if:**
 - Audience or scope is unstated → ask and wait; don't assume.
@@ -44,7 +44,7 @@ Build and refine the outline — structure and briefs only; the words come later
 Axis: <the organizing axis>
 Skeleton (MECE; overlap/gap test): <tree + result>
 Crystallized this session: <sections> → docspec ready
-Backlog touched: <roadmap gap/doing entries>
+Backlog touched: <roadmap gap/task entries (via docspec roadmap add)>
 Open questions for you: <the framing calls still owed>
 ```
 

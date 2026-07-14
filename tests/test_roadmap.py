@@ -42,7 +42,7 @@ def _write_roadmap(path: Path, entries: list[dict]) -> None:
 def _doc_root(home: Path, article: str) -> Path:
     """per-doc roadmap 路徑＝corpus/<article>/roadmap.yaml。★store-only：corpus/<article>/ 夾不再由
     write_leaf 順帶建出——先建夾（引擎 save() 亦自建）。"""
-    p = home / "corpus" / article / "roadmap.yaml"
+    p = home / "corpus" / f"{article}.roadmap.yaml"
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -85,7 +85,7 @@ def test_load_absent_returns_empty(make_project):
     home = make_project()
     layout = Layout(home)
     assert load_forest_roadmap(layout) == []
-    assert load_doc_roadmap(home / "corpus" / "a", "a") == []
+    assert load_doc_roadmap(Layout(home), "a") == []
 
 
 def test_validate_bad_enum():
@@ -235,7 +235,7 @@ def test_from_audit_dead_ref_fails(make_project, write_leaf):
     leaf_dir = write_leaf(home, "art", concept=_root_concept("c-art", "Art"))
     # 寫一個 audit.yaml 含 finding F1
     leaf_dir.mkdir(parents=True, exist_ok=True)   # ★store-only：corpus/art/ 夾另建放 audit
-    (leaf_dir / "audit.yaml").write_text(
+    (leaf_dir.parent / f"{leaf_dir.name}.audit.yaml").write_text(
         yaml.safe_dump({"findings": [
             {"id": "F1", "face": "logic", "severity": "med", "status": "open",
              "finding": "x", "targets": ["art"]},
@@ -255,7 +255,7 @@ def test_from_audit_live_ref_passes(make_project, write_leaf):
                           decisions=[{"id": "d1", "kind": "normative",
                                       "status": "accepted", "statement": "s"}])
     leaf_dir.mkdir(parents=True, exist_ok=True)   # ★store-only：corpus/art/ 夾另建放 audit
-    (leaf_dir / "audit.yaml").write_text(
+    (leaf_dir.parent / f"{leaf_dir.name}.audit.yaml").write_text(
         yaml.safe_dump({"findings": [
             {"id": "F1", "face": "logic", "severity": "med", "status": "open",
              "finding": "x", "targets": ["art"]},
@@ -345,10 +345,10 @@ def test_mark_done_moves_doc_entry_to_archive(make_project, write_leaf):
     record = mark_done(layout, leaves, "r1", "風格殘留已潤除")
     assert record["id"] == "r1" and record["note"] == "風格殘留已潤除" and record["date"]
 
-    remaining = load_doc_roadmap(home / "corpus" / "art", "art")
+    remaining = load_doc_roadmap(Layout(home), "art")
     assert {e["id"] for e in remaining} == {"r2"}          # r1 掉出、r2 還在
 
-    archive = yaml.safe_load(_doc_archive(home, "art").read_text(encoding="utf-8"))
+    archive = yaml.safe_load(_forest_archive(home).read_text(encoding="utf-8"))
     assert archive["entries"][0]["id"] == "r1"
     assert archive["entries"][0]["title"] == "潤除殘留"
 
@@ -363,7 +363,7 @@ def test_mark_done_deletes_file_when_last_entry_removed(make_project, write_leaf
     leaves = load_project(layout)
     mark_done(layout, leaves, "r1", "done")
     assert not _doc_root(home, "art").is_file()   # 沒待辦了 → 整檔刪除（按需生成慣例）
-    assert _doc_archive(home, "art").is_file()
+    assert _forest_archive(home).is_file()
 
 
 def test_mark_done_finds_forest_entry(make_project, write_leaf):

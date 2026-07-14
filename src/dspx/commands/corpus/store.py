@@ -29,6 +29,8 @@ HELP = "one-file-per-article store maintenance: dump / load / fsck / migrate (pa
 # migrate/dump 認得的每節檔（其餘檔一律 fail-loud，永不靜默刪資料）。
 _FOLD_FILES = ("concept.yaml", "decisions.yaml", "material.md", "history.yaml", "group.yaml")
 _MOVE_TO_WORK = ("develop.md", "history.md")
+# doc-root 治理檔（散檔世界的 audit/roadmap）：migrate 收編成 sibling 密封檔、非拒絕。
+_GOVERNANCE_FILES = ("audit.yaml", "roadmap.yaml", "roadmap-archive.yaml")
 
 
 # ── article leaf-set 建構（migrate 平價閘用）────────────────────────────
@@ -111,7 +113,7 @@ def _guard_scatter_files(layout: Layout, article: str) -> list[str]:
     unexpected: list[str] = []
     if not art_dir.is_dir():
         return unexpected
-    allowed = set(_FOLD_FILES) | set(_MOVE_TO_WORK)
+    allowed = set(_FOLD_FILES) | set(_MOVE_TO_WORK) | set(_GOVERNANCE_FILES)
     for p in sorted(art_dir.rglob("*")):
         if layout.is_archived_path(p):
             continue
@@ -159,6 +161,7 @@ def _migrate_one(layout: Layout, article: str, schema) -> int:
     # 平價閘過關 → 寫 store 檔、搬 develop/history 散文出 store、刪散檔樹。
     st.save_article(layout, article_obj, schema)
     moved = _relocate_workfiles(layout, article)
+    folded_gov = _fold_governance(layout, article)
     _delete_scatter_tree(layout, article)
     print(f"store migrate: {article} -> corpus/{article}.yaml "
           f"({len(article_obj.leaf_records())} leaves, {len(article_obj.group_records())} groups; "
@@ -183,6 +186,35 @@ def _relocate_workfiles(layout: Layout, article: str) -> int:
             shutil.move(str(p), str(dst))
             moved += 1
     return moved
+
+
+def _fold_governance(layout: Layout, article: str) -> int:
+    """migrate 收編：散檔 `<article>/{audit,roadmap}.yaml` → sibling 密封檔；
+    `roadmap-archive.yaml` → 單一 forest archive。回傳收編的檔數。"""
+    from dspx.engine.sealed import load_sealed
+    from dspx.reports.audit import AuditError, AuditStore, doc_audit_path
+    from dspx.reports.roadmap import (RoadmapError, _append_archive, _write_entries,
+                                      doc_roadmap_path, forest_roadmap_archive_path)
+    art_dir = layout.section_dir(article)
+    folded = 0
+    old_audit = art_dir / "audit.yaml"
+    if old_audit.is_file():
+        _rev, findings = load_sealed(old_audit, list_key="findings", error_cls=AuditError)
+        AuditStore(path=doc_audit_path(layout, article), findings=findings,
+                   store=f"doc:{article}").save()
+        folded += 1
+    old_roadmap = art_dir / "roadmap.yaml"
+    if old_roadmap.is_file():
+        _rev, entries = load_sealed(old_roadmap, list_key="entries", error_cls=RoadmapError)
+        _write_entries(doc_roadmap_path(layout, article), entries)
+        folded += 1
+    old_archive = art_dir / "roadmap-archive.yaml"
+    if old_archive.is_file():
+        _rev, arch = load_sealed(old_archive, list_key="entries", error_cls=RoadmapError)
+        for rec in arch:
+            _append_archive(forest_roadmap_archive_path(layout), rec)
+        folded += 1
+    return folded
 
 
 def _delete_scatter_tree(layout: Layout, article: str) -> None:

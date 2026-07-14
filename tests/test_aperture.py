@@ -218,7 +218,7 @@ def _roadmap_fixture(home, write_leaf):
         {"id": "f1", "kind": "task", "title": "森林工作",
          "what": "w", "target": "forest"},
     ])
-    _write_roadmap(home / "corpus" / "art" / "roadmap.yaml", [
+    _write_roadmap(home / "corpus" / "art.roadmap.yaml", [
         {"id": "r-open", "kind": "task", "title": "可開工",
          "what": "w", "target": "art"},
         {"id": "r-blocked", "kind": "task", "title": "受阻",

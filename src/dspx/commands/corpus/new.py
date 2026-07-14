@@ -47,10 +47,16 @@ def _segment_error(segment: str) -> str | None:
 
 def validate_section_path(section: str) -> str | None:
     """逐段驗證 section 路徑；回傳第一個壞段的錯誤訊息（指明段與原因），全部合法 → None。"""
-    for segment in section.split("/"):
+    segments = section.split("/")
+    for i, segment in enumerate(segments):
         reason = _segment_error(segment)
         if reason:
             return f'invalid path segment "{segment}": {reason}'
+        # 文章名（首段）不得含 `.`——會撞治理 sibling 檔命名慣例（`<article>.audit.yaml` /
+        # `<article>.roadmap.yaml`），使該文章的 audit/roadmap 無法路由。
+        if i == 0 and "." in segment:
+            return (f'article name "{segment}" must not contain "." — it collides with the '
+                    "governance sibling-file convention (<article>.audit.yaml / .roadmap.yaml)")
     return None
 
 

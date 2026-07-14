@@ -63,7 +63,7 @@ def _root(home, write_leaf):
 def test_vr1_too_many_entries_warns(make_project, write_leaf):
     home = make_project()
     _root(home, write_leaf)
-    _write_roadmap(home / "corpus" / "art" / "roadmap.yaml", [
+    _write_roadmap(home / "corpus" / "art.roadmap.yaml", [
         {"id": f"r{i}", "kind": "task", "title": "t",
          "what": "w", "target": "art"} for i in range(8)   # 8 > 7
     ])
@@ -79,7 +79,7 @@ def test_vr2_promoted_entry_still_substantial_warns(make_project, write_leaf):
     """含 promoted-to 卻仍帶實質內容（如 what/target）→ 搬家沒搬乾淨。"""
     home = make_project()
     _root(home, write_leaf)
-    _write_roadmap(home / "corpus" / "art" / "roadmap.yaml", [
+    _write_roadmap(home / "corpus" / "art.roadmap.yaml", [
         {"id": "r1", "kind": "task", "title": "t", "what": "w", "target": "art",
          "promoted-to": "chg-x"}])
     layout = Layout(home)
@@ -91,7 +91,7 @@ def test_vr2_clean_collapsed_promoted_entry_no_warn(make_project, write_leaf):
     """乾淨收攏（只剩 id/title/promoted-to）→ 不誤報。"""
     home = make_project()
     _root(home, write_leaf)
-    _write_roadmap(home / "corpus" / "art" / "roadmap.yaml", [
+    _write_roadmap(home / "corpus" / "art.roadmap.yaml", [
         {"id": "r1", "title": "t", "promoted-to": "chg-x"}])
     layout = Layout(home)
     findings = run_lint(layout, load_project(layout), load_schema())
@@ -106,7 +106,7 @@ def test_vr3_roadmap_audit_mirror_warns(make_project, write_leaf, monkeypatch):
     monkeypatch.chdir(home.parent)
     assert audit_cmd.run(["raise", "--target", "art", "--face", "logic",
                           "--sev", "med", "--finding", "散文問題"]) == 0
-    _write_roadmap(home / "corpus" / "art" / "roadmap.yaml", [
+    _write_roadmap(home / "corpus" / "art.roadmap.yaml", [
         {"id": "r1", "kind": "task", "title": "t", "what": "修 (audit F1)", "target": "art"}])
     layout = Layout(home)
     findings = run_lint(layout, load_project(layout), load_schema())
@@ -121,7 +121,7 @@ def test_vr3_no_mirror_when_finding_closed(make_project, write_leaf, monkeypatch
     assert audit_cmd.run(["raise", "--target", "art", "--face", "logic",
                           "--sev", "med", "--finding", "散文問題"]) == 0
     assert audit_cmd.run(["resolve", "F1", "--status", "fixed"]) == 0
-    _write_roadmap(home / "corpus" / "art" / "roadmap.yaml", [
+    _write_roadmap(home / "corpus" / "art.roadmap.yaml", [
         {"id": "r1", "kind": "task", "title": "t", "what": "修 (audit F1)", "target": "art"}])
     layout = Layout(home)
     findings = run_lint(layout, load_project(layout), load_schema())

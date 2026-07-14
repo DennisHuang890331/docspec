@@ -48,31 +48,26 @@ def _yaml_position(exc: yaml.YAMLError) -> str:
 
 @dataclass
 class AuditStore:
-    """一個 audit.yaml（findings 清單）；可為某 doc-root 或 forest。"""
+    """一個 audit sibling 密封檔（findings 清單）；可為某 doc-root 或 forest。
+
+    ★store-native：比照 article store 套封條紀律（engine-owned＋integrity 封條＋canonical＋
+    原子寫＋hook 守門），走 `engine/sealed.py` 通用 helper。scope＝`store`（"doc:<a>" | "forest"）。"""
 
     path: Path
     findings: list[dict] = field(default_factory=list)
-    store: str = ""        # "doc:<article>" | "forest"（aggregate 時標記來源）
+    store: str = ""        # "doc:<article>" | "forest"（aggregate 時標記來源＝封條 scope）
+    revision: int = 1
 
     @classmethod
     def load(cls, path: Path, store: str = "") -> "AuditStore":
-        if not path.is_file():
-            return cls(path=path, findings=[], store=store)
-        from dspx.engine.model import keyed_list
-        try:
-            raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-        except yaml.YAMLError as exc:
-            # 壞檔（Drive 衝突截斷）→ domain error 帶路徑，比照 model._load_yaml；不裸 traceback。
-            raise AuditError(f"YAML parse failed: {path}{_yaml_position(exc)}") from exc
-        items = keyed_list(raw, path, "findings", error=AuditError)  # 誤名頂層 key fail-loud
-        return cls(path=path, findings=items, store=store)
+        from dspx.engine.sealed import load_sealed
+        revision, items = load_sealed(path, list_key="findings", error_cls=AuditError)
+        return cls(path=path, findings=items, store=store, revision=revision)
 
     def save(self) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        body = yaml.safe_dump({"findings": self.findings}, allow_unicode=True,
-                              sort_keys=False, width=10000)
-        header = "# audit findings (maintained by the docspec audit command; do not edit by hand). append-only adversarial log.\n"
-        self.path.write_text(header + body, encoding="utf-8", newline="\n")
+        from dspx.engine.sealed import write_sealed
+        write_sealed(self.path, kind="audit", scope=self.store or FOREST_STORE,
+                     revision=self.revision, list_key="findings", items=self.findings)
 
     def by_id(self, fid: str) -> dict | None:
         for f in self.findings:
@@ -92,18 +87,18 @@ class AuditStore:
 # ── 儲存路徑與 load helpers（比照 roadmap.py）─────────────────────────
 
 def doc_audit_path(layout: Layout, article: str) -> Path:
-    """per-doc audit 檔＝該文件 root section dir 下的 audit.yaml。"""
-    return layout.section_dir(article) / AUDIT_FILE
+    """per-doc audit 檔＝**sibling 密封檔** `corpus/<article>.audit.yaml`（一篇一檔 store 的兄弟；
+    形狀命中 hook `_is_store_file`＝自動守手改）。"""
+    return layout.corpus_dir / f"{article}.audit.yaml"
 
 
 def forest_audit_path(layout: Layout) -> Path:
     return layout.planning_home / AUDIT_FILE
 
 
-def load_doc_audit(article_root_dir: Path, article: str | None = None) -> AuditStore:
-    """讀某文件 root dir 下的 audit.yaml；缺席→空 store。標 store="doc:<article>"。"""
-    name = article if article is not None else article_root_dir.name
-    return AuditStore.load(article_root_dir / AUDIT_FILE, store=f"doc:{name}")
+def load_doc_audit(layout: Layout, article: str) -> AuditStore:
+    """讀 `corpus/<article>.audit.yaml`；缺席→空 store。標 store="doc:<article>"。"""
+    return AuditStore.load(doc_audit_path(layout, article), store=f"doc:{article}")
 
 
 def load_forest_audit(layout: Layout) -> AuditStore:
@@ -125,7 +120,7 @@ def all_findings(layout: Layout, leaves: list) -> list[dict]:
         if art and art not in seen_articles:
             seen_articles.append(art)
     for art in seen_articles:
-        store = load_doc_audit(layout.section_dir(art), art)
+        store = load_doc_audit(layout, art)
         for f in store.findings:
             out.append({**f, "_store": f"doc:{art}"})
     return out
@@ -162,7 +157,7 @@ def route_store(layout: Layout, leaves: list, targets: list) -> AuditStore:
     if not arts:
         raise AuditError("targets do not resolve to any real section (use a full section path or concept id)")
     if len(arts) == 1:
-        return load_doc_audit(layout.section_dir(arts[0]), arts[0])
+        return load_doc_audit(layout, arts[0])
     return load_forest_audit(layout)
 
 
@@ -233,7 +228,7 @@ def find_store(layout: Layout, leaves: list, fid: str) -> AuditStore | None:
         if not art or art in seen:
             continue
         seen.append(art)
-        store = load_doc_audit(layout.section_dir(art), art)
+        store = load_doc_audit(layout, art)
         if store.by_id(fid):
             return store
     return None

@@ -423,6 +423,8 @@ def store_articles(layout: Layout) -> list[str]:
     for p in sorted(layout.corpus_dir.glob("*.yaml")):
         if not (p.is_file() and not p.name.startswith("_")):
             continue
+        if p.name.endswith((".audit.yaml", ".roadmap.yaml")):
+            continue   # sibling 治理密封檔不是文章 store
         if _CONFLICT_STORE_RE.match(p.stem) or ".tmp.drive" in p.name.lower():
             continue   # Drive 同步垃圾：引擎隱形（衛生 check 會 WARN）
         out.append(p.stem)

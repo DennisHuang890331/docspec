@@ -77,7 +77,7 @@ def _warn_back_references(layout, section: str, sub_ids: set[str]) -> None:
     hits: list[str] = []
     articles = layout.articles()
     audit_stores = [load_forest_audit(layout)] + [
-        load_doc_audit(layout.section_dir(a), a) for a in articles]
+        load_doc_audit(layout, a) for a in articles]
     for store in audit_stores:
         for f in store.findings:
             fid = f.get("id")
@@ -88,7 +88,7 @@ def _warn_back_references(layout, section: str, sub_ids: set[str]) -> None:
                 hits.append(f"audit finding {fid} ({store.store or store.path.name}) -> \"{ref}\"")
     entries = list(load_forest_roadmap(layout))
     for a in articles:
-        entries.extend(load_doc_roadmap(layout.section_dir(a), a))
+        entries.extend(load_doc_roadmap(layout, a))
     for e in entries:
         if _refers(e.get("target")):
             hits.append(f"roadmap entry {e.get('id')} ({e.get('_store')}) -> \"{e.get('target')}\"")

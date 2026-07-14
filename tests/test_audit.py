@@ -15,7 +15,7 @@ from dspx.engine.schema import load_schema
 def _doc_audit(home, article):
     """per-doc audit 路徑＝corpus/<article>/audit.yaml。★store-only：store 是 corpus/<article>.yaml
     檔，corpus/<article>/ 夾不再由 write_leaf 順帶建出——測試直寫前先建夾（引擎 save() 亦自建）。"""
-    p = home / "corpus" / article / "audit.yaml"
+    p = home / "corpus" / f"{article}.audit.yaml"
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 
@@ -61,7 +61,7 @@ def test_single_doc_finding_lands_in_doc_root(make_project, write_leaf, monkeypa
     assert audit_cmd.run(["raise", "--target", "a/x", "--face", "logic",
                           "--sev", "high", "--finding", "推理跳步",
                           "--suggest", "補步驟"]) == 0
-    doc = load_doc_audit(home / "corpus" / "a", "a")
+    doc = load_doc_audit(Layout(home), "a")
     assert len(doc.findings) == 1
     f = doc.findings[0]
     assert f["id"] == "F1" and f["status"] == "open" and f["targets"] == ["a/x"]
@@ -109,7 +109,7 @@ def test_raise_with_verdict_stores_and_shows(make_project, write_leaf, monkeypat
     assert audit_cmd.run(["raise", "--target", "a/x", "--face", "consistency",
                           "--sev", "high", "--finding", "來源反對此說",
                           "--verdict", "contradicted"]) == 0
-    f = load_doc_audit(home / "corpus" / "a", "a").findings[0]
+    f = load_doc_audit(Layout(home), "a").findings[0]
     assert f["verdict"] == "contradicted"
     capsys.readouterr()  # 清掉 raise 的輸出
     assert audit_cmd.run(["show", "F1"]) == 0
@@ -141,7 +141,7 @@ def test_finding_without_verdict_is_valid(make_project, write_leaf, monkeypatch)
     monkeypatch.chdir(home.parent)
     assert audit_cmd.run(["raise", "--target", "a/x", "--face", "logic",
                           "--sev", "low", "--finding", "x"]) == 0
-    f = load_doc_audit(home / "corpus" / "a", "a").findings[0]
+    f = load_doc_audit(Layout(home), "a").findings[0]
     assert "verdict" not in f
     assert _check(home).ok
 
@@ -157,7 +157,7 @@ def test_raise_then_resolve_appends_log(make_project, write_leaf, monkeypatch):
     # resolve 不需指定 store；引擎用 id 反查
     assert audit_cmd.run(["resolve", "F1", "--status", "fixed",
                           "--actor", "author", "--note", "已補步驟"]) == 0
-    doc = load_doc_audit(home / "corpus" / "a", "a")
+    doc = load_doc_audit(Layout(home), "a")
     f = doc.findings[0]
     assert f["status"] == "fixed"
     assert len(f["log"]) == 2 and f["log"][1]["status"] == "fixed"
@@ -204,9 +204,9 @@ def test_global_unique_id_across_stores(make_project, write_leaf, monkeypatch):
                    "--sev", "low", "--finding", "p2"])       # F2 → forest
     audit_cmd.run(["raise", "--target", "b", "--face", "clarity", "--sev", "low",
                    "--finding", "p3"])                       # F3 → doc:b
-    assert load_doc_audit(home / "corpus" / "a", "a").findings[0]["id"] == "F1"
+    assert load_doc_audit(Layout(home), "a").findings[0]["id"] == "F1"
     assert load_forest_audit(Layout(home)).findings[0]["id"] == "F2"
-    assert load_doc_audit(home / "corpus" / "b", "b").findings[0]["id"] == "F3"
+    assert load_doc_audit(Layout(home), "b").findings[0]["id"] == "F3"
 
 
 def test_aggregate_list(make_project, write_leaf, monkeypatch):
@@ -461,7 +461,7 @@ def test_check_accepts_promoted_to_roadmap_id(make_project, write_leaf):
     home = make_project()
     write_leaf(home, "a", concept=_root("ca", "A"))
     (home / "corpus" / "a").mkdir(parents=True, exist_ok=True)
-    (home / "corpus" / "a" / "roadmap.yaml").write_text(
+    (home / "corpus" / "a.roadmap.yaml").write_text(
         yaml.safe_dump({"entries": [{"id": "r1", "kind": "task", "title": "t",
                                      "what": "w", "target": "a"}]},
                        allow_unicode=True), encoding="utf-8")

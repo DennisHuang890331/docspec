@@ -697,7 +697,7 @@ def _lint_roadmap(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
         if leaf.article and leaf.article not in seen_articles:
             seen_articles.append(leaf.article)
     for art in seen_articles:
-        entries = roadmap_mod.load_doc_roadmap(layout.section_dir(art), art)
+        entries = roadmap_mod.load_doc_roadmap(layout, art)
         if len(entries) > _ROADMAP_OPEN_MAX:
             findings.append(Finding("Vr1", WARN, f"corpus/{art}/roadmap.yaml",
                 f"{len(entries)} entries (>{_ROADMAP_OPEN_MAX}) -- don't let the backlog become a "

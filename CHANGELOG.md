@@ -10,6 +10,16 @@ a minor bump.
 
 ## [Unreleased]
 
+### Changed — audit & roadmap become engine-owned, integrity-sealed sibling stores (governance-store-native)
+
+Audit findings and the roadmap backlog now live under the SAME discipline as the article store — an engine-owned single file per document, protected by an integrity seal, written atomically, guarded against hand-edits — instead of the old scattered `corpus/<article>/audit.yaml` folder that no longer exists in the one-file-store world.
+
+- **Sibling sealed stores**: per-document audit → `corpus/<article>.audit.yaml`, roadmap → `corpus/<article>.roadmap.yaml` (forest-level ones stay at `docspec/audit.yaml` / `docspec/roadmap.yaml`). Each carries a `sha256` integrity seal over its content; a hand-edit makes the next docspec command fail loud and point at `docspec store fsck`. A new shared helper `engine/sealed.py` (canonical serialize + seal + atomic write) backs both. Old un-sealed files still read (so migration/first-save upgrade them cleanly).
+- **New `docspec roadmap add`** — the roadmap gained an engine write gate (previously the backlog was hand-edited, which sealing would have blocked). `roadmap add --kind gap|task --title … --target <section|forest>` validates and seals the entry, routing it to the right document's store. `develop` now records backlog work through this command instead of hand-editing. (This makes roadmap fully engine-owned, symmetric with audit — the "everything through the engine" choice; the alternative of leaving roadmap hand-edited like the glossary was considered and rejected for consistency.)
+- **Migration unblocked**: `store migrate` now folds a scattered document's `audit.yaml` / `roadmap.yaml` into the sealed siblings instead of refusing (the roadmap/audit files used to make a document un-migratable). Roadmap completion archives consolidate into a single `docspec/roadmap-archive.yaml`.
+- **Guards**: article discovery skips the `*.audit.yaml` / `*.roadmap.yaml` siblings (they're not documents); `new` refuses an article name containing `.` (it would collide with the sibling naming); the hand-edit hook guards the siblings (by the `corpus/` shape) and the forest governance files (by name). Every place that rewrites audit/roadmap during a move / promotion / archive now round-trips through the sealed store instead of a raw write.
+- Fingerprints do NOT read audit/roadmap, so this needs zero re-baseline.
+
 ### Changed — command-surface round 2: renames, regrouping, a new `edit` primitive, setup folded into `init`
 
 - **`self-update` → `update`** (the freed-up name; `upgrade` was already gone). Pure rename.

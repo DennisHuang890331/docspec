@@ -259,6 +259,9 @@ class Layout:
             import re as _re
             conflict = _re.compile(r".* \(\d+\)$")   # Drive 衝突副本 `<stem> (N).yaml` 隱形
             for p in sorted(self.corpus_dir.glob("*.yaml")):
+                # sibling 治理密封檔（`<a>.audit.yaml`/`<a>.roadmap.yaml`）不是文章、不入列。
+                if p.name.endswith((".audit.yaml", ".roadmap.yaml")):
+                    continue
                 if (p.is_file() and not p.name.startswith("_") and p.stem not in seen
                         and not conflict.match(p.stem) and ".tmp.drive" not in p.name.lower()):
                     seen.append(p.stem)

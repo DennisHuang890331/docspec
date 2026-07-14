@@ -312,7 +312,7 @@ def test_instructions_develop_prints_roadmap(make_project, write_leaf, monkeypat
     _write_roadmap_file(home / "roadmap.yaml", [
         {"id": "f1", "kind": "task", "title": "森林工作",
          "what": "w", "target": "forest"}])
-    _write_roadmap_file(home / "corpus" / "art" / "roadmap.yaml", [
+    _write_roadmap_file(home / "corpus" / "art.roadmap.yaml", [
         {"id": "r1", "kind": "task", "title": "可開工",
          "what": "w", "target": "art"}])
     monkeypatch.chdir(home.parent)

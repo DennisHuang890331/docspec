@@ -42,6 +42,10 @@ def _is_store_file(token: str) -> bool:
     corpus 底下唯一的頂層 .yaml 就是 store 檔（散檔的 concept/decisions 住更深的節夾裡）。"""
     from pathlib import Path
     p = Path(token.strip().strip("'\""))
+    # forest 級治理密封檔（`<home>/audit.yaml` / `roadmap.yaml`）——依名顯式守（不在 corpus/ 下、
+    # 但同為封條保護，手改必壞；doc 級 sibling `<a>.audit.yaml` 走下面 corpus-parent 規則）。
+    if p.name in ("audit.yaml", "roadmap.yaml"):
+        return True
     return (p.suffix == ".yaml" and p.parent.name == "corpus"
             and not p.name.startswith("_"))
 

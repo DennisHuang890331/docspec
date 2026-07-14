@@ -109,18 +109,15 @@ def _dump_with_header(path: Path, data: dict, original_text: str) -> None:
 
 
 def _rewrite_audit_file(path: Path, old: str, new: str) -> list[str]:
-    """重寫某 audit.yaml 內 findings 的路徑型 targets/sot-owner；壞檔略過（check 會抓）。"""
+    """重寫某 audit 密封檔內 findings 的路徑型 targets/sot-owner；有變更→經封條 save 重寫
+    （★store-native：絕不裸寫，否則留 stale 封條）。壞檔/封條不符 → 讓 load 自己 fail-loud。"""
     if not path.is_file():
         return []
-    text = path.read_text(encoding="utf-8")
-    try:
-        data = yaml.safe_load(text)
-    except yaml.YAMLError:
-        return []
-    if not isinstance(data, dict) or not isinstance(data.get("findings"), list):
-        return []
+    from dspx.reports.audit import AUDIT_FILE, AuditStore
+    scope = "forest" if path.name == AUDIT_FILE else f"doc:{path.name[:-len('.audit.yaml')]}"
+    store = AuditStore.load(path, store=scope)
     changes: list[str] = []
-    for f in data["findings"]:
+    for f in store.findings:
         if not isinstance(f, dict):
             continue
         fid = f.get("id")
@@ -138,23 +135,19 @@ def _rewrite_audit_file(path: Path, old: str, new: str) -> list[str]:
                 changes.append(f"{path.name} finding {fid} sot-owner: {so} -> {r}")
                 f["sot-owner"] = r
     if changes:
-        _dump_with_header(path, data, text)
+        store.save()
     return changes
 
 
 def _rewrite_roadmap_file(path: Path, old: str, new: str) -> list[str]:
-    """重寫某 roadmap.yaml 內 entries 的路徑型 target；壞檔略過（check 會抓）。"""
+    """重寫某 roadmap 密封檔內 entries 的路徑型 target；有變更→經封條 `_write_entries` 重寫。"""
     if not path.is_file():
         return []
-    text = path.read_text(encoding="utf-8")
-    try:
-        data = yaml.safe_load(text)
-    except yaml.YAMLError:
-        return []
-    if not isinstance(data, dict) or not isinstance(data.get("entries"), list):
-        return []
+    from dspx.engine.sealed import load_sealed
+    from dspx.reports.roadmap import RoadmapError, _write_entries
+    _rev, entries = load_sealed(path, list_key="entries", error_cls=RoadmapError)
     changes: list[str] = []
-    for e in data["entries"]:
+    for e in entries:
         if not isinstance(e, dict):
             continue
         r = _remap_target(e.get("target"), old, new)
@@ -162,7 +155,7 @@ def _rewrite_roadmap_file(path: Path, old: str, new: str) -> list[str]:
             changes.append(f"{path.name} roadmap {e.get('id')} target: {e.get('target')} -> {r}")
             e["target"] = r
     if changes:
-        _dump_with_header(path, data, text)
+        _write_entries(path, entries)
     return changes
 
 
