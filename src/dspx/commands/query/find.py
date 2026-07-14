@@ -27,10 +27,12 @@ HELP = ("locate a keyword/term across all faces (prose/concept/decisions/materia
         "--numbers aggregates number+unit values by referent (present-only, for the agent to judge)")
 
 _ALL_FACES = ("prose", "concept", "decisions", "material", "glossary", "audit")
-# 值層呈現器：數字＋單位（放寬 V10 的封閉集，含常見中文量詞）。
+# 值層呈現器：數字＋單位（放寬 V10 的封閉集，含常見中文量詞）。單位後不得緊接英文字母
+# （#12：擋「5 steps」→「5 s」這類垃圾組）；長單位在前，避免 m 先吃掉 mm/ms。
 _NUM_UNIT_RE = re.compile(
     r"(\d+(?:[.,]\d+)?)\s*"
-    r"(ms|s|Hz|kHz|MHz|%|mm|cm|m|km|km/h|kg|g|V|A|W|kW|°C|次|毫秒|秒|公尺|公里|公分)")
+    r"(km/h|kHz|MHz|kW|ms|Hz|mm|cm|km|kg|°C|s|m|g|V|A|W|%|次|毫秒|秒|公尺|公里|公分)"
+    r"(?![A-Za-z])")
 
 
 def _snippet(text: str, start: int, end: int, pad: int = 40) -> str:
@@ -66,7 +68,7 @@ def _prose_section_at(spans, pos: int) -> str | None:
     return None
 
 
-def _search_prose(layout, articles, query, regex, hits):
+def _search_prose(layout, articles, query, regex, hits, scope_sections=None):
     from dspx.engine.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
                                     classify_deliverable, mask_non_prose)
     for art in articles:
@@ -79,8 +81,10 @@ def _search_prose(layout, articles, query, regex, hits):
         masked = mask_non_prose(text, kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER})
         spans = classify_deliverable(text)
         for start, end in _match_positions(masked, query, regex):
-            line = text.count("\n", 0, start) + 1
             sec = _prose_section_at(spans, start) or art
+            if scope_sections is not None and sec not in scope_sections:
+                continue   # #12：scope 限定時，別回報 scope 外同篇節的 prose 命中
+            line = text.count("\n", 0, start) + 1
             hits.append({"section": sec, "face": "prose",
                          "loc": f"docs/{art}/_latest.md L{line} (snapshot)",
                          "snippet": _snippet(text, start, end), "id": None})
@@ -136,19 +140,32 @@ def _search_audit(layout, leaves, query, regex, hits):
                                  "snippet": _snippet(val, s, e), "id": f.get("id")})
 
 
-def _referent_of(lf, glossary_names) -> str:
-    """值層呈現器的分組鍵：命中的 glossary canonical 詞 → concept.title → section。"""
-    title = lf.concept.get("title") if isinstance(lf.concept, dict) else None
-    if isinstance(title, str) and title.strip():
-        return title.strip()
-    return lf.section
+def _referent_of(text: str, pos: int, glossary_terms: list[str], lf, sec: str) -> str:
+    """值層呈現器的分組鍵（#3）：數字前 60 字內**最靠近**的 glossary canonical 詞 → concept.title
+    → section。用 glossary 當鍵才能讓跨文件同一個量（標題不同、但都用同一術語稱呼）聚成一組、
+    「>1 distinct value」旗標才亮得起來。"""
+    window = text[max(0, pos - 60):pos]
+    best, best_i = None, -1
+    for term in glossary_terms:
+        if term:
+            i = window.rfind(term)
+            if i > best_i:
+                best, best_i = term, i
+    if best is not None:
+        return best
+    if lf is not None and isinstance(lf.concept, dict):
+        title = lf.concept.get("title")
+        if isinstance(title, str) and title.strip():
+            return title.strip()
+    return sec
 
 
 def _run_numbers(layout, leaves, articles, as_json) -> int:
     """`find --numbers`：森林級聚合 number+unit → 依指涉分組攤出所有值＋出處。只攤不判。"""
     from dspx.engine.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
                                     classify_deliverable, mask_non_prose)
-    glossary_names = {str(t.get("canonical", "")).lower() for t in load_glossary(layout)}
+    glossary_terms = [str(t.get("canonical", "")) for t in load_glossary(layout) if t.get("canonical")]
+    by_section = {lf.section: lf for lf in leaves}
     groups: dict[str, list[dict]] = {}
     for art in articles:
         path = layout.docs_latest(art)
@@ -157,12 +174,10 @@ def _run_numbers(layout, leaves, articles, as_json) -> int:
         text = path.read_text(encoding="utf-8")
         masked = mask_non_prose(text, kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER})
         spans = classify_deliverable(text)
-        by_section = {lf.section: lf for lf in leaves}
         for m in _NUM_UNIT_RE.finditer(masked):
             value, unit = m.group(1), m.group(2)
             sec = _prose_section_at(spans, m.start()) or art
-            lf = by_section.get(sec)
-            ref = _referent_of(lf, glossary_names) if lf else sec
+            ref = _referent_of(text, m.start(), glossary_terms, by_section.get(sec), sec)
             key = f"{ref} · {unit}"
             line = text.count("\n", 0, m.start()) + 1
             groups.setdefault(key, []).append(
@@ -227,10 +242,16 @@ def run(argv: list[str]) -> int:
         return 2
 
     faces = set(_ALL_FACES) if not args.faces else {f.strip() for f in args.faces.split(",")}
+    unknown = faces - set(_ALL_FACES)
+    if unknown:   # #6：未知面名 fail-loud（別靜默給假「不存在」）
+        sys.stderr.write(f"docspec find: unknown --in face(s) {sorted(unknown)}; "
+                         f"valid: {', '.join(_ALL_FACES)}\n")
+        return 2
+    scope_sections = {lf.section for lf in leaves} if args.scope else None   # #12：prose 過濾到 scope 內
     hits: list[dict] = []
     try:
         if "prose" in faces:
-            _search_prose(layout, articles, args.query, args.regex, hits)
+            _search_prose(layout, articles, args.query, args.regex, hits, scope_sections)
         _search_source(leaves, args.query, args.regex, faces, hits)
         if "glossary" in faces:
             _search_glossary(layout, args.query, args.regex, hits)

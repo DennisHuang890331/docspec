@@ -5,7 +5,7 @@
 - 每條 finding 掛 append-only `log`（raised→responded→verified），= 攻防軌跡＋記憶。
 - 非阻塞：audit 永不擋 publish（只有 check+lint 擋）。
 - **儲存比照 roadmap（per-doc-root ＋ forest）**：
-  - finding 觸及 1 文件 → 該文件 root 的 `corpus/<article>/audit.yaml`。
+  - finding 觸及 1 文件 → sibling 密封檔 `corpus/<article>.audit.yaml`。
   - 觸及 ≥2 文件 → forest-level `<planning_home>/audit.yaml`。
   - 判準＝finding `targets` 裡的 **distinct 文件數**（確定性、引擎可強制）。
   - **按需生成**：沒 finding＝無檔；load 回空 store。

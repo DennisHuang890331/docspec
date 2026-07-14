@@ -119,6 +119,20 @@ def _staging_concept_text(home, cid, section):
     return _y.safe_dump(rec.concept, allow_unicode=True) if (rec and rec.concept) else ""
 
 
+def test_edit_refuses_when_section_in_active_change(
+        make_project, write_leaf, monkeypatch, tmp_path):
+    """#2（fable 審查）：change 期間 official 交付面凍結——edit 命中 active change 的節→拒絕
+    （否則靜默改正式版→收案 drift 閘瞎＋反作弊假勾）。"""
+    from dspx.commands.deliverable import edit as edit_cmd
+    home = _project(make_project, write_leaf)
+    _render_baseline(home, monkeypatch)
+    change_cmd.run(["new", "chg-x", "--publish", "advisory"])
+    change_cmd.run(["add-target", "chg-x", "sec-intro", "--action", "revise"])
+    monkeypatch.chdir(home.parent)
+    assert edit_cmd.run(["g/intro", "--replace", "x", "y"]) == 1     # 命中 active change → 拒絕
+    assert edit_cmd.run(["g", "--punct"]) == 1                        # 整篇 edit 亦拒絕（含該節）
+
+
 # ── 4.1：active change 期間 put target → staging 有新內容、official byte 不變 ──
 
 def test_put_target_routes_to_staging_official_byte_frozen(

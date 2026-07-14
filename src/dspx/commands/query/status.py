@@ -280,6 +280,27 @@ def _run_pending_facts(layout, article: str | None, as_json: bool) -> int:
             for m in dict.fromkeys(_PLACEHOLDER_RE.findall(text)):
                 out.append({"section": lf.section, "where": where, "placeholder": m.strip()})
 
+    # #5：zero-inference 教義是「源料沒有的事實→寫 [TBD] 進**散文**」——那批（V4 擋 publish 的）
+    # 不在源料 aperture 裡，是主要人口。併掃 render 散文（過遮罩、映射到節）。
+    from dspx.engine.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
+                                    classify_deliverable, mask_non_prose)
+    seen_articles: list[str] = []
+    for lf in leaves:
+        if (article and lf.article != article) or not lf.article:
+            continue
+        if lf.article not in seen_articles:
+            seen_articles.append(lf.article)
+    for art in seen_articles:
+        path = layout.docs_latest(art)
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        masked = mask_non_prose(text, kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER})
+        spans = classify_deliverable(text)
+        for m in _PLACEHOLDER_RE.finditer(masked):
+            sec = next((sp.section for sp in spans if sp.start <= m.start() < sp.end), None) or art
+            out.append({"section": sec, "where": "prose (docs)", "placeholder": m.group(0).strip()})
+
     if as_json:
         print(json.dumps({"pendingFacts": out}, ensure_ascii=False, indent=2))
         return 0

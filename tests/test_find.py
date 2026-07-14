@@ -105,3 +105,27 @@ def test_status_pending_facts_empty(make_project, write_leaf, monkeypatch, capsy
     capsys.readouterr()
     assert status_cmd.run(["--pending-facts"]) == 0
     assert "no pending facts" in capsys.readouterr().out
+
+
+def test_find_in_unknown_face_fails(make_project, write_leaf, monkeypatch, capsys):
+    """#6：未知 --in 面名 fail-loud（別靜默給假『不存在』）。"""
+    home = make_project()
+    _leaf(write_leaf, home)
+    monkeypatch.chdir(home.parent)
+    assert find_cmd.run(["x", "--in", "audits"]) == 2       # 打錯字（audit 才對）→ 非零、報錯
+
+
+def test_status_pending_facts_finds_prose_tbd(make_project, write_leaf, monkeypatch, capsys):
+    """#5：[TBD] 主要寫在散文（zero-inference），--pending-facts 要掃得到。"""
+    home = make_project()
+    _leaf(write_leaf, home)
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["sc"])
+    layout = Layout(home)
+    _inject(layout, "sc", "sc/x", "回覆簽名 [TBD: 確認格式]。")
+    render_cmd.run(["sc"])
+    capsys.readouterr()
+    monkeypatch.chdir(home.parent)
+    assert status_cmd.run(["--pending-facts"]) == 0
+    out = capsys.readouterr().out
+    assert "prose (docs)" in out and "[TBD" in out

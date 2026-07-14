@@ -113,7 +113,7 @@ def _guard_scatter_files(layout: Layout, article: str) -> list[str]:
     unexpected: list[str] = []
     if not art_dir.is_dir():
         return unexpected
-    allowed = set(_FOLD_FILES) | set(_MOVE_TO_WORK) | set(_GOVERNANCE_FILES)
+    allowed = set(_FOLD_FILES) | set(_MOVE_TO_WORK)
     for p in sorted(art_dir.rglob("*")):
         if layout.is_archived_path(p):
             continue
@@ -121,6 +121,10 @@ def _guard_scatter_files(layout: Layout, article: str) -> list[str]:
             if p.name == "assets" and any(f.is_file() for f in p.rglob("*")):
                 unexpected.append(f"{p.relative_to(layout.corpus_dir).as_posix()}/ (corpus-side "
                                   "assets — relocate to docs/assets/ before migrating)")
+            continue
+        # 治理檔（audit/roadmap/roadmap-archive.yaml）只在文章**根層**放行（fold 只收根層那份）；
+        # 巢狀誤放＝unexpected fail-loud，永不靜默刪（#9：guard 的唯一職責就是不靜默刪資料）。
+        if p.name in _GOVERNANCE_FILES and p.parent == art_dir:
             continue
         if p.name not in allowed:
             unexpected.append(p.relative_to(layout.corpus_dir).as_posix())
@@ -303,6 +307,36 @@ def _load_one(layout: Layout, article: str, src_dir: Path, schema) -> int:
 
 # ── fsck（驗封條）──────────────────────────────────────────────────────
 
+def _fsck_governance(layout: Layout, articles: list[str], accept: bool) -> int:
+    """驗（並在 --accept 時重封）封條治理檔＝doc audit/roadmap sibling＋forest（#1：這些以前
+    完全不在 fsck 掃描面，fail-loud 指路 fsck 卻修不了它們＝死路）。"""
+    from dspx.engine.sealed import load_sealed, write_sealed
+    from dspx.reports.audit import doc_audit_path, forest_audit_path
+    from dspx.reports.roadmap import doc_roadmap_path, forest_roadmap_path
+    checks: list = []
+    for a in articles:
+        checks.append((doc_audit_path(layout, a), "audit", f"doc:{a}", "findings"))
+        checks.append((doc_roadmap_path(layout, a), "roadmap", f"doc:{a}", "entries"))
+    checks.append((forest_audit_path(layout), "audit", "forest", "findings"))
+    checks.append((forest_roadmap_path(layout), "roadmap", "forest", "entries"))
+    rc = 0
+    for path, kind, scope, key in checks:
+        if not path.is_file():
+            continue
+        try:
+            load_sealed(path, list_key=key, error_cls=st.StoreError, verify=True)
+            print(f"store fsck: {path.name} OK (integrity seal valid)")
+        except st.StoreError as exc:
+            if accept:
+                rev, items = load_sealed(path, list_key=key, error_cls=st.StoreError, verify=False)
+                write_sealed(path, kind=kind, scope=scope, revision=rev, list_key=key, items=items)
+                print(f"store fsck: {path.name} RESEALED (external change adopted)")
+            else:
+                sys.stderr.write(f"docspec: store fsck: {path.name}: {exc}\n")
+                rc = 1
+    return rc
+
+
 def _fsck(layout: Layout, articles: list[str], accept: bool, schema) -> int:
     rc = 0
     for article in articles:
@@ -318,7 +352,7 @@ def _fsck(layout: Layout, articles: list[str], accept: bool, schema) -> int:
             else:
                 sys.stderr.write(f"docspec: store fsck: {article}: {exc}\n")
                 rc = 1
-    return rc
+    return _fsck_governance(layout, articles, accept) or rc
 
 
 # ── CLI ───────────────────────────────────────────────────────────────

@@ -5,7 +5,7 @@
 - 只收「計劃了、還沒做、關於本森林文件」的工作；**在檔＝待辦、掉出＝完成**（不再有
   `status`/`done-to` 欄——這兩欄已刪，見 `validate_roadmap`）。
 - 兩個 store（按 owner 分）：
-  - per-doc（單一文件 owner）＝`corpus/<article>/roadmap.yaml`（root section dir，隨樹退場）。
+  - per-doc（單一文件 owner）＝sibling 密封檔 `corpus/<article>.roadmap.yaml`。
   - forest（跨文件、無單一 owner）＝`<planning_home>/roadmap.yaml`（森林級）。
   - **按需生成**：沒待辦＝無檔；load 回 []。view 永遠可算。
 - 完成分流（兩條路，見 `roadmap-archive` 相關 requirement）：
@@ -222,7 +222,8 @@ def next_roadmap_id(layout: Layout, leaves: list) -> str:
 
 
 def add_entry(layout: Layout, leaves: list, *, kind: str, title: str, target: str,
-              what: str = "", priority: str = "") -> dict:
+              what: str = "", priority: str = "", depends_on: list | None = None,
+              from_audit: str = "") -> dict:
     """`docspec roadmap add`＝roadmap 的唯一引擎寫入門（甲案；取代 agent 手編 roadmap.yaml）。
     驗欄位 → 路由（target=forest→forest 檔、target=section→該篇 doc 檔）→ 生 id → append + 密封 save。"""
     if kind not in KINDS:
@@ -247,6 +248,10 @@ def add_entry(layout: Layout, leaves: list, *, kind: str, title: str, target: st
         entry["what"] = what.strip()
     if priority.strip():
         entry["priority"] = priority.strip()
+    if depends_on:                                    # #11：依賴（驅動 blocked/unblocked 視圖＋check DAG 驗）
+        entry["depends-on"] = [d for d in depends_on if str(d).strip()]
+    if from_audit.strip():                            # #11：晉升溯源鏈（check 驗死引用）
+        entry["from-audit"] = from_audit.strip()
     from dspx.engine.sealed import load_sealed
     _rev, existing = load_sealed(path, list_key="entries", error_cls=RoadmapError)
     existing.append(entry)

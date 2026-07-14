@@ -3,7 +3,7 @@
 audit 是結構化審計記錄：不手改 audit.yaml，一律走指令、寫時驗證、攻防 log 累積。
 非阻塞：永不擋 publish。
 
-儲存＝per-doc-root（`corpus/<article>/audit.yaml`）＋ forest（`<home>/audit.yaml`），
+儲存＝sibling 密封檔（`corpus/<article>.audit.yaml`）＋ forest（`<home>/audit.yaml`），
 比照 roadmap：finding 依 targets 的 distinct 文件數路由（1→doc、≥2→forest）。
 """
 

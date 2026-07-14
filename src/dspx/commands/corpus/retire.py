@@ -118,6 +118,20 @@ def _migrate_orphan_deliverable(layout, article: str, dest) -> list[str]:
     return moved
 
 
+def _carry_governance_siblings(layout, article: str, dest) -> list[str]:
+    """整篇退役：把 sibling `corpus/<a>.{audit,roadmap}.yaml` 封條檔搬進封存包（可回復）＋刪原檔。
+    #8：否則它們留在活 corpus 卻無活 leaf 發現→不進任何視圖/check，且同名新篇一建舊 finding
+    復活、target 指死節→check 憑空炸。"""
+    from dspx.reports.audit import doc_audit_path
+    from dspx.reports.roadmap import doc_roadmap_path
+    moved: list[str] = []
+    for path in (doc_audit_path(layout, article), doc_roadmap_path(layout, article)):
+        if path.is_file():
+            shutil.move(str(path), str(dest / path.name))
+            moved.append(path.name)
+    return moved
+
+
 def _write_history_yaml(history_path, entries: list) -> None:
     history_path.parent.mkdir(parents=True, exist_ok=True)
     history_path.write_text(
@@ -230,6 +244,7 @@ def _retire_store(layout, schema, section: str, args) -> int:
         # 交付檔＋帳本搬進封存包（D6：content is recoverable）。
         store_file.unlink()
         moved_deliverables = _migrate_orphan_deliverable(layout, article, dest)
+        _carry_governance_siblings(layout, article, dest)   # #8：sibling audit/roadmap 搬進封存包、不孤兒化
 
     print(f"retire: \"{section}\" retired -> {dest.relative_to(layout.project_root)} "
           f"(store corpus/{article}.yaml: {len(subtree)} record(s) extracted, revision {art.revision})")

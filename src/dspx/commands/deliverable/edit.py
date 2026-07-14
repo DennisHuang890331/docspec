@@ -78,6 +78,20 @@ def _run_replace(target: str, old: str, new: str, dry_run: bool) -> int:
     return 0
 
 
+def _guard_change(layout, sections: list[str]) -> tuple[str, str] | None:
+    """#2：edit 寫的是正式交付面，但 change 期間 official 凍結（改動走 staging）。任一目標節命中
+    active change → 回 (section, change_id) 供拒絕。否則 None。"""
+    from dspx.engine.change import RoutingAmbiguous, routing_change_for
+    for sec in sections:
+        try:
+            c = routing_change_for(layout, sec)
+        except RoutingAmbiguous:
+            return sec, "(multiple)"
+        if c is not None:
+            return sec, c.id
+    return None
+
+
 def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec edit", description=HELP)
     parser.add_argument("target", nargs="?", default=None,
@@ -93,6 +107,28 @@ def run(argv: list[str]) -> int:
                         help="preview without writing anything")
     args = parser.parse_args(argv)
     dry = ["--dry-run"] if args.dry_run else []
+
+    # change-aware 守門（#2）：命中 active change 就拒絕（正式面凍結，別讓 edit 靜默改正式版→
+    # 收案 drift 閘瞎＋反作弊假勾）。dry-run 略過（純預覽不寫、放行）。
+    if not args.dry_run:
+        try:
+            layout, _cfg = bootstrap()
+            leaves = load_model(layout)
+        except BootstrapError as exc:
+            return exc.exit_code
+        if args.replace and args.target:
+            secs = [args.target.strip("/")]
+        else:  # --punct/--term：整篇（或全庫）
+            secs = [lf.section for lf in leaves
+                    if (not args.target) or lf.article == args.target]
+        hit = _guard_change(layout, secs)
+        if hit:
+            sec, cid = hit
+            sys.stderr.write(
+                f"docspec: edit refuses — section \"{sec}\" is in active change \"{cid}\"; the "
+                "official deliverable is frozen during a change (edits land in staging, not official). "
+                "Archive the change first, or edit through the change workflow.\n")
+            return 1
 
     if args.punct:
         if not args.target:

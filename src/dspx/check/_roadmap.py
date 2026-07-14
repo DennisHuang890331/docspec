@@ -94,7 +94,7 @@ def _validate_roadmap(layout, leaves: list[Leaf], id_set: set[str],
         # 放對檔：section/root target 必須落在該文件的 doc 檔
         if store == "forest":
             errs.append(f"roadmap[{eid}]: section target \"{target}\" should not go in the forest file"
-                        f" (per-doc work goes in corpus/<article>/roadmap.yaml)")
+                        f" (per-doc work goes in the sibling corpus/<article>.roadmap.yaml — via `docspec roadmap add`)")
         elif store.startswith("doc:"):
             art = store[len("doc:"):]
             if target not in article_targets.get(art, set()):

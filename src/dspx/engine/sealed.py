@@ -66,7 +66,9 @@ def load_sealed(path: Path, *, list_key: str, error_cls, verify: bool = True):
         raise error_cls(f"malformed sealed store (top-level not a mapping): {path}")
     revision = raw.get("revision")
     revision = revision if isinstance(revision, int) and revision >= 1 else 1
-    if verify and raw.get("integrity") is not None:
+    # 真舊 unsealed 檔（無 kind 也無 integrity）＝相容讀入不驗；一旦 `kind` 在場（是密封檔）就必驗
+    # ——缺 integrity（被刪一行洗白）視同 mismatch，否則下次 save 靜默重封＝手改零留痕。
+    if verify and (raw.get("kind") is not None or raw.get("integrity") is not None):
         expect = integrity_of(raw.get("kind"), raw.get("scope"), revision, list_key, items)
         if raw.get("integrity") != expect:
             raise error_cls(

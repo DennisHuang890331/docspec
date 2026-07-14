@@ -118,6 +118,10 @@ def run(argv: list[str]) -> int:
                        help="the section path/id this belongs to, or 'forest' for a cross-document item")
     p_add.add_argument("--what", default="", help="optional detail of the work")
     p_add.add_argument("--priority", default="", help="optional priority tag")
+    p_add.add_argument("--depends-on", dest="depends_on", default=None,
+                       help="comma-separated roadmap ids this entry waits on (drives blocked/unblocked view + check DAG)")
+    p_add.add_argument("--from-audit", dest="from_audit", default="",
+                       help="the audit finding id this was promoted from (traceability; check verifies it resolves)")
 
     p_done = sub.add_parser(
         "done", help="🟢 small direct work, no change needed: move the entry into roadmap-archive.yaml")
@@ -134,9 +138,11 @@ def run(argv: list[str]) -> int:
         return exc.exit_code
 
     if args.op == "add":
+        deps = [d.strip() for d in (args.depends_on or "").split(",") if d.strip()] or None
         try:
             entry = roadmap.add_entry(layout, leaves, kind=args.kind, title=args.title,
-                                      target=args.target, what=args.what, priority=args.priority)
+                                      target=args.target, what=args.what, priority=args.priority,
+                                      depends_on=deps, from_audit=args.from_audit)
         except roadmap.RoadmapError as exc:
             sys.stderr.write(f"docspec: {exc}\n")
             return 1

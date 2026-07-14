@@ -110,3 +110,35 @@ def test_hook_guards_sibling_and_forest():
     assert _is_store_file("docspec/audit.yaml")              # forest（依名顯式守）
     assert _is_store_file("docspec/roadmap.yaml")
     assert not _is_store_file("docs/x.md")
+
+
+# ── fable 審查補洞驗證 ──────────────────────────────────────────────────
+
+def test_deleting_integrity_line_is_caught(tmp_path):
+    """#10：sealed 檔被刪 integrity 行（想洗白）→ 必驗 mismatch，不再靜默照讀。"""
+    p = tmp_path / "x.audit.yaml"
+    sealed.write_sealed(p, kind="audit", scope="doc:x", revision=1, list_key="findings",
+                        items=[{"id": "F1", "finding": "x", "targets": ["x"]}])
+    kept = [ln for ln in p.read_text(encoding="utf-8").splitlines() if "integrity:" not in ln]
+    p.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    with pytest.raises(ValueError):
+        sealed.load_sealed(p, list_key="findings", error_cls=ValueError, verify=True)
+
+
+def test_fsck_repairs_corrupted_sealed_audit(make_project, write_leaf, monkeypatch, capsys):
+    """#1：store fsck --accept 現在真的會重封壞掉的治理檔（以前是死路）。"""
+    from dspx.commands.corpus import store as store_cmd
+    from dspx.reports.audit import doc_audit_path, load_doc_audit, raise_finding
+    home = make_project()
+    write_leaf(home, "sc/x", concept={"id": "c1", "title": "X", "order": 1})
+    layout = Layout(home)
+    st = load_doc_audit(layout, "sc")
+    raise_finding(st, face="logic", severity="med", finding="x", targets=["sc/x"])
+    st.save()
+    p = doc_audit_path(layout, "sc")
+    p.write_text(p.read_text(encoding="utf-8").replace("severity: med", "severity: high"),
+                 encoding="utf-8")                            # 手改 → 破封條
+    monkeypatch.chdir(home.parent)
+    assert store_cmd.run(["fsck", "sc"]) == 1                 # 未 --accept：抓到、非零
+    assert store_cmd.run(["fsck", "sc", "--accept"]) == 0     # --accept：重封成功（不再死路）
+    load_doc_audit(layout, "sc")                              # 重封後可正常載入（不 raise）
