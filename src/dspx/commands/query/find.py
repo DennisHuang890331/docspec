@@ -140,10 +140,11 @@ def _search_audit(layout, leaves, query, regex, hits):
                                  "snippet": _snippet(val, s, e), "id": f.get("id")})
 
 
-def _referent_of(text: str, pos: int, glossary_terms: list[tuple[str, str]], lf, sec: str) -> str:
-    """值層呈現器的分組鍵（#3）：數字前 60 字內**最靠近**的 glossary 詞（canonical **或別名**、
-    case-insensitive）→ 回其 canonical → concept.title → section。用 glossary 當鍵才能讓跨文件
-    同一個量（標題不同、稱呼含別名）聚成一組、「>1 distinct value」旗標才亮得起來。"""
+def _referent_of(text: str, pos: int, glossary_terms: list[tuple[str, str]], lf, sec: str) -> tuple[str, bool]:
+    """回 (分組鍵, 是否為真量名)。數字前 60 字內最近的 glossary 詞（canonical **或別名**、
+    case-insensitive）→ (canonical, **True**＝真量名，跨文件同量才聚得起來)；否則 fallback
+    concept.title → section → (…, **False**)。**fallback 只是「同節同單位」、不代表同一個量**——
+    所以只有 True 的組能誠實地下「多值」訊號（否則是假分組上的假判斷，違反只呈現不判）。"""
     window = text[max(0, pos - 60):pos].lower()
     best_canon, best_i = None, -1
     for name_lower, canonical in glossary_terms:
@@ -151,12 +152,12 @@ def _referent_of(text: str, pos: int, glossary_terms: list[tuple[str, str]], lf,
         if i > best_i:
             best_canon, best_i = canonical, i
     if best_canon is not None:
-        return best_canon
+        return best_canon, True
     if lf is not None and isinstance(lf.concept, dict):
         title = lf.concept.get("title")
         if isinstance(title, str) and title.strip():
-            return title.strip()
-    return sec
+            return title.strip(), False
+    return sec, False
 
 
 def _run_numbers(layout, leaves, articles, as_json, scope_sections=None) -> int:
@@ -174,6 +175,7 @@ def _run_numbers(layout, leaves, articles, as_json, scope_sections=None) -> int:
                 glossary_terms.append((str(a).lower(), canon))
     by_section = {lf.section: lf for lf in leaves}
     groups: dict[str, list[dict]] = {}
+    real_referent: set[str] = set()      # 鍵來自 glossary 真量名（才能誠實下「多值」訊號）
     for art in articles:
         path = layout.docs_latest(art)
         if not path.is_file():
@@ -186,30 +188,43 @@ def _run_numbers(layout, leaves, articles, as_json, scope_sections=None) -> int:
             sec = _prose_section_at(spans, m.start()) or art
             if scope_sections is not None and sec not in scope_sections:
                 continue   # #12：scope 限定時，別列 scope 外同篇節的數字（與 prose 搜同一過濾）
-            ref = _referent_of(text, m.start(), glossary_terms, by_section.get(sec), sec)
+            ref, is_glossary = _referent_of(text, m.start(), glossary_terms, by_section.get(sec), sec)
             key = f"{ref} · {unit}"
+            if is_glossary:
+                real_referent.add(key)
             line = text.count("\n", 0, m.start()) + 1
             groups.setdefault(key, []).append(
                 {"value": value, "unit": unit, "section": sec, "line": line,
                  "snippet": _snippet(text, m.start(), m.end(), 24)})
-    # 只攤：>1 distinct value 的組排前面（agent 優先看這些），但不下任何判決字眼。
-    ordered = sorted(groups.items(),
-                     key=lambda kv: (-len({h["value"] for h in kv[1]}), kv[0]))
+    # 排序：真量名的多值組排最前（唯一能誠實下「多值」訊號的），其餘照鍵名。
+    def _rank(kv):
+        key, occ = kv
+        multi = len({h["value"] for h in occ}) > 1
+        return (0 if (key in real_referent and multi) else 1, key)
+    ordered = sorted(groups.items(), key=_rank)
     if as_json:
-        print(json.dumps({"groups": [{"referent": k, "values": v} for k, v in ordered]},
+        print(json.dumps({"groups": [{"referent": k, "byGlossaryTerm": k in real_referent,
+                                       "values": v} for k, v in ordered]},
                          ensure_ascii=False, indent=2))
         return 0
     if not ordered:
         print("find --numbers: no number+unit tokens found in the rendered prose.")
         return 0
     print("find --numbers — number+unit values grouped by referent "
-          "(present-only; a group with >1 distinct value is for you to judge, not a verdict):\n")
+          "(present-only; NOT a verdict):\n")
     for key, occ in ordered:
         distinct = sorted({h["value"] for h in occ})
-        flag = "  ← multiple values" if len(distinct) > 1 else ""
-        print(f"  {key}: {{{', '.join(distinct)}}}{flag}")
+        # 只有 glossary 真量名的組能誠實標「多值」——fallback（section 標題）是「同節同單位、
+        # 未必同量」，標「多值」＝假分組上的假判斷（違反只呈現不判），故不標。
+        flag = "  ← multiple values for the same quantity" if (key in real_referent and len(distinct) > 1) else ""
+        note = "" if key in real_referent else "  [grouped by section, not by a named quantity]"
+        print(f"  {key}: {{{', '.join(distinct)}}}{flag}{note}")
         for h in occ[:6]:
             print(f"      {h['value']}{h['unit']}  @ {h['section']} L{h['line']}  …{h['snippet']}…")
+    if not glossary_terms:
+        print("\n  note: the glossary is empty, so numbers are grouped by section, not by the quantity "
+              "they measure — populate docspec/glossary.yaml (the quantity names) to group the SAME "
+              "quantity across documents and surface real cross-document value conflicts.")
     return 0
 
 

@@ -71,21 +71,44 @@ def test_find_decisions_face(make_project, write_leaf, monkeypatch, capsys):
     assert "decisions[0].statement" in out and "[d1]" in out
 
 
-def test_find_numbers_groups_and_flags_multiple(make_project, write_leaf, monkeypatch, capsys):
+def test_find_numbers_flags_conflict_only_via_glossary(make_project, write_leaf, monkeypatch, capsys):
+    """★壓測抓到：只有 glossary 真量名的組能誠實標「多值」——這樣跨文件同量才聚得起來、
+    旗標才有意義（不是同節同單位的假分組）。"""
     home = make_project()
     _leaf(write_leaf, home)
+    (home / "glossary.yaml").write_text(
+        "terms:\n  - id: t1\n    canonical: 回應延遲\n    bucket: standard\n", encoding="utf-8")
     monkeypatch.chdir(home.parent)
     render_cmd.run(["sc"])
     layout = Layout(home)
-    _inject(layout, "sc", "sc/x", "延遲目標 100ms，另一處 timeout 是 1000ms。")
+    _inject(layout, "sc", "sc/x", "回應延遲不超過 100ms；另一處回應延遲卻是 1000ms。")
     render_cmd.run(["sc"])
     capsys.readouterr()
     monkeypatch.chdir(home.parent)
     assert find_cmd.run(["--numbers"]) == 0
     out = capsys.readouterr().out
-    assert "100" in out and "1000" in out
-    assert "multiple values" in out                        # 同指涉·ms 兩值 → 攤出、標記供 agent 判
+    assert "回應延遲 · ms" in out                          # 用 glossary 量名當鍵
+    assert "multiple values for the same quantity" in out  # 同一量兩值 → 誠實標
     assert "drift" not in out.lower() and "reconcile" not in out.lower()  # 只攤不判
+
+
+def test_find_numbers_empty_glossary_no_false_flag(make_project, write_leaf, monkeypatch, capsys):
+    """★壓測抓到：glossary 空時退回 section 分組——**不得**在假分組上亂標「多值」（違反只呈現不判），
+    且要提示補 glossary。"""
+    home = make_project()
+    _leaf(write_leaf, home)
+    monkeypatch.chdir(home.parent)
+    render_cmd.run(["sc"])
+    layout = Layout(home)
+    _inject(layout, "sc", "sc/x", "人行穿越距離 20 公尺；感測範圍 30 公尺。")   # 不同量、同單位
+    render_cmd.run(["sc"])
+    capsys.readouterr()
+    monkeypatch.chdir(home.parent)
+    assert find_cmd.run(["--numbers"]) == 0
+    out = capsys.readouterr().out
+    assert "20" in out and "30" in out
+    assert "multiple values for the same quantity" not in out   # 不同量、不亂標
+    assert "grouped by section" in out and "glossary is empty" in out  # 誠實 + 指路補 glossary
 
 
 def test_status_pending_facts_lists_tbd(make_project, write_leaf, monkeypatch, capsys):
