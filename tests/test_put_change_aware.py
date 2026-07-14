@@ -131,6 +131,8 @@ def test_edit_refuses_when_section_in_active_change(
     monkeypatch.chdir(home.parent)
     assert edit_cmd.run(["g/intro", "--replace", "x", "y"]) == 1     # 命中 active change → 拒絕
     assert edit_cmd.run(["g", "--punct"]) == 1                        # 整篇 edit 亦拒絕（含該節）
+    # #2（壓測）：--dry-run 也要擋——dry-run 的意義是準確預覽真跑，真跑會拒、dry-run 就不能假放行。
+    assert edit_cmd.run(["g/intro", "--replace", "x", "y", "--dry-run"]) == 1
 
 
 # ── 4.1：active change 期間 put target → staging 有新內容、official byte 不變 ──

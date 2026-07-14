@@ -109,26 +109,26 @@ def run(argv: list[str]) -> int:
     dry = ["--dry-run"] if args.dry_run else []
 
     # change-aware 守門（#2）：命中 active change 就拒絕（正式面凍結，別讓 edit 靜默改正式版→
-    # 收案 drift 閘瞎＋反作弊假勾）。dry-run 略過（純預覽不寫、放行）。
-    if not args.dry_run:
-        try:
-            layout, _cfg = bootstrap()
-            leaves = load_model(layout)
-        except BootstrapError as exc:
-            return exc.exit_code
-        if args.replace and args.target:
-            secs = [args.target.strip("/")]
-        else:  # --punct/--term：整篇（或全庫）
-            secs = [lf.section for lf in leaves
-                    if (not args.target) or lf.article == args.target]
-        hit = _guard_change(layout, secs)
-        if hit:
-            sec, cid = hit
-            sys.stderr.write(
-                f"docspec: edit refuses — section \"{sec}\" is in active change \"{cid}\"; the "
-                "official deliverable is frozen during a change (edits land in staging, not official). "
-                "Archive the change first, or edit through the change workflow.\n")
-            return 1
+    # 收案 drift 閘瞎＋反作弊假勾）。**dry-run 也跑**——dry-run 的意義是準確預覽最終行為，真跑會被
+    # 拒的，dry-run 就該回報會被拒（壓測 #2：dry-run 若放行會誤導 agent 以為可以直接改）。
+    try:
+        layout, _cfg = bootstrap()
+        leaves = load_model(layout)
+    except BootstrapError as exc:
+        return exc.exit_code
+    if args.replace and args.target:
+        secs = [args.target.strip("/")]
+    else:  # --punct/--term：整篇（或全庫）
+        secs = [lf.section for lf in leaves
+                if (not args.target) or lf.article == args.target]
+    hit = _guard_change(layout, secs)
+    if hit:
+        sec, cid = hit
+        sys.stderr.write(
+            f"docspec: edit refuses — section \"{sec}\" is in active change \"{cid}\"; the "
+            "official deliverable is frozen during a change (edits land in staging, not official). "
+            "Archive the change first, or edit through the change workflow.\n")
+        return 1
 
     if args.punct:
         if not args.target:

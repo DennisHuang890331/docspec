@@ -70,7 +70,10 @@ def run(argv: list[str]) -> int:
     p_raise = sub.add_parser("raise", help="🔴 raise a finding")
     p_raise.add_argument("--target", action="append", required=True,
                          help="the section(s) it touches (path or concept id); repeatable or comma-separated")
-    p_raise.add_argument("--face", required=True)
+    p_raise.add_argument("--face", required=True,
+                         help="the attack face — core set: logic, completeness, clarity, discipline, "
+                              "consistency (config.audit may mount more packs); an unknown face is "
+                              "rejected with the valid set")
     p_raise.add_argument("--sev", required=True, choices=["high", "med", "low"])
     p_raise.add_argument("--finding"); p_raise.add_argument("--finding-file")
     p_raise.add_argument("--suggest", default=None); p_raise.add_argument("--suggest-file")
@@ -97,8 +100,9 @@ def run(argv: list[str]) -> int:
     p_sum.add_argument("--json", action="store_true", dest="sum_json")
 
     # 預設（無 op）= 彙總列出
-    parser.add_argument("--article", dest="list_article", default=None,
-                        help="list only a document store's findings (doc:<article>)")
+    parser.add_argument("--article", dest="list_article", default=None, metavar="ARTICLE",
+                        help="list only findings in this document's store — pass the article NAME "
+                             "(e.g. --article my-doc), NOT the doc:<name> store key")
     parser.add_argument("--open", action="store_true", dest="only_open")
     parser.add_argument("--face", dest="list_face", default=None)
     parser.add_argument("--json", action="store_true", dest="as_json")
