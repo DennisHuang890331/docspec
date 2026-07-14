@@ -254,6 +254,48 @@ def _run_retired(layout, prefix: str | None, as_json: bool) -> int:
     return 0
 
 
+def _run_pending_facts(layout, article: str | None, as_json: bool) -> int:
+    """`docspec status --pending-facts`：掃源料 aperture 的 [TBD]/[待補] 佔位＝「等寫作者補的事實
+    清單」（複用 lint V4 `_PLACEHOLDER_RE`；事實正確性是寫作者責任、機械不判對錯，只列缺口給人）。"""
+    from dspx.engine.lint import _PLACEHOLDER_RE
+    from dspx.engine.model import load_project
+
+    leaves = load_project(layout)
+    out: list[dict] = []
+    for lf in leaves:
+        if article and lf.article != article:
+            continue
+        blobs: list[tuple[str, str]] = []
+        if isinstance(lf.concept, dict):
+            for k in ("title", "concept"):
+                if isinstance(lf.concept.get(k), str):
+                    blobs.append((f"concept.{k}", lf.concept[k]))
+        for i, d in enumerate(lf.decisions or []):
+            for k in ("statement", "rationale"):
+                if isinstance(d.get(k), str):
+                    blobs.append((f"decisions[{i}].{k}", d[k]))
+        if isinstance(lf.material, str):
+            blobs.append(("material", lf.material))
+        for where, text in blobs:
+            for m in dict.fromkeys(_PLACEHOLDER_RE.findall(text)):
+                out.append({"section": lf.section, "where": where, "placeholder": m.strip()})
+
+    if as_json:
+        print(json.dumps({"pendingFacts": out}, ensure_ascii=False, indent=2))
+        return 0
+    if not out:
+        print("(no pending facts — no [TBD]/[待補] placeholders in the source)")
+        return 0
+    print(f"facts the writer still owes ({len(out)}):\n")
+    last = None
+    for it in out:
+        if it["section"] != last:
+            print(f"  § {it['section']}")
+            last = it["section"]
+        print(f"      {it['where']}: {it['placeholder']}")
+    return 0
+
+
 def run(argv: list[str]) -> int:
     import sys
 
@@ -263,6 +305,9 @@ def run(argv: list[str]) -> int:
     parser.add_argument("--retired", action="store_true",
                         help="instead of live status, list retired sections/decisions "
                              "(the optional positional filters by original path prefix)")
+    parser.add_argument("--pending-facts", action="store_true", dest="pending_facts",
+                        help="list every [TBD]/[待補] placeholder in the source (material/decisions/"
+                             "concept) as \"facts the writer still owes\" — the fact-input queue")
     parser.add_argument("--json", action="store_true", dest="as_json", help="output as JSON")
     args = parser.parse_args(argv)
 
@@ -273,6 +318,8 @@ def run(argv: list[str]) -> int:
 
     if args.retired:
         return _run_retired(layout, args.article, args.as_json)
+    if args.pending_facts:
+        return _run_pending_facts(layout, args.article, args.as_json)
 
     try:
         schema = load_engine_schema(config)

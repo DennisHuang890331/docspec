@@ -10,6 +10,15 @@ a minor bump.
 
 ## [Unreleased]
 
+### Added — `docspec find` (locate without reading everything) + `status --pending-facts` (the fact-input queue)
+
+Agents that factcheck or edit used to read whole files to locate something; these two read-only queries let them jump straight to the relevant lines and save tokens.
+
+- **`docspec find <query>`** searches every face — deliverable prose (code fences / URLs / markers masked, so no false hits), concept, decisions, material, glossary, audit — and returns, per hit, the section + which face matched + a precise location (a prose hit gives the line in `docs/<article>/_latest.md`; a source hit gives `decisions[i].statement` / `material Ln`) + a snippet, plus the id for a follow-up `show`. Deterministic substring / `--regex`; scope to a section/subtree/article; `--json`.
+- **`docspec find --numbers`** is a value presenter (the retired lint V10 idea, reborn): it aggregates every number+unit token in the rendered prose grouped by referent (glossary term → section title → section), and lays out the values with their locations. A referent carrying more than one distinct value is surfaced for an agent to judge — it is **present-only** and never prints a verdict like "drift" or "reconcile" (mechanical judgement of number semantics was measured at 100% false-positive on the real corpus; the engine presents, the agent judges, the human decides). This extends the engine's existing "present, don't judge" pattern (`coherence_contract`) from statement text to values.
+- **`docspec status --pending-facts`** lists every `[TBD]` / `[待補]` placeholder in the source (material / decisions / concept) as "facts the writer still owes" — the deterministic surface for the ruling that fact correctness is the writer's responsibility (a mechanical number-provenance gate was investigated against the real corpus and rejected as unworkable; the engine surfaces the gaps, it never judges whether a filled-in fact is correct).
+- **`factcheck` skill reframed** to lead with `find --numbers` (triage number inconsistencies the engine surfaces) and `find` (jump to a claim) before reading, and to check `find --in audit` for an already-rejected finding before raising. (The separately-planned coherence value-patch is subsumed by `find --numbers`, which already surfaces every prose value by referent, so it was dropped.)
+
 ### Changed — audit & roadmap become engine-owned, integrity-sealed sibling stores (governance-store-native)
 
 Audit findings and the roadmap backlog now live under the SAME discipline as the article store — an engine-owned single file per document, protected by an integrity seal, written atomically, guarded against hand-edits — instead of the old scattered `corpus/<article>/audit.yaml` folder that no longer exists in the one-file-store world.
