@@ -175,7 +175,9 @@ class Change:
 # ── 路徑解析 ──────────────────────────────────────────────────────────
 
 def changes_root(layout: Layout) -> Path:
-    return layout.project_root / CHANGES_DIR
+    # ★比照 OpenSpec：change 容器收在引擎 home 夾（docspec/）底下，與 corpus/ledger/glossary 一致，
+    # 不散在專案根（changes/ 是引擎內部修改事件管理狀態、非人要讀的東西；人只讀 docs/）。
+    return layout.planning_home / CHANGES_DIR
 
 
 def _state_root(layout: Layout, state: str) -> Path:

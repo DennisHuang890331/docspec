@@ -10,6 +10,10 @@ a minor bump.
 
 ## [Unreleased]
 
+### Changed — the change containers move under `docspec/` (mirroring how OpenSpec keeps everything under `openspec/`)
+
+The modify-event-layer's `changes/` folder now lives at `docspec/changes/` instead of the project root. It is engine-internal management state (staging branches, previews, change metadata) — not something a human reads directly (humans read `docs/`) — so it belongs alongside `corpus/`, the ledger, glossary, and freeze net inside the engine home, exactly as OpenSpec keeps its `changes/` under `openspec/`. Existing projects: move `changes/` into `docspec/`. (Pre-release, so no compatibility shim.)
+
 ### Added — `docspec find` (locate without reading everything) + `status --pending-facts` (the fact-input queue)
 
 Agents that factcheck or edit used to read whole files to locate something; these two read-only queries let them jump straight to the relevant lines and save tokens.

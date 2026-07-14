@@ -68,7 +68,7 @@ def _root_concept(cid: str, title: str, order: int = 1) -> dict:
 
 def _write_change(home: Path, cid: str, state: str) -> Path:
     """在 project_root（home.parent）下建一個最小 change 容器（active/_archive/_abandoned）。"""
-    root = home.parent / "changes"
+    root = home / "changes"          # ★changes 現在收在 docspec/ home 底下
     sub = {"active": root, "archived": root / "_archive", "abandoned": root / "_abandoned"}[state]
     cdir = sub / cid
     cdir.mkdir(parents=True, exist_ok=True)

@@ -405,7 +405,7 @@ def test_audit_summary_json_keys(make_project, write_leaf, monkeypatch, capsys):
 
 def _write_change(home, cid: str, state: str) -> None:
     """最小 change 容器（active/_archive/_abandoned），供 promoted-to 反查測試。"""
-    root = home.parent / "changes"
+    root = home / "changes"          # ★changes 現在收在 docspec/ home 底下
     sub = {"active": root, "archived": root / "_archive", "abandoned": root / "_abandoned"}[state]
     cdir = sub / cid
     cdir.mkdir(parents=True, exist_ok=True)
