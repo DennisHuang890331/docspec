@@ -1,4 +1,4 @@
-"""deliverable-cleanliness：V4（placeholder 類放寬）、V12（GFM alert 殘留）、V10（數字一致 WARN）。
+"""deliverable-cleanliness：V4（placeholder 類放寬）、V12（GFM alert 殘留）。
 
 對應 change deliverable-cleanliness-truthful / capability deliverable-cleanliness。
 靶＝渲染後的 docs/_latest.md（lint 掃交付物）；每個測試 render 一個最小 leaf 後注入缺陷再 lint。
@@ -86,30 +86,7 @@ def test_v12_code_fenced_alert_exempt(make_project, write_leaf, monkeypatch):
     assert not any(f.rule == "V12" for f in _lint(layout))
 
 
-# ── V10 跨文件數字一致（WARN、非阻塞）────────────────────────────────
-
-def test_v10_number_drift_warn_not_error(make_project, write_leaf, monkeypatch):
-    home = make_project(); _leaf(write_leaf, home)
-    layout = _render(home, monkeypatch)
-    _inject(layout, "a", "\n\ne_stop 採 timeout 1000ms。\n\ne_stop 的 timeout 800ms。\n")
-    v10 = [f for f in _lint(layout) if f.rule == "V10"]
-    assert v10 and all(f.level == WARN for f in v10)        # WARN，不是 ERROR
-    assert any("1000ms" in f.detail and "800ms" in f.detail for f in v10)
-
-
-def test_v10_different_metric_not_flagged(make_project, write_leaf, monkeypatch):
-    """同 key 不同度量、或不同 key → 不報衝突。"""
-    home = make_project(); _leaf(write_leaf, home)
-    layout = _render(home, monkeypatch)
-    _inject(layout, "a", "\n\ntask_assign 的 timeout 5000ms。\n\ne_stop 端到端延遲低於 100ms。\n")
-    assert not any(f.rule == "V10" for f in _lint(layout))
-
-
-def test_v10_consistent_numbers_clean(make_project, write_leaf, monkeypatch):
-    home = make_project(); _leaf(write_leaf, home)
-    layout = _render(home, monkeypatch)
-    _inject(layout, "a", "\n\ntask_assign 的 timeout 5000ms。\n\ntask_assign 表格列 5000ms。\n")
-    assert not any(f.rule == "V10" for f in _lint(layout))
+# V10（跨文件數字一致）已退場——判官改呈現器 `docspec find --numbers`（見 test_find.py）。
 
 
 # ── V13 保留範例/佔位 token 外洩（WARN）──────────────────────────────

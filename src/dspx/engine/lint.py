@@ -10,7 +10,6 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   V7 material 雜思痕跡           ERROR
   V8 骨肉漂移（corpus↔docs）      WARN
   V9 realizes 指向退場決策        WARN
-  V10 跨文件數字一致             WARN   ← 同 snake_case 指涉的同單位值相互衝突（advisory、不阻塞）
   V11 凍結區（archive/）被竄改    ERROR  ← 已發行版本不可變（見 dspx.reports.freeze）
   V12 docs 殘留 GFM 警示/暫停旗   ERROR  ← `> [!WARNING]` 等 alert；draft 撞決策衝突刻意產生、絕不該 ship
   V15 docs 殘留撰寫工具/治理詞彙   ERROR  ← forest/governed-by/治理父/fan-in/factcheck/Tier-N/L2a/§回引…＝後台詞洩進交付物（補 V1 覆蓋缺口）
@@ -45,7 +44,7 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   finding 定位：交付物本文規則（V1–V4/V12/V13/V15/V16/V17/V18）的 where 帶章節定位
   `docs/<article>/_latest.md § <section-path>`——沿隱形 `dspx:section`/`dspx:group` 標記切段、
   逐段掃描；首個標記前的 preamble／整份無標記的檔案回退檔案級 where。去重單位＝每章節
-  （同 token 洩漏兩章節＝兩筆各自可定位的 finding）。V10 為全文聚合檢查、維持檔案級。
+  （同 token 洩漏兩章節＝兩筆各自可定位的 finding）。
 """
 
 from __future__ import annotations
@@ -83,10 +82,8 @@ _RESERVED_EXAMPLE_RE = re.compile(
     r"|\b555-01\d\d\b",                   # NANP 虛構電話段（555-0100..0199）
     re.IGNORECASE,
 )
-# V10 數字一致：number+unit token 與同行最近的 snake_case 指涉（如 e_stop / task_assign）。
-# 封閉單位集抑制誤報；snake_case（至少一個底線）才當 key，排除 timeout/status 等裸詞與 CJK 鄰詞。
-_NUM_UNIT_RE = re.compile(r"(\d+(?:\.\d+)?)\s*(ms|s|Hz|%)\b")
-_SNAKE_RE = re.compile(r"[a-z][a-z0-9]*(?:_[a-z0-9]+)+")
+# V10（跨文件數字一致 WARN）已退場——判官改呈現器 `docspec find --numbers`（實測 V10 對真語料
+# 0 finding；機械判數字語義 100% 誤報，改由引擎只攤、agent 判、人裁）。
 # V3 只抓 docspec 自己塞的鷹架佔位字（instructions 模板的 {id}/{title}/{order}/{name}）；
 # generic `<…>` 在技術散文太氾濫（KE 模板 <vehicle_id>、泛型 <T> 都合法），不再誤殺。
 _SCAFFOLD_RE = re.compile(r"\{(?:id|title|order|name)\}")
@@ -437,42 +434,6 @@ def _lint_prose_chapter_refs(layout: Layout, articles: list[str]) -> list[Findin
     return findings
 
 
-def _lint_numbers(layout: Layout, articles: list[str]) -> list[Finding]:
-    """V10 跨文件數字一致（WARN、非阻塞、不改寫）。
-
-    把每個 number+unit token 關聯到「同一行最近的 snake_case 指涉」（如 e_stop、task_assign）。
-    全文蒐集後，同一 (指涉, 單位) 出現相互衝突的值 → WARN。封閉單位集 + snake_case-only key
-    抑制誤報（不同度量如 timeout 1000ms vs 延遲 100ms 因指涉不同而不衝突）。
-    """
-    findings: list[Finding] = []
-    for article in articles:
-        path = layout.docs_latest(article)
-        if not path.is_file():
-            continue
-        from dspx.engine.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
-                                mask_non_prose)
-        body = mask_non_prose(path.read_text(encoding="utf-8"),
-                              kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER})
-        where = f"docs/{article}/_latest.md"
-        # (key, unit) -> 值集合
-        seen: dict[tuple[str, str], set[str]] = {}
-        for line in body.splitlines():
-            for nm in _NUM_UNIT_RE.finditer(line):
-                # 最近的「在此數字之前」的 snake_case 指涉
-                keys = [s.group(0) for s in _SNAKE_RE.finditer(line) if s.start() < nm.start()]
-                if not keys:
-                    continue
-                key = keys[-1]
-                seen.setdefault((key, nm.group(2)), set()).add(nm.group(1))
-        for (key, unit), vals in sorted(seen.items()):
-            if len(vals) > 1:
-                joined = " vs ".join(sorted(f"{v}{unit}" for v in vals))
-                findings.append(Finding("V10", WARN, where,
-                    f"number drift: \"{key}\" has conflicting {unit} values ({joined}) -- "
-                    "reconcile against the source (advisory; does not block publish)"))
-    return findings
-
-
 def _lint_material(leaf: Leaf) -> list[Finding]:
     # backend-neutral：優先 leaf.material（store/散檔皆由此供給）、退回開檔（防禦）。
     text = leaf.material
@@ -548,7 +509,6 @@ def run_lint(layout: Layout, leaves: list[Leaf], schema: Schema) -> list[Finding
     all_ids = set(index.ids)
     articles = sorted({leaf.article for leaf in leaves})
     findings = _lint_docs(layout, articles, all_ids)
-    findings.extend(_lint_numbers(layout, articles))
     findings.extend(_lint_punctuation(layout, articles))
     findings.extend(_lint_prose_chapter_refs(layout, articles))
     for leaf in leaves:
