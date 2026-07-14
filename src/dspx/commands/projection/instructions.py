@@ -86,8 +86,16 @@ _ACTION_MODE = {
 def _sync_mode_verb(sync: str) -> tuple[str, str] | None:
     """一節的 staleness 型別 → apply 模式 + 對應 render/ack verb（change 外驅動）。
     synced / uncrystallized 等無工作態回 None。"""
-    if sync in ("unwritten", "stale-own", "stale-upstream"):
+    if sync == "unwritten":
         return "rewrite", "docspec render <article>  (blind-render the section from its aperture)"
+    if sync in ("stale-own", "stale-upstream"):
+        # ★源料變：散文**確實要改** → 改後 plain render 清；散文**合理不需改**（如 must_cover 長了
+        # 但既有散文已涵蓋）→ `--ack-own --reason`（attest + 重戳 own/deps）。plain render 對「散文
+        # 未變」的 stale-own **不清、也不報**（保住信號），別誤以為 render 沒反應＝完成；絕不 perturb-revert。
+        return "rewrite", ("docspec render <article>  (source changed — rewrite the prose to match) — "
+                           "else if the prose legitimately still holds unchanged, "
+                           "docspec render <article> --ack-own <section> --reason <text>  "
+                           "(attest + re-stamp; NEVER perturb-then-revert to force a clear)")
     if sync == "stale-norm":
         return "align", ("docspec render <article>  (a sentence violated the changed ruling) — else "
                          "docspec render <article> --ack <section>  (re-checked; prose conforms)")

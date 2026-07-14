@@ -353,7 +353,9 @@ def run(argv: list[str]) -> int:
             s.split("/", 1)[0]
             for s in develop_only_sections(layout, {lf.section for lf in leaves})}
         if args.article not in known:
-            sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n")
+            hint = ("  (that looks like a section path — did you mean "
+                    f"`docspec status --section {args.article}`?)\n") if "/" in args.article else ""
+            sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n{hint}")
             return 1
 
     check_ok = run_check(leaves, schema, layout).ok

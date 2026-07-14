@@ -452,3 +452,15 @@ def test_guide_projects_verdict_verbs_and_whitelist(tmp_path, write_leaf, monkey
     assert "must_cover" in out                                       # 白名單反例（content-bearing）
     assert "docspec stale" in out
     assert "perturb-render-revert" in out                            # 禁止擾動復原 dance
+
+
+def test_stale_own_projection_offers_ack_own_exit():
+    """P0（壓測 fable/agent 抓到）：instructions apply 對 stale-own 的投影必須含 `--ack-own` 出口，
+    不能只給 plain render——否則「源料變、散文合理不變」時 plain render 靜默 no-op、agent 走死路。"""
+    from dspx.commands.projection.instructions import _sync_mode_verb
+    mode, verb = _sync_mode_verb("stale-own")
+    assert mode == "rewrite"
+    assert "--ack-own" in verb                     # 補上正當出口
+    assert "perturb" in verb.lower()               # 明令禁 perturb-revert
+    assert "--ack-own" in _sync_mode_verb("stale-upstream")[1]
+    assert "--ack-own" not in _sync_mode_verb("unwritten")[1]   # unwritten 仍純 render、不誤導
