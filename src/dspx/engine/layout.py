@@ -11,7 +11,7 @@
         ├── config.yaml
         └── corpus/                   章節架構（資料夾樹鏡像文章骨架）
             └── <article>/<…>/<leaf>/  末節資料夾（含 concept.yaml 即為末節）
-                ├── concept.yaml  decisions.yaml  material.md  develop.md  history.yaml
+                ├── concept.yaml  decisions.yaml  material.md  history.yaml
 
 「末節（leaf）」＝任何含 concept.yaml 的資料夾。section 路徑＝相對 corpus/ 的路徑。
 """

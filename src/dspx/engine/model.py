@@ -401,7 +401,6 @@ class Leaf:
     decisions: list[dict] = field(default_factory=list)   # decisions.yaml entries
     history: list[dict] = field(default_factory=list)      # history.yaml entries
     has_material: bool = False
-    has_develop: bool = False
     has_history: bool = False
     # material 全文（backend-neutral 窄腰）：散檔 backend 由 material.md 讀入、store backend 由記錄餵。
     # own 軸 v5 與 aperture/lint 一律讀這裡，不再各自開檔——「換 parse 來源、指紋不變」的關鍵。
@@ -538,7 +537,6 @@ def leaf_from_dir(section: str, leaf_dir: Path) -> Leaf:
         decisions=_entries(_load_yaml(decisions_path), decisions_path),
         history=_entries(_load_yaml(history_path), history_path),
         has_material=material_path.is_file(),
-        has_develop=(leaf_dir / "develop.md").is_file(),
         has_history=history_path.is_file(),
         # read_bytes().decode（非 read_text）＝**不做 universal-newline 翻譯**：孤 `\r` 保留為內容
         # 差異（own 軸 v5 只把 `\r\n`→`\n` 正規化，與 v3 一致；read_text 會把孤 `\r` 也翻成 `\n`）。

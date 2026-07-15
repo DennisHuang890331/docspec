@@ -30,7 +30,7 @@ _BLOCK_MSG = (
 _STORE_BLOCK_MSG = (
     "[docspec] Blocked: corpus/<article>.yaml is an engine-owned single-file store guarded by an "
     "integrity seal — a hand-edit corrupts it. Change a section through the engine: "
-    "`docspec get/put <section> <category>` or `docspec crystallize`. "
+    "`docspec get/put <section> <category>`. "
     "(If you truly must edit externally, run `docspec store fsck --accept` afterwards.)"
 )
 
@@ -158,8 +158,8 @@ def _command_writes_store(command: str) -> bool:
 def _postcheck(data: object) -> int:
     """PostToolUse：編輯**散檔形態**的 concept/decisions/history（`store dump`／migrate 源／
     `_archive` 快照）後的「檔案級完整性」提醒。活 store（`corpus/<article>.yaml`）由 guard 擋手改、
-    走 put/crystallize，不經此路。
-    **best-effort、非阻擋**（PostToolUse 在寫入後觸發、擋不住寫入；真正的閘＝ready/publish）。
+    走 put，不經此路。
+    **best-effort、非阻擋**（PostToolUse 在寫入後觸發、擋不住寫入；真正的閘＝check/publish）。
     絕不因自身錯誤干擾 agent（任何例外 → 放行 exit 0）。exit 2 僅把提醒餵回 agent。"""
     if data is None:
         return 0
@@ -191,7 +191,7 @@ def _postcheck(data: object) -> int:
         if not errs:
             return 0
         sys.stderr.write("[docspec] Reminder (non-blocking, file already written): the file just "
-                         "written has unfilled required fields; fill them before graduation (docspec ready):\n")
+                         "written has unfilled required fields; fill them (status shows the section as developing until complete):\n")
         for e in errs[:8]:
             sys.stderr.write(f"  · {e}\n")
         return 2

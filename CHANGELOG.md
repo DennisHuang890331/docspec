@@ -10,6 +10,17 @@ a minor bump.
 
 ## [Unreleased]
 
+### Removed — the develop workbench retires: `docspec new`, `docspec ready`, `develop.md`, and the `work/` directory are gone; `put` is the single way a section comes into being
+
+The develop.md thinking-pad loop (`new` scaffolds `work/<section>/develop.md` → agent thinks in it → `put` crystallizes → `ready` drains + deletes the file) was a scattered-files-era workflow whose gate had no mechanical consumer: nothing downstream ever read the `ready` state (render/publish/put all ignore it), the whole loop could be bypassed by calling `put` directly (which already stamps id/order and validates the path on first write), and the deliverable never reads develop.md. Its one durable role — a meeting-minutes-style thinking record — is already served properly by a change container's `notes.md`, which is archived with the change. What the loop actually left behind in practice was a pile of empty `work/<section>/` shells after every crystallization.
+
+- **`docspec new` removed** (including `--reopen`). A section EXISTS from its first `docspec put <section> concept`; put stamps the id (path fingerprint) and order (sibling count) and validates the path segments (the Windows-reserved-name / illegal-character / `_`-prefix blacklist moved from new into put — same rules, same messages).
+- **`docspec ready` removed** (including article-batch mode). `status` still reports `developing` for sections whose required fields are incomplete — computed from field completeness only. Completeness gates stay where they always mechanically were: `check` and `publish`.
+- **`develop` artifact removed from the schema** (template + instruction files deleted; every skill aperture cleaned). The develop SKILL remains — it is the authoring judgment loop — but its steps now read: think in your working context, keep durable discussion in a change's `notes.md` (open the change the moment work touches a ruling or spans sections), then crystallize via `put` with the same four-question triage.
+- **`store migrate` now refuses** a scattered tree that still contains legacy `develop.md` / `history.md` workfiles instead of relocating them into `work/` (which no longer exists): distill them into the store with `put` or delete them yourself, then re-run — the engine never silently drops or moves them.
+- Planned-but-unwritten sections are the roadmap's job (`docspec roadmap add`); status/list no longer surface develop-only stubs.
+- Ghost-command cleanup in the same sweep: messages that pointed at `docspec crystallize` (never a real command) now point at `get/put`.
+
 ### Changed — the change containers move under `docspec/` (mirroring how OpenSpec keeps everything under `openspec/`)
 
 The modify-event-layer's `changes/` folder now lives at `docspec/changes/` instead of the project root. It is engine-internal management state (staging branches, previews, change metadata) — not something a human reads directly (humans read `docs/`) — so it belongs alongside `corpus/`, the ledger, glossary, and freeze net inside the engine home, exactly as OpenSpec keeps its `changes/` under `openspec/`. Existing projects: move `changes/` into `docspec/`. (Pre-release, so no compatibility shim.)

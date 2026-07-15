@@ -52,23 +52,25 @@ def test_draft_decisions_statement_only(make_project, write_leaf):
     assert "退場的" not in dtext        # 非 active 不投
 
 
-def test_draft_never_sees_develop_or_history(make_project, write_leaf):
+def test_draft_never_sees_history(make_project, write_leaf):
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1},
-               develop="# 機密草稿亂想",
                history=[{"id": "h1", "kind": "normative", "status": "superseded",
                          "statement": "墳場"}])
     proj = _project(home, "apply", "a/x")
-    assert "develop" not in proj.reads
     assert "history" not in proj.reads
+    # ★retire-develop-workbench：develop artifact 已廢除——任何 skill 的 reads 都不再有 develop 面
+    assert "develop" not in proj.reads
 
 
-def test_develop_is_only_reader_of_develop(make_project, write_leaf):
+def test_develop_aperture_has_no_develop_artifact(make_project, write_leaf):
+    """★retire-develop-workbench：develop skill 的 aperture 不再含 develop 面（工作台廢除，
+    思考在 context、耐久討論在 change notes.md）；仍讀 concept。"""
     home = make_project()
-    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1},
-               develop="# 草稿內容")
+    write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     proj = _project(home, "develop", "a/x")
-    assert "草稿內容" in proj.reads["develop"]
+    assert "develop" not in proj.reads
+    assert "concept" in proj.reads
 
 
 def test_purpose_projected_to_develop_and_draft(make_project, write_leaf):

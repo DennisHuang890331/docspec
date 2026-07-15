@@ -3,7 +3,7 @@
 這是 docspec 的存在理由——控制生成當下的 context。引擎不寫一個字，只裁切轉交。
 硬規則（engine-spec §4）：
   - draft 讀 concept 只投 concept/brief/must_cover/sources；decisions 只投 active 條目的 statement；
-    絕不投 develop.md / history.yaml。
+    絕不投 history。
   - 不在 skill 白名單的檔，引擎不遞、不揭露路徑。
 """
 
@@ -142,13 +142,6 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
             content = leaf.material if leaf.material is not None else _read_file(leaf, "material.md")
             if content:
                 proj.reads["material"] = content
-        elif art_id == "develop":
-            # ★store-only：develop.md 住 work/（結晶前工作台）。
-            from dspx.engine import store as _store
-            dp = _store.work_develop(layout, leaf.section)
-            content = dp.read_text(encoding="utf-8") if dp.is_file() else None
-            if content:
-                proj.reads["develop"] = content
         elif art_id == "history":
             # ★store-only：history 由 store 記錄供（非散檔 history.yaml）。
             if leaf.history:

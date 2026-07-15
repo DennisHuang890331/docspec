@@ -530,7 +530,7 @@ def load_union(layout: Layout, change: Change) -> list[Leaf]:
 
 def _union_store_leaves(layout: Layout, change: Change) -> list[Leaf]:
     """每個 store 篇：正式記錄 dict ← staging overlay（整記錄蓋／tombstone 刪／pending-create 佔位）
-    → 建 Leaf。concept=None（未結晶 create）＝不入 union（同散檔 develop-only 語義）。"""
+    → 建 Leaf。concept=None（尚未首寫 concept 的 create）＝不入 union。"""
     from dspx.engine import store as _store
     out: list[Leaf] = []
     for article in _store.store_articles(layout):

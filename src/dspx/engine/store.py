@@ -33,7 +33,7 @@ STORE_FORMAT_VERSION = 1
 
 STORE_HEADER = ("# docspec article store — engine-owned single-file corpus for this article.\n"
                 "# Never edit by hand: an integrity seal guards the body; the next docspec command\n"
-                "# will fail loud and point you at `docspec store fsck`. Use get/put/crystallize.\n")
+                "# will fail loud and point you at `docspec store fsck`. Use get/put.\n")
 
 # 記錄頂層鍵的 canonical 序（group 節點另有自己的鍵，見 _record_key_order）。
 _LEAF_RECORD_ORDER = ("path", "kind", "concept", "decisions", "history", "material")
@@ -431,23 +431,12 @@ def store_articles(layout: Layout) -> list[str]:
     return out
 
 
-# ── work/ 位置（develop.md 出 store；D5）────────────────────────────────
-
-def work_dir(layout: Layout, section: str) -> Path:
-    """草稿工作台：`docspec/work/<section-path>/`（鏡像樹、透明目錄）。"""
-    return layout.planning_home / "work" / Path(*section.split("/"))
-
-
-def work_develop(layout: Layout, section: str) -> Path:
-    return work_dir(layout, section) / "develop.md"
-
-
 # ── store → Leaf（讀端窄腰；上層無感）─────────────────────────────────
 
 def leaf_from_record(layout: Layout, rec: SectionRecord) -> Leaf:
     """單一 leaf 記錄 → Leaf（與散檔 leaf_from_dir 逐欄等價）。
 
-    develop.md 不在 store（住 work/）：has_develop 查 work/。history/material 直接由記錄餵。
+    history/material 直接由記錄餵。
     Leaf.dir 指向散檔會在的名目路徑（不存在＝讀檔式讀取者自然回退，材料改走 leaf.material）。
     change 層 union view 逐節建 Leaf 亦走此（正式記錄與 staging overlay 記錄同構）。"""
     section = rec.path
@@ -458,7 +447,6 @@ def leaf_from_record(layout: Layout, rec: SectionRecord) -> Leaf:
         decisions=list(rec.decisions),
         history=list(rec.history),
         has_material=rec.material is not None,
-        has_develop=work_develop(layout, section).is_file(),
         has_history=bool(rec.history),
         material=rec.material,
     )

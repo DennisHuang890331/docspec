@@ -14,10 +14,8 @@ import yaml
 
 from dspx.check import run_check
 from dspx.commands.query import check as check_cmd
-from dspx.commands.corpus import ready as ready_cmd
 from dspx.commands.query import show as show_cmd
 from dspx.commands.query import status as status_cmd
-from dspx.commands.corpus.ready import _graduate
 from dspx.commands.query.status import section_state
 from dspx.engine.layout import Layout
 from dspx.engine.model import (
@@ -82,32 +80,6 @@ def test_status_concept_only_not_waiting_decisions(
     assert row["files"]["decisions"] is False        # d 旗標保留（缺席≠降級）
 
 
-def test_ready_graduates_without_decisions(make_project, write_leaf, monkeypatch, capsys):
-    """concept 完整、develop 榨乾、無 decisions.yaml → 晉升成功、不要求建 entries:[] 容器。"""
-    home = make_project()
-    write_leaf(home, "g/x",
-               concept={"id": "c1", "title": "X", "order": 1, "concept": "real",
-                        "brief": {"audience": "a", "depth": "d", "breadth": "b"}},
-               develop="<!-- drained -->")
-    monkeypatch.chdir(home.parent)
-    assert ready_cmd.run(["g/x"]) == 0
-    assert not (home / "work" / "g" / "x" / "develop.md").exists()
-
-
-def test_ready_missing_concept_still_refused(make_project, monkeypatch, capsys):
-    """缺 concept.yaml 的拒絕維持原樣（concept 無合法空形狀）。"""
-    from dspx.commands.corpus import new as new_cmd
-    home = make_project()
-    monkeypatch.chdir(home.parent)
-    new_cmd.run(["g/a"])                              # 只有 develop.md（work/）
-    assert ready_cmd.run(["g/a"]) == 1
-    # ★store-only：未結晶＝無 store 記錄／無 concept
-    assert "not crystallized" in capsys.readouterr().err
-
-
-# ── Task 1.4：`entries: []` 空殼 ⟺ 缺檔（行為等價）───────────────────────────────
-
-
 def test_empty_entries_behaves_like_missing_decisions(make_project, write_leaf, monkeypatch):
     """`entries: []` 空殼節與無 decisions.yaml 節：model.decisions／status state／ready 結果全等。"""
     home = make_project()
@@ -127,13 +99,9 @@ def test_empty_entries_behaves_like_missing_decisions(make_project, write_leaf, 
 
     # model.decisions 同為空
     assert by["g/a"].decisions == [] == by["g/b"].decisions
-    # status state 同
+    # status state 同（★retire-develop-workbench：ready 指令已廢除，行為等價由 state 判定釘死）
     assert section_state(by["g/a"], schema, check_ok) \
         == section_state(by["g/b"], schema, check_ok)
-    # ready 結果同（ok 與 reasons）
-    ok_a, reasons_a, *_ = _graduate(layout, schema, "g/a")
-    ok_b, reasons_b, *_ = _graduate(layout, schema, "g/b")
-    assert ok_a == ok_b and reasons_a == reasons_b
 
 
 # ── Task 3.2：舊 live 樹 history.yaml 向後相容 ──────────────────────────────────

@@ -6,9 +6,7 @@ import yaml
 
 from dspx.commands.query import check as check_cmd
 from dspx.commands.query import lint as lint_cmd
-from dspx.commands.corpus import new as new_cmd
 from dspx.commands.deliverable import publish as publish_cmd
-from dspx.commands.corpus import ready as ready_cmd
 
 
 def _entries(path):
@@ -61,99 +59,6 @@ def test_instructions_apply_projects_authoring_three_blocks(make_project, write_
     # develop --json：無 authoring（None）
     assert instr_cmd.run(["develop", "a/x", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["authoring"] is None
-
-
-def test_new_scaffolds_develop_only(make_project, monkeypatch):
-    """develop 階段只建 develop.md；concept/decisions 由結晶時才產（不預建空 stub）。"""
-    home = make_project()
-    monkeypatch.chdir(home.parent)
-    assert new_cmd.run(["guide/intro"]) == 0
-    # ★store-only：develop.md 住 work/；concept/decisions 尚未結晶＝無 store 檔
-    assert (home / "work" / "guide" / "intro" / "develop.md").is_file()
-    assert not (home / "corpus" / "guide.yaml").exists()
-
-
-def test_new_then_instructions_on_uncrystallized(make_project, monkeypatch, capsys):
-    """未結晶節（只有 develop.md）也能投影；id/order 由 new 種在 develop.md 註解頭、投影可見
-    （template-slimming：concept/decisions 的 yaml 骨架改由 schema 單一推導，不再有手維護模板檔）。"""
-    import json
-    from dspx.commands.projection import instructions as instr
-    home = make_project()
-    monkeypatch.chdir(home.parent)
-    new_cmd.run(["g/a"])
-    new_cmd.run(["g/b"])
-    capsys.readouterr()
-    assert instr.run(["develop", "g/b", "--json"]) == 0
-    data = json.loads(capsys.readouterr().out)
-    # id/order 種在 develop.md（投影的 reads）——結晶時 copy 進 concept.yaml
-    dev = data["reads"].get("develop", "")
-    assert "sec-" in dev          # new 種的穩定 id
-    assert "order: 2" in dev      # 同層第二個 → order 接龍 2
-    # concept 的可貼骨架＝schema 單一推導（yaml_skeleton），不再來自模板檔
-    concept_w = next(w for w in data["writes"] if w["id"] == "concept")
-    assert concept_w["template"] is None                     # 模板檔已刪
-    assert "concept" in (concept_w.get("yamlSkeleton") or "")  # 骨架由 schema 推導
-
-
-def test_new_seeds_develop_header_with_id_title_order(make_project, monkeypatch):
-    """#5/#6：new 把 id/title/order 種進 develop.md 註解頭（id 持久化、--title 生效）；
-    種子是純註解 → drain_remainder 永不擋畢業。"""
-    home = make_project()
-    monkeypatch.chdir(home.parent)
-    assert new_cmd.run(["demo/intro", "--title", "導言"]) == 0
-    body = (home / "work" / "demo" / "intro" / "develop.md").read_text(encoding="utf-8")
-    assert "sec-" in body                 # 生成的 id 持久化在鷹架裡
-    assert "導言" in body                  # --title 不再是 no-op
-    assert "order: 1" in body
-    assert ready_cmd.drain_remainder(body) == ""   # 種子＝註解，不算實質殘留
-
-    assert new_cmd.run(["demo/guide"]) == 0        # 無 --title → 路徑末段
-    body2 = (home / "work" / "demo" / "guide" / "develop.md").read_text(encoding="utf-8")
-    assert "guide" in body2
-    assert ready_cmd.drain_remainder(body2) == ""
-
-
-def test_new_refuses_overwrite(make_project, monkeypatch):
-    home = make_project()
-    monkeypatch.chdir(home.parent)
-    assert new_cmd.run(["g/a"]) == 0
-    assert new_cmd.run(["g/a"]) == 2
-
-
-def test_ready_graduates_complete_and_drained(make_project, write_leaf, monkeypatch):
-    home = make_project()
-    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "real"},
-               decisions=[{"id": "d1", "kind": "normative", "status": "accepted", "statement": "s"}],
-               develop="<!-- thinking workbench, now drained -->")
-    monkeypatch.chdir(home.parent)
-    assert ready_cmd.run(["g/x"]) == 0
-    assert not (home / "work" / "g" / "x" / "develop.md").exists()  # 刪除＝畢業的持久動作
-
-
-def test_ready_refuses_when_develop_has_content(make_project, write_leaf, monkeypatch):
-    home = make_project()
-    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": "real"},
-               decisions=[{"id": "d1", "kind": "normative", "status": "accepted", "statement": "s"}],
-               develop="## still thinking\nthis paragraph is not yet distributed")
-    monkeypatch.chdir(home.parent)
-    assert ready_cmd.run(["g/x"]) == 1
-    assert (home / "work" / "g" / "x" / "develop.md").is_file()  # 帶內容不准畢業、不刪
-
-
-def test_ready_refuses_incomplete_fields(make_project, write_leaf, monkeypatch):
-    home = make_project()
-    write_leaf(home, "g/x", concept={"id": "c1", "title": "X", "order": 1, "concept": ""},
-               decisions=[{"id": "d1", "kind": "normative", "status": "accepted", "statement": "s"}],
-               develop="")
-    monkeypatch.chdir(home.parent)
-    assert ready_cmd.run(["g/x"]) == 1
-
-
-def test_ready_refuses_uncrystallized(make_project, monkeypatch):
-    home = make_project()
-    monkeypatch.chdir(home.parent)
-    new_cmd.run(["g/a"])                       # 只有 develop.md
-    assert ready_cmd.run(["g/a"]) == 1         # 缺 concept/decisions
 
 
 def test_show_decision_and_concept_payload(make_project, write_leaf, monkeypatch, capsys):
@@ -336,7 +241,8 @@ def test_guide_projects_workflow_and_artifacts(make_project, monkeypatch, capsys
     assert data["workflow"].get("loop")                       # 敘事來自 schema、非 hardcode
     assert len(data["workflow"].get("skills", [])) == 5   # develop/apply/factcheck/publish/release
     ids = {a["id"] for a in data["artifacts"]}
-    assert {"concept", "decisions", "develop"} <= ids         # 涵蓋每個 schema artifact
+    assert {"concept", "decisions", "material"} <= ids        # 涵蓋每個 schema artifact
+    assert "develop" not in ids                               # ★retire-develop-workbench
     concept = next(a for a in data["artifacts"] if a["id"] == "concept")
     # differential-brief contract (contract-slimming): brief and its sub-fields are OPTIONAL
     # (write only the diff from the ancestor chain; root completeness enforced by the hierarchy
@@ -353,8 +259,9 @@ def test_instructions_emits_required_fields(make_project, monkeypatch, capsys):
     from dspx.commands.projection import instructions as instr
     home = make_project()
     monkeypatch.chdir(home.parent)
-    new_cmd.run(["g/a"])
     capsys.readouterr()
+    # g/a 尚未建（put-only 世界無鷹架步）：develop 投影對「還不存在的節」也要給欄位契約，
+    # agent 首寫 put 前才拿得到形狀。
     assert instr.run(["develop", "g/a", "--json"]) == 0
     data = json.loads(capsys.readouterr().out)
     concept_w = next(w for w in data["writes"] if w["id"] == "concept")
@@ -402,25 +309,6 @@ def test_status_concept_and_ready_via_show_and_status(make_project, write_leaf, 
     assert status_cmd.run(["--json"]) == 0
     row = next(r for r in json.loads(capsys.readouterr().out)["sections"] if r["section"] == "g/x")
     assert row["state"] == "ready"
-
-
-def test_status_shows_develop_only_sections(make_project, monkeypatch, capsys):
-    """只有 develop.md（未結晶）的節：status 看得到、標 developing，不可誤報 empty。"""
-    import json
-    from dspx.commands.query import status as status_cmd
-    from dspx.commands.corpus import new as new_cmd
-    home = make_project()
-    monkeypatch.chdir(home.parent)
-    new_cmd.run(["g/intro"])                      # 只建 develop.md、未結晶
-    # text 模式：不說 empty、列出該節並標 developing
-    assert status_cmd.run([]) == 0
-    out = capsys.readouterr().out
-    assert "corpus is empty" not in out.lower()
-    assert "g/intro" in out and "developing" in out
-    # json 模式：含該節、state=developing
-    assert status_cmd.run(["--json"]) == 0
-    rows = json.loads(capsys.readouterr().out)["sections"]
-    assert any(r["section"] == "g/intro" and r["state"] == "developing" for r in rows)
 
 
 def _write_scatter_concept(home, section, data):

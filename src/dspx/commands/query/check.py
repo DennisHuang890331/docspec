@@ -34,10 +34,7 @@ def run(argv: list[str]) -> int:
         return exc.exit_code
 
     if args.article:
-        from dspx.commands.query.status import develop_only_sections
-        known = {lf.article for lf in leaves} | {
-            s.split("/", 1)[0]
-            for s in develop_only_sections(layout, {lf.section for lf in leaves})}
+        known = {lf.article for lf in leaves}
         if args.article not in known:
             sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n")
             return 1

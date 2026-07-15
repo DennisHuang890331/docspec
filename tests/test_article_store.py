@@ -186,7 +186,7 @@ def test_own_axis_v5_backend_neutral():
 
 
 class _DummyLayout:
-    """leaves_from_article 只用到 section_dir / work_develop 的存在性檢查（回不存在路徑）。"""
+    """leaves_from_article 只用到 section_dir（回不存在路徑）。"""
     from pathlib import Path as _P
     planning_home = _P("/__nonexistent__")
 
@@ -233,15 +233,19 @@ def test_migrate_creates_store_deletes_scatter_and_is_reversible(make_project, m
     assert (out / "g" / "rules" / "decisions.yaml").is_file()
 
 
-def test_migrate_moves_develop_to_work(make_project, monkeypatch):
+def test_migrate_refuses_legacy_develop(make_project, monkeypatch, capsys):
+    """★retire-develop-workbench：散檔樹殘留 develop.md → migrate fail-loud 拒遷（不搬不刪——
+    工作台已廢除、store 不承載；留人裁決：put 蒸餾或自行刪除）。原檔逐 byte 存活、store 檔沒寫半套。"""
     home = make_project()
     _wl(home, "g/intro", concept={"id": "c-in", "title": "簡介", "order": 1},
         develop="草稿中的想法\n")
     monkeypatch.chdir(home.parent)
-    assert store_cmd.run(["migrate", "g"]) == 0
-    dev = st.work_develop(Layout(home), "g/intro")
-    assert dev.is_file()
-    assert dev.read_text(encoding="utf-8") == "草稿中的想法\n"
+    assert store_cmd.run(["migrate", "g"]) == 1
+    err = capsys.readouterr().err
+    assert "develop.md" in err and "workbench" in err
+    dev = home / "corpus" / "g" / "intro" / "develop.md"
+    assert dev.read_text(encoding="utf-8") == "草稿中的想法\n"   # 一個 byte 不動
+    assert not (home / "corpus" / "g.yaml").exists()             # store 檔沒寫半套
 
 
 def test_migrate_refuses_unexpected_file(make_project, monkeypatch, capsys):
@@ -383,12 +387,10 @@ def _section_block(text: str, path: str) -> str:
 
 # ── Phase-C 尾巴：生命週期指令 backend-neutral（store 篇也能走）───────────────────
 
-def test_store_new_ready_workbench_lifecycle(make_project, monkeypatch, tmp_path):
-    """store 篇的 develop 工作台 lifecycle：new→work/ 建 develop.md（不進 corpus）→ put concept
-    結晶進 store 記錄 → ready 刪 work/ 的 develop.md。簽章不變、backend 路由。"""
-    from dspx.commands.corpus import new as new_cmd
+def test_store_put_first_write_lifecycle(make_project, monkeypatch, tmp_path):
+    """★retire-develop-workbench：建節唯一入口＝put 首寫（無鷹架步）。首寫 concept 蓋 id/order、
+    記錄直接進 store、不建任何 corpus 散檔／工作台目錄。"""
     from dspx.commands.corpus import put as put_cmd
-    from dspx.commands.corpus import ready as ready_cmd
     home = make_project()
     _wl(home, "g", concept={"id": "c-root", "title": "根", "order": 1,
                             "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
@@ -396,23 +398,17 @@ def test_store_new_ready_workbench_lifecycle(make_project, monkeypatch, tmp_path
     assert store_cmd.run(["migrate", "g"]) == 0
     layout = Layout(home)
 
-    # new g/newsec → develop.md 落在 work/（不建 corpus 散檔、不觸發 both-backend）
-    assert new_cmd.run(["g/newsec"]) == 0
-    assert st.work_develop(layout, "g/newsec").is_file()
-    assert not (home / "corpus" / "g" / "newsec").exists()
-    assert st.backend_of(layout, "g") == "store"
-
-    # 結晶：put concept（store-aware、無 --change → 進正式 store 記錄）
+    # put 首寫 concept（無鷹架前置）→ 節即存在、id/order 引擎蓋章
     cpt = tmp_path / "c.yaml"
     cpt.write_text("title: 新節\nstatus: draft\nconcept: 一句話說明\n", encoding="utf-8")
     assert put_cmd.run(["g/newsec", "concept", str(cpt)]) == 0
     art = st.load_article(st.store_path(layout, "g"))
     rec = art.record_by_path("g/newsec")
     assert rec is not None and rec.concept and rec.concept.get("id")
-
-    # ready → 完整性綠 + 榨乾 → 刪 work/ 的 develop.md（畢業）
-    assert ready_cmd.run(["g/newsec"]) == 0
-    assert not st.work_develop(layout, "g/newsec").is_file()
+    assert rec.concept.get("order") is not None
+    assert not (home / "corpus" / "g" / "newsec").exists()   # 零散檔
+    assert not (home / "work").exists()                       # 零工作台目錄
+    assert st.backend_of(layout, "g") == "store"
 
 
 def test_store_mv_repoints_records_sidesections_survive(make_project, monkeypatch, capsys):

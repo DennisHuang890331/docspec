@@ -24,7 +24,7 @@ from pathlib import Path
 import yaml
 
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
-from dspx.commands.corpus.new import validate_section_path
+from dspx.commands.corpus.put import validate_section_path
 
 NAME = "mv"
 HELP = ("engine transaction: rename/relocate a leaf/group folder (or a docs/assets image) and "

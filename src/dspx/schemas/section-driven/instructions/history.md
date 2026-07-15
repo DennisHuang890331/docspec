@@ -18,4 +18,4 @@
 - 整節退場**不寫 history.md**（細節＝archive 資料夾本身）。
 - 查詢：`docspec status --retired`（摘要清單，含 archive link 是否解析得到）、`docspec show <id>`（單筆下鑽）。
 
-draft 不讀；develop（re-open 回顧「為何丟」）、factcheck（判脈絡）讀。
+draft 不讀；develop（回顧「為何丟」）、factcheck（判脈絡）讀。

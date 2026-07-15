@@ -23,7 +23,7 @@ def _fill_template(template: str | None, section: str, layout) -> str | None:
         order = 1 + sum(
             1 for s in parent.iterdir()
             if s.is_dir() and s != layout.section_dir(section)
-            and ((s / "develop.md").is_file() or (s / "concept.yaml").is_file())
+            and (s / "concept.yaml").is_file()
         )
     for k, v in {"id": sid, "title": title, "order": str(order)}.items():
         template = template.replace("{" + k + "}", v)
@@ -237,15 +237,16 @@ def run(argv: list[str]) -> int:
     except BootstrapError as exc:
         return exc.exit_code
 
-    # develop-only (not-yet-crystallized) sections must also project — develop needs the concept/decisions
-    # templates at crystallization. ★store-only：develop.md 住 work/、尚無 store 記錄 → 建 concept=None 樁 Leaf。
-    if not any(lf.section == args.section for lf in leaves):
-        from dspx.engine import store as _store
-        if _store.work_develop(layout, args.section).is_file():
+    # not-yet-created sections must also project for the develop skill — the agent needs the
+    # concept/decisions templates + field contract BEFORE the first `put` (put 是唯一建節入口，
+    # 首寫前的形狀投影只能來自這裡)。先驗路徑段安全，別為非法路徑投影。
+    if args.skill == "develop" and not any(lf.section == args.section for lf in leaves):
+        from dspx.commands.corpus.put import validate_section_path
+        if validate_section_path(args.section) is None:
             from dspx.engine.model import Leaf
             leaves = leaves + [Leaf(section=args.section,
                                     dir=layout.section_dir(args.section),
-                                    concept=None, has_develop=True)]
+                                    concept=None)]
 
     try:
         proj = project(layout, schema, args.skill, args.section, leaves, config)

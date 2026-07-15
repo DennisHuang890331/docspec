@@ -14,23 +14,23 @@ metadata:
 
 Build and refine the outline — structure and briefs only; the words come later in `apply`. Early you open the space up (surface options, name tensions); then you close it down (settle the axis, prune to MECE, commit the skeleton). Knowing which way to push at each moment is the whole job.
 
-**Input**: an article/section to start or restructure. New = drill into an empty tree; revise = re-drill the affected subtree. `docspec guide` carries the file model, crystallization, ready/retire, and filing rules — projected live; don't restate them from memory.
+**Input**: an article/section to start or restructure. New = drill into an empty tree; revise = re-drill the affected subtree. `docspec guide` carries the file model, crystallization, retire, and filing rules — projected live; don't restate them from memory.
 
 **Steps**
 
-1. **Orient** — `docspec instructions develop <section>` (the forest map, the roadmap backlog to check before starting, the project purpose) and `docspec guide`. Engine commands (`new` / `render` / `ready` / `check` / `status` / `stale` / `redraft` / `mv` / `put` / `change …`) are your internal machinery — run them autonomously, never ask "should I run docspec X?" and never narrate invocations; the human's interface is intent-in / deliverable-out.
+1. **Orient** — `docspec instructions develop <section>` (the forest map, the roadmap backlog to check before starting, the project purpose) and `docspec guide`. Engine commands (`put` / `render` / `check` / `status` / `stale` / `mv` / `change …`) are your internal machinery — run them autonomously, never ask "should I run docspec X?" and never narrate invocations; the human's interface is intent-in / deliverable-out.
 
 2. **Interrogate → WAIT** — ask who reads this and when, how deep (gate or teach), the one takeaway, and what is explicitly OUT of scope. Get answers before descending; never assume audience or scope — the cheapest fixes now, the most expensive after prose exists. (Running end-to-end without pausing is a TEST-ONLY mode.)
 
 3. **Name the axis, grow a MECE skeleton** — say the ORGANIZING AXIS out loud and let the human correct it (often NOT topic: contradiction-tracking, a timeline, claim→evidence, a mandated clause order). Frame the whole with an orienting OVERVIEW (root or leading scope section) that states what the document defines, its boundary, and its audience, anchored on the subject's core framing idea — NOT a prose table of contents. Walk the tree once per reader perspective (operator / auditor / newcomer / integrator) for coverage; a real gap you can't fill now becomes a roadmap `gap` entry via `docspec roadmap add --kind gap --title "…" --target <section>`.
 
-4. **Name section folders in the deliverable language** — `docspec new <article>/<chapter name>` (a Chinese document gets `適用範圍/`, not an English slug). NEVER prefix a chapter number — ordering's single source is the `order` field and render derives the outline number (`concept.title` carries the bare name). To INSERT between `order: 2` and `3`, give `order: 2.5` (order is a number) — no sibling is renumbered. Renames/moves go through `docspec mv` (atomic); migrate a slug tree with `docspec store tidy`.
+4. **Name sections in the deliverable language** — a section EXISTS from its first `docspec put <article>/<chapter name> concept` (a Chinese document gets `適用範圍`, not an English slug; there is no scaffold step — put stamps id/order on first write). NEVER prefix a chapter number — ordering's single source is the `order` field and render derives the outline number (`concept.title` carries the bare name). To INSERT between `order: 2` and `3`, give `order: 2.5` (order is a number) — no sibling is renumbered. Renames/moves go through `docspec mv` (atomic); migrate a slug tree with `docspec store tidy`.
 
-5. **Descend, crystallizing section-by-section** — set each section's `brief` (audience / depth / breadth / forbidden), writing ONLY the field that differs from the ancestor chain; always fill `forbidden`. Write each section's one-line `concept` as its ROLE in the argument (each conclusion the next section's premise), then split MECE or call it a leaf. Note when content should be a table, list, or **diagram** (a drawio image authored by a delegated `dspx-diagram` subagent — never TikZ/mermaid). Crystallize each part with `docspec put <section> concept|decisions|material` on the human's nod (the review checkpoint — present children as a batch), then graduate with `docspec ready <section>`.
+5. **Descend, crystallizing section-by-section** — set each section's `brief` (audience / depth / breadth / forbidden), writing ONLY the field that differs from the ancestor chain; always fill `forbidden`. Write each section's one-line `concept` as its ROLE in the argument (each conclusion the next section's premise), then split MECE or call it a leaf. Note when content should be a table, list, or **diagram** (a drawio image authored by a delegated `dspx-diagram` subagent — never TikZ/mermaid). Crystallize each part with `docspec put <section> concept|decisions|material` on the human's nod (the review checkpoint — present children as a batch); `docspec status` shows a section as developing until its required fields are complete.
 
 6. **Open a change when the work touches a normative ruling or spans sections** — `docspec change new <id> --seed <dec-id> --publish advisory|release-bound`, AT THAT MOMENT (mid-develop, not an upfront ceremony); the enlistment line is "touches a ruling?", not section count. Edits then land in `changes/<id>/staging/`; `docspec change status <id>` DERIVES per-target acceptance (never hand-check a task); the human's one gate is `docspec change archive <id>`. Cross-section reasoning lives in the change's `notes.md`, never in the blind-render aperture.
 
-**Reversal is normal** — re-open a settled section with `docspec new <section> --reopen` (rebuilds `develop.md` from its `concept.yaml`; reason lands in `develop.md` as you think, not after). A cross-section restructure reopens the ROOT's `develop.md` as the single central workbench; register it via `docspec roadmap add --kind task --title "…" --target <root-section>` (roadmap is engine-written now; never hand-edit the roadmap store).
+**Reversal is normal** — re-think a settled section by putting an updated `concept`/`decisions` directly (inside a change when the official face is frozen; a superseded ruling STAYS in decisions marked `status: superseded`). Durable discussion lives in a change's `notes.md` — the change archives with its notes, so the record survives. Register a cross-section restructure via `docspec roadmap add --kind task --title "…" --target <root-section>` (roadmap is engine-written; never hand-edit the roadmap store).
 
 **Pause if:**
 - Audience or scope is unstated → ask and wait; don't assume.
@@ -43,7 +43,7 @@ Build and refine the outline — structure and briefs only; the words come later
 ## develop — <article>
 Axis: <the organizing axis>
 Skeleton (MECE; overlap/gap test): <tree + result>
-Crystallized this session: <sections> → docspec ready
+Crystallized this session: <sections> (via docspec put)
 Backlog touched: <roadmap gap/task entries (via docspec roadmap add)>
 Open questions for you: <the framing calls still owed>
 ```

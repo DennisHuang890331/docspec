@@ -1,8 +1,8 @@
 """共用測試夾具（section 模型）。
 
 ★store-only-corpus（階段 3）：`write_leaf`／`write_group` 一律建 **store corpus**——每篇語料
-buffer 起來，每次寫入即 materialize 成 `corpus/<article>.yaml`（引擎獨占單檔 store），develop.md
-落 `work/<section>/develop.md`。**翻一次工廠、個測不動**：既有測試對 store 跑，一次跑就知有沒有漏。
+buffer 起來，每次寫入即 materialize 成 `corpus/<article>.yaml`（引擎獨占單檔 store）。
+**翻一次工廠、個測不動**：既有測試對 store 跑，一次跑就知有沒有漏。
 """
 
 from __future__ import annotations
@@ -60,9 +60,8 @@ def _corpus_store():
 
 @pytest.fixture
 def write_leaf(_corpus_store):
-    """在 store 建一個末節記錄（concept 必給，其餘可選）。★store-only：真相進 `corpus/<article>.yaml`，
-    develop.md 落 `work/<section>/develop.md`（結晶前工作台）。回傳該節名目資料夾路徑（相容既有測試；
-    store 世界該夾不含實體檔）。
+    """在 store 建一個末節記錄（concept 必給，其餘可選）。★store-only：真相進 `corpus/<article>.yaml`。
+    回傳該節名目資料夾路徑（相容既有測試；store 世界該夾不含實體檔）。
 
     附掛兩個 helper（省去個測改 signature）：
     - `write_leaf.group(home, section, title=…, order=…, numbering=…)`＝建 group 記錄（取代舊
@@ -79,8 +78,7 @@ def write_leaf(_corpus_store):
     def _write(home: Path, section: str, *, concept: dict,
                decisions: list[dict] | None = None,
                history: list[dict] | None = None,
-               material: str | None = None,
-               develop: str | None = None) -> Path:
+               material: str | None = None) -> Path:
         # 補齊 schema 必填欄預設，讓最小 fixture 也通過 check 的欄位驗證
         full = {"status": "draft", "concept": section, "brief": {}, **concept}
         rec = _store.SectionRecord(
@@ -89,12 +87,6 @@ def write_leaf(_corpus_store):
             history=list(history) if history is not None else [],
             material=material)
         _corpus_store(home, section, rec)
-        if develop is not None:
-            wd = home / "work"
-            for part in section.split("/"):
-                wd = wd / part
-            wd.mkdir(parents=True, exist_ok=True)
-            (wd / "develop.md").write_text(develop, encoding="utf-8", newline="\n")
         leaf = home / "corpus"
         for part in section.split("/"):
             leaf = leaf / part

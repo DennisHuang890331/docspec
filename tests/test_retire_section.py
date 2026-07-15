@@ -75,15 +75,3 @@ def test_retire_section_rejects_unknown(make_project, write_leaf, monkeypatch):
 #   非硬綁；舊的破折號雙向 binding check 在 P2 退場 redesign 移除。）
 
 
-def test_status_flags_leftover_develop_as_developing(make_project, write_leaf, monkeypatch, capsys):
-    home = make_project()
-    # 已結晶（concept+decisions）但 develop.md 還在 → developing，不是 ready
-    write_leaf(home, "a/x",
-               concept={"id": "c1", "title": "X", "order": 1},
-               decisions=[{"id": "d1", "status": "accepted", "statement": "s"}],
-               develop="還在討論")
-    monkeypatch.chdir(home.parent)
-    assert status_cmd.run(["--json"]) == 0
-    data = json.loads(capsys.readouterr().out)
-    row = next(r for r in data["sections"] if r["section"] == "a/x")
-    assert row["state"] == "developing"

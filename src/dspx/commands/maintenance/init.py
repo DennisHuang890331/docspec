@@ -342,7 +342,7 @@ def run(argv: list[str]) -> int:
     }
     for t in tools:
         print(f"    - {t:<11} → {_dest[t]}")
-    print("\nNext: docspec new <article> to create the article root section (develop will ask you about audience/scope).")
+    print("\nNext: crystallize the article root with `docspec put <article> concept` (develop will ask you about audience/scope).")
 
     # 被動、離線、可關的排版環境提示：tex.lock 缺或與隨包期望錯位 → 叫跑 doctor。
     # 不連網、不下載；只讀本機 tex.lock。

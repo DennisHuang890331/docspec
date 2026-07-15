@@ -28,7 +28,7 @@ HELP = "one-file-per-article store maintenance: dump / load / fsck / migrate (pa
 
 # migrate/dump 認得的每節檔（其餘檔一律 fail-loud，永不靜默刪資料）。
 _FOLD_FILES = ("concept.yaml", "decisions.yaml", "material.md", "history.yaml", "group.yaml")
-_MOVE_TO_WORK = ("develop.md", "history.md")
+_LEGACY_WORKFILES = ("develop.md", "history.md")   # 前世工作台/退場散文：migrate fail-loud、不搬不刪
 # doc-root 治理檔（散檔世界的 audit/roadmap）：migrate 收編成 sibling 密封檔、非拒絕。
 _GOVERNANCE_FILES = ("audit.yaml", "roadmap.yaml", "roadmap-archive.yaml")
 
@@ -108,12 +108,16 @@ def _parity_check(layout: Layout, article: str, schema) -> tuple[st.Article, lis
 # ── migrate ───────────────────────────────────────────────────────────
 
 def _guard_scatter_files(layout: Layout, article: str) -> list[str]:
-    """掃該篇散檔樹，回「非預期檔」清單（migrate 遇任一非預期檔 fail-loud，永不靜默刪資料）。"""
+    """掃該篇散檔樹，回「非預期檔」清單（migrate 遇任一非預期檔 fail-loud，永不靜默刪資料）。
+
+    develop.md / history.md（前世工作台/退場散文）也算非預期：work/ 工作台已廢除
+    （retire-develop-workbench），store 不承載它們、migrate 也沒有安全去處——留給人裁決
+    （蒸餾進 store 用 put、或自行刪除）後再遷，永不靜默刪。"""
     art_dir = layout.section_dir(article)
     unexpected: list[str] = []
     if not art_dir.is_dir():
         return unexpected
-    allowed = set(_FOLD_FILES) | set(_MOVE_TO_WORK)
+    allowed = set(_FOLD_FILES)
     for p in sorted(art_dir.rglob("*")):
         if layout.is_archived_path(p):
             continue
@@ -125,6 +129,11 @@ def _guard_scatter_files(layout: Layout, article: str) -> list[str]:
         # 治理檔（audit/roadmap/roadmap-archive.yaml）只在文章**根層**放行（fold 只收根層那份）；
         # 巢狀誤放＝unexpected fail-loud，永不靜默刪（#9：guard 的唯一職責就是不靜默刪資料）。
         if p.name in _GOVERNANCE_FILES and p.parent == art_dir:
+            continue
+        if p.name in _LEGACY_WORKFILES:
+            unexpected.append(f"{p.relative_to(layout.corpus_dir).as_posix()} (legacy workbench/"
+                              "prose file — the develop workbench is retired; distill it into the "
+                              "store with `docspec put`, or delete it yourself, then re-run migrate)")
             continue
         if p.name not in allowed:
             unexpected.append(p.relative_to(layout.corpus_dir).as_posix())
@@ -162,34 +171,17 @@ def _migrate_one(layout: Layout, article: str, schema) -> int:
             sys.stderr.write(f"    ✗ {m}\n")
         return 1
 
-    # 平價閘過關 → 寫 store 檔、搬 develop/history 散文出 store、刪散檔樹。
+    # 平價閘過關 → 寫 store 檔、收編治理散檔、刪散檔樹（工作台散檔在 guard 已 fail-loud 擋下）。
     st.save_article(layout, article_obj, schema)
-    moved = _relocate_workfiles(layout, article)
     folded_gov = _fold_governance(layout, article)
     _delete_scatter_tree(layout, article)
     print(f"store migrate: {article} -> corpus/{article}.yaml "
           f"({len(article_obj.leaf_records())} leaves, {len(article_obj.group_records())} groups; "
           f"parity gate passed).")
-    if moved:
-        print(f"  moved {moved} workbench/prose file(s) to docspec/work/{article}/…")
+    if folded_gov:
+        print(f"  folded {folded_gov} governance file(s) into sealed sibling/forest stores")
     print(f"  reverse anytime: docspec store dump {article} <DIR>  then delete corpus/{article}.yaml")
     return 0
-
-
-def _relocate_workfiles(layout: Layout, article: str) -> int:
-    """把 develop.md / history.md（非 store 承載）搬到 work/ 鏡像樹，保全不刪。"""
-    art_dir = layout.section_dir(article)
-    moved = 0
-    for name in _MOVE_TO_WORK:
-        for p in sorted(art_dir.rglob(name)):
-            if layout.is_archived_path(p):
-                continue
-            section = layout.section_id(p.parent)
-            dst = st.work_dir(layout, section) / name
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(p), str(dst))
-            moved += 1
-    return moved
 
 
 def _fold_governance(layout: Layout, article: str) -> int:

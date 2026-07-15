@@ -31,7 +31,7 @@ import sys
 
 from dspx.commands.corpus import mv as mv_cmd
 from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
-from dspx.commands.corpus.new import _ILLEGAL_CHARS, _segment_error
+from dspx.commands.corpus.put import _ILLEGAL_CHARS, _segment_error
 from dspx.engine.lint import _TITLE_ARABIC_PREFIX_RE, brief_dup_fields
 
 NAME = "tidy"

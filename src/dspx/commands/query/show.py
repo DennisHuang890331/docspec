@@ -88,16 +88,12 @@ def _find_section(leaves: list, layout, arg: str) -> dict | None:
     """section 路徑模式（id 查找 miss 後的第二種地址形狀）：回該節身份 payload。
 
     命中條件＝引數含 `/`，或指到既有非封存 corpus 節資料夾。leaf → conceptId/title/status
-    （＝concept.status，非 sync 狀態）/order＋決策 id（statement 截 80 字）＋history id；
-    develop-only（尚無 concept.yaml）→ conceptId: null＋note。"""
+    （＝concept.status，非 sync 狀態）/order＋決策 id（statement 截 80 字）＋history id。"""
     section = arg.strip("/")
     if not section:
         return None
-    # ★store-only：develop-only（未結晶）節的 develop.md 住 work/（非 corpus 資料夾）。
-    from dspx.engine import store as _store
-    develop_only = _store.work_develop(layout, section).is_file()
     section_dir = layout.section_dir(section)
-    dir_hit = develop_only or (section_dir.is_dir() and not layout.is_archived_path(section_dir))
+    dir_hit = section_dir.is_dir() and not layout.is_archived_path(section_dir)
     if "/" not in arg and not dir_hit:
         return None
     for leaf in leaves:
@@ -112,9 +108,6 @@ def _find_section(leaves: list, layout, arg: str) -> dict | None:
                               for e in leaf.decisions],
                 "history": [{"id": e.get("id"), "kind": e.get("kind"),
                              "status": e.get("status")} for e in leaf.history]}
-    if dir_hit:
-        return {"kind": "section", "section": section, "conceptId": None,
-                "note": "not yet crystallized (develop-only section: no concept.yaml yet)"}
     return None
 
 

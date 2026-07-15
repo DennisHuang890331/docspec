@@ -27,13 +27,10 @@ HELP = "section structure overview: per section files present / writable / synce
 def section_state(leaf: Leaf, schema: Schema, check_ok: bool) -> str:
     """每節狀態（status 與 list 共用）。
     ready 需「concept 齊、欄位完整（per-section run_file_check）、全專案 check 綠」；
-    develop.md 還在 or 必填未齊 → developing（不擋寫、draft 不選）。
-    decisions.yaml 缺席＝合法空（該節無自有裁決）＝不降級（contract-slimming D2）。"""
-    # backend-neutral：concept 存在＝模型有 concept（store leaf 無實體 concept.yaml，散檔 leaf
-    # 由 leaf_dirs 保證有）；develop 存在＝leaf.has_develop（散檔在 leaf.dir、store 在 work/）。
+    必填未齊 → developing（不擋寫）。
+    decisions 缺席＝合法空（該節無自有裁決）＝不降級（contract-slimming D2）。"""
+    # backend-neutral：concept 存在＝模型有 concept（store leaf 無實體 concept.yaml）。
     has_concept = leaf.concept is not None
-    if leaf.has_develop:
-        return "developing"
     if not has_concept:
         return "waiting(missing:concept)"
     if run_file_check(leaf, schema):
@@ -48,20 +45,6 @@ def _docs_hashes(layout: Layout, article: str) -> dict[str, str]:
     `docs/<article>/.sections.yaml`；舊交付物 fallback 讀 `_latest.md` frontmatter（ISSUE-3）。"""
     from dspx.engine.render import read_ledger
     return read_ledger(layout, article)
-
-
-def develop_only_sections(layout: Layout, leaf_sections: set[str]) -> list[str]:
-    """已建 `develop.md` 但尚未結晶成 concept（＝非 leaf）的章節 id；排序、排除已是 leaf 者。
-    ★store-only：develop.md 住 `docspec/work/<section>/`（結晶前工作台，不進 store），此處掃 work/。
-    `status` 與 `list` 共用此 model-liveness 判準——否則 develop-only 節在 status 可見、在 list 卻消失。"""
-    out: list[str] = []
-    work_root = layout.planning_home / "work"
-    if work_root.is_dir():
-        for dev in sorted(work_root.rglob("develop.md")):
-            sec = dev.parent.relative_to(work_root).as_posix()
-            if sec and sec not in leaf_sections:
-                out.append(sec)
-    return sorted(out)
 
 
 # style 子軸 → 對人輸出的載體名（診斷指名哪個 doctrine 載體動了；標籤仍統一 stale-style）
@@ -147,7 +130,6 @@ def _leaf_row(layout: Layout, leaf: Leaf, schema: Schema, check_ok: bool,
             "concept": has_concept,
             "decisions": has_decisions,
             "material": leaf.has_material,
-            "develop": leaf.has_develop,
             "history": leaf.has_history,
             "draft": recorded is not None,
         },
@@ -349,9 +331,7 @@ def run(argv: list[str]) -> int:
         return exc.exit_code
 
     if args.article:
-        known = {lf.article for lf in leaves} | {
-            s.split("/", 1)[0]
-            for s in develop_only_sections(layout, {lf.section for lf in leaves})}
+        known = {lf.article for lf in leaves}
         if args.article not in known:
             hint = ("  (that looks like a section path — did you mean "
                     f"`docspec status --section {args.article}`?)\n") if "/" in args.article else ""
@@ -396,21 +376,6 @@ def run(argv: list[str]) -> int:
         row["drifted"] = leaf.section in drift_by_article[leaf.article]
         rows.append(row)
 
-    # develop-only 章節（已建 develop.md、尚未結晶成 concept/decisions）——讓它們可見且不誤報 ready
-    leaf_sections = {lf.section for lf in leaves}
-    for sec in develop_only_sections(layout, leaf_sections):
-        if args.article and sec.split("/", 1)[0] != args.article:
-            continue
-        if args.section and sec != args.section:
-            continue
-        rows.append({
-            "section": sec, "state": "developing", "sync": "uncrystallized",
-            "files": {"concept": False, "decisions": False,
-                      "material": False,   # ★store-only：develop-only 尚無 store 記錄/material
-                      "develop": True, "history": False, "draft": False},
-            "drifted": False,
-        })
-
     needs_migration_articles = sorted(a for a, m in migration_by_article.items() if m)
 
     # 分組節點列（吸收原 `docspec list` 唯一多出的能力）：concept-less 的 group 目錄，
@@ -435,7 +400,7 @@ def run(argv: list[str]) -> int:
         return 0
 
     if not rows:
-        print("corpus is empty (no leaf sections yet). Use docspec new <section> to create the first one.")
+        print("corpus is empty (no leaf sections yet). A section exists from its first `docspec put <section> concept`.")
         return 0
 
     _print_active_changes_overview(layout, schema)
@@ -448,7 +413,6 @@ def run(argv: list[str]) -> int:
             "c" if f["concept"] else "-",
             "d" if f["decisions"] else "-",
             "m" if f["material"] else "-",
-            "v" if f["develop"] else "-",
             "h" if f["history"] else "-",
         ])
         drift = " ✎hand-edited(docspec diff)" if r.get("drifted") else ""
@@ -472,7 +436,7 @@ def run(argv: list[str]) -> int:
         for g in group_rows:
             order = "" if g["order"] is None else f"  order={g['order']}"
             print(f"    [group] {g['section']}/ — {g['title']}{order}")
-    print("\n  flags: c=concept d=decisions m=material v=develop h=history")
+    print("\n  flags: c=concept d=decisions m=material h=history")
     print("  (sync is state; the single apply skill routes its own mode from it — "
           "docspec instructions apply <section> projects the mode + verb)")
     return 0

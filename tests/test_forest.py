@@ -170,18 +170,19 @@ def test_governed_by_adds_no_semantic_gate(make_project, write_leaf, monkeypatch
     res = run_check(_leaves(home), load_schema())
     assert res.ok is True      # 語義牴觸不擋＝引擎不判語義
 
-    # 且能畢業（ready）：給可榨乾的 develop + 完整 yaml
+    # 且 state 可達 ready（★retire-develop-workbench：ready 指令廢除、state 純由完整性計算）
     write_leaf(home, "t2", concept={"id": "c-t2", "title": "T2", "order": 2,
                                     "status": "draft",
                                     "concept": "一律使用英制單位（直接牴觸 c-t1）",
                                     "brief": full_brief, "governed-by": ["c-t1"]},
                decisions=[{"id": "d-t2", "kind": "normative", "status": "accepted",
-                           "statement": "用英制"}],
-               develop="<!-- drained -->")
+                           "statement": "用英制"}])
     monkeypatch.chdir(home.parent)
-    from dspx.commands.corpus import ready as ready_cmd
-    assert ready_cmd.run(["t2"]) == 0
-    assert not (home / "work" / "t2" / "develop.md").exists()
+    from dspx.commands.query.status import section_state
+    leaves = _leaves(home)
+    by = {lf.section: lf for lf in leaves}
+    check_ok = run_check(leaves, load_schema(), Layout(home)).ok
+    assert section_state(by["t2"], load_schema(), check_ok) == "ready"
 
 
 # ── change `multi-document-governance-robustness`：治理感知 staleness + 守門 + 投影 ──

@@ -11,7 +11,8 @@ def test_load_builtin_section_driven():
     schema = load_schema()  # 預設 section-driven
     assert schema.name == "section-driven"
     ids = {a.id for a in schema.artifacts}
-    assert ids == {"concept", "decisions", "material", "develop", "history", "history-md"}
+    # ★retire-develop-workbench：develop artifact 已廢除
+    assert ids == {"concept", "decisions", "material", "history", "history-md"}
 
 
 def test_artifact_kinds_and_aperture():
@@ -21,10 +22,8 @@ def test_artifact_kinds_and_aperture():
     assert concept.aperture.projects_into == "docs"
     assert "develop" in concept.aperture.write
 
-    develop = schema.by_id("develop")
-    # develop.md 只有 develop skill 可讀（aperture 防漏）
-    assert develop.aperture.read == ("develop",)
-    assert develop.aperture.projects_into is None
+    # ★retire-develop-workbench：develop artifact 不存在（工作台廢除）
+    assert schema.by_id("develop") is None
 
 
 def test_skills_table_present():

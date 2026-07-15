@@ -35,7 +35,7 @@ HELP = "retire an entire section (including children) to corpus/_archive/; recor
 
 
 def _section_id_for_path(section: str) -> str:
-    """develop-only 節退場用路徑指紋（同 new 規則）；leaf 有 concept.id 時優先用它（見呼叫端）。"""
+    """路徑指紋 fallback（同 put 首寫的 _stable_id 規則）；leaf 有 concept.id 時優先用它（見呼叫端）。"""
     return "sec-" + hashlib.sha1(section.encode("utf-8")).hexdigest()[:8]
 
 
@@ -279,7 +279,6 @@ def run(argv: list[str]) -> int:
     if not _store.article_has_store(layout, layout.article_of(section)):
         sys.stderr.write(
             f"docspec: section \"{section}\" is not in a store (corpus/{layout.article_of(section)}"
-            ".yaml not found). retire operates on crystallized store sections; an uncrystallized "
-            "develop-only section is discarded by deleting its work/ develop.md.\n")
+            ".yaml not found). retire operates on store sections.\n")
         return 1
     return _retire_store(layout, schema, section, args)

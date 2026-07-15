@@ -16,13 +16,13 @@ description: >
 projection:
   produces: docs/<article>/_latest
   driven-by: publish
-  reads: [concept, decisions, material]   # develop / history never enter
+  reads: [concept, decisions, material]   # history never enters
 
 # skills × aperture (who reads / who writes; the hard projection whitelist of the instructions command)
 skills:
   develop:
-    reads:  [concept, decisions, material, develop, history, history-md]
-    writes: [concept, decisions, material, develop, history, history-md]
+    reads:  [concept, decisions, material, history, history-md]
+    writes: [concept, decisions, material, history, history-md]
   apply:
     # single prose-to-source alignment skill (the former draft + edit), two modes:
     #   rewrite (blind-render from the committed layer) + align (copy-prep / staleness alignment on docs).
@@ -30,7 +30,7 @@ skills:
     reads:  [concept, decisions, material, docs]
     writes: [docs]
   factcheck:
-    reads:  [concept, decisions, material, history, history-md, docs]   # NOT develop.md (live scratch; gone by ready/apply)
+    reads:  [concept, decisions, material, history, history-md, docs]
     writes: []
   publish:
     reads:  [concept, decisions, material]
@@ -50,48 +50,42 @@ workflow:
     New = drill into an empty tree; revise = re-drill the affected subtree; same flow. docs/<article>/_latest is the projected deliverable.
   skills:
     - id: develop
-      summary: Developmental editor. Think freely in develop.md, then crystallize into concept/decisions/material; a superseded decision stays marked in its decisions.yaml, a whole obsolete section retires via docspec retire.
+      summary: Developmental editor. Think, then crystallize into concept/decisions/material via docspec put (a section EXISTS from its first put — there is no scaffold step); a superseded decision stays marked in its decisions.yaml, a whole obsolete section retires via docspec retire.
       steps:
         - Read the forest map + roadmap first (docspec instructions develop <section>).
         - >-
-          Name section folders (docspec new) with the chapter name in the DELIVERABLE language — the
-          folder name is what a human sees browsing corpus/ (a Chinese document gets 適用範圍/, not an
-          English slug). NEVER prefix a chapter number (1-適用範圍/): ordering's only source of truth is
-          the order field (concept.yaml / group.yaml) and the outline NUMBER is derived by render from
-          order + tree position (concept.title carries the BARE name — no 6./11、 prefix). A numbered
-          folder name is a second, drifting source that every reorder would force a rename to fix.
-          Renames/moves are now safe — they go through `docspec mv` (atomic: rewrites the path-keyed
-          prose markers + audit/roadmap targets, self-checks, rolls back on failure) — but don't create
-          a numbered name that needs one. Applies to NEW sections; existing slug-named trees stay legal
-          (migrate them with `docspec tidy`, which renames folders to the delivery-language title via mv).
-          To INSERT a section between order: 2 and order: 3, give it order: 2.5 (order is a number, not
-          an integer) — render derives the outline number, so no sibling's order is touched; reserve
-          integer re-spacing for a genuine large restructure. Renumbering a run of siblings by hand just
-          to slot one in is exactly the mechanical churn the derived-numbering model exists to kill.
-        - Think in develop.md ONLY; the other four files do not exist yet.
+          Name sections (created at their first `docspec put <section> concept`) with the chapter name
+          in the DELIVERABLE language — the section path is what a human sees (a Chinese document gets
+          適用範圍, not an English slug). NEVER prefix a chapter number (1-適用範圍): ordering's only
+          source of truth is the order field (concept / group.yaml) and the outline NUMBER is derived
+          by render from order + tree position (concept.title carries the BARE name — no 6./11、
+          prefix). A numbered name is a second, drifting source that every reorder would force a rename
+          to fix. Renames/moves are safe — they go through `docspec mv` (atomic: rewrites the
+          path-keyed prose markers + audit/roadmap targets, self-checks, rolls back on failure) — but
+          don't create a numbered name that needs one. Applies to NEW sections; existing slug-named
+          trees stay legal (migrate them with `docspec tidy`, which renames to the delivery-language
+          title via mv). To INSERT a section between order: 2 and order: 3, give it order: 2.5 (order
+          is a number, not an integer) — render derives the outline number, so no sibling's order is
+          touched; reserve integer re-spacing for a genuine large restructure.
         - >-
-          Reasoning lands AS IT HAPPENS — a long discussion or a reversal is written into develop.md
-          while you think, not reconstructed after the fact. A section already crystallized (its
-          develop.md was drained + deleted by ready) has no scratch home again until you reopen one:
-          docspec new <section> --reopen rebuilds develop.md from the schema template (id/title/order
-          read from the existing concept.yaml, never recomputed). A cross-section restructuring reopens
-          the ROOT section's develop.md as the central workbench, and at crystallization the same
-          four-question triage (scope→concept / rulings→decisions / facts→material / rejected→history)
-          distributes each part to the section it belongs in; register the restructuring as a roadmap
-          `doing` entry, and the existing roadmap lint (doing without a develop.md) becomes the
-          deterministic "this reasoning has no home yet" reminder — no new rule.
+          Think BEFORE crystallizing — in your working context, not in a scratch file. Durable
+          discussion has ONE home: a change container's notes.md (open `docspec change new` the moment
+          the work touches a normative ruling or spans sections — the change is archived with its
+          notes, so the discussion record survives). Genuine throwaway reasoning needs no file.
         - >-
           Crystallize via four-question triage → scope→concept / rulings→decisions / facts→material /
-          rejected→recorded; write each part with docspec put <section> <artifact> (engine-write). The
-          leaf contract is CONCEPT-REQUIRED, the rest ON-DEMAND: build decisions.yaml
-          ONLY when this section owns a normative ruling of its own — no ruling ⇒ no decisions.yaml (never a
+          rejected→recorded; write each part with docspec put <section> <artifact> (the single write
+          gate — the first concept put creates the section and stamps id/order). The leaf contract is
+          CONCEPT-REQUIRED, the rest ON-DEMAND: build decisions
+          ONLY when this section owns a normative ruling of its own — no ruling ⇒ no decisions (never a
           fabricated empty `entries: []`; a pure-overview leaf that only realizes rulings owned elsewhere is a
-          legal one-file section). material.md only when it has digested facts. Rejected/superseded reasoning is
-          recorded as a status: superseded decision that STAYS in decisions.yaml (addressable), not moved into a
-          live-tree history.yaml; genuine throwaway is deleted. Write each brief field ONLY where it differs from
+          legal concept-only section). material only when it has digested facts. Rejected/superseded reasoning is
+          recorded as a status: superseded decision that STAYS in decisions (addressable), not moved into a
+          live-tree history; genuine throwaway is deleted. Write each brief field ONLY where it differs from
           the ancestor chain (an absent field = inherit; restating an ancestor value verbatim is lint-flagged).
-        - Graduate with docspec ready <section> (a checked transaction; it drains then deletes develop.md).
-      transaction: ready
+          To re-think a crystallized section, put an updated concept/decisions directly (inside a change
+          when the official face is frozen).
+      transaction: put
     - id: apply
       summary: >-
         Prose-to-source alignment (the single skill; former draft + edit), two engine-routed modes.
@@ -111,7 +105,7 @@ workflow:
         - >-
           rewrite mode — render only stale-own / stale-upstream / not-yet-written sections (a
           redraft-flagged section surfaces as ordinary stale-own; your rewrite clears the flag on
-          render); write from the committed layer, blind to siblings; never read develop.md or history;
+          render); write from the committed layer, blind to siblings; never read history;
           honor the brief as a hard contract, lead with the payload, and mark any missing fact/rationale
           [TBD] rather than fabricate it.
         - >-
@@ -156,13 +150,13 @@ workflow:
   boundaries:
     - publish is the only irreversible boundary; the human always pulls the trigger.
     - release touches the format layer only (template-pack params), never content — content's one source is the frozen snapshot md (export byte-lock guards it); a layout problem fixable only by changing content → raise an audit finding upstream, the human re-edits → re-publishes → re-releases; the agent never self-fixes content.
-    - Completeness gates sit at advancement (docspec ready / publish), not at write time — half-formed work is free inside the loop, it just stays "developing".
+    - Completeness gates sit at advancement (docspec publish), not at write time — half-formed work is free inside the loop, it just stays "developing" (status surfaces it; put never blocks on it).
     - Semantic judgment → audit (factcheck), never an engine gate (audit itself can hallucinate).
     - Mechanical text edits are ENGINE transactions, never hand-typed occurrence-by-occurrence — a rename/move goes through `docspec mv` (atomic; rewrites the path-keyed prose markers + audit/roadmap targets, self-checks, rolls back on failure), punctuation width through `docspec edit --punct`, corpus hygiene / empty-shell + verbatim-brief + title-number cleanup through `docspec tidy`, a project-wide term substitution through `docspec edit --term` (prose-span only; identifiers/code/URLs byte-exact). Hand-editing these — or an ad-hoc find-replace script — is the drift/corruption class the real corpus died on (a 22-script replace run that poisoned `OCC_LIMIT_*` identifier codes); use the command or a script that calls it, never a blind sweep.
     - Pin line endings at the repo level — a .gitattributes with `*.md` / `*.yaml` / `*.yml` as `text eol=lf` (docspec init scaffolds it for new projects; EXISTING projects should add it themselves). The engine normalizes CRLF when fingerprinting and writes LF, but the repo pin is the third defense layer against git autocrlf rewriting checkouts.
     - corpus/_archive/ = retired sections (decision history): engine-invisible in active work (status/check/apply never see it); query with docspec retired, drill with docspec show <id>. It is history — never touch it in current work (unlocked, by convention, like OpenSpec's changes/archive).
     - Work that touches a NORMATIVE ruling or spans sections runs inside a CHANGE (docspec change new … --publish advisory|release-bound) — a staging draft branch: edits land in changes/<id>/staging/, official corpus/docs stay byte-frozen, render --change previews the union view, and `docspec change status` DERIVES per-target acceptance. Open it mid-develop (the moment you realize you're superseding a decision / rippling across documents), not as an upfront ceremony; the enlistment line is "touches a ruling?", not section count. The human's one gate is `docspec change archive` (running it = acceptance; "reject" = keep editing until the derivation goes green; abandon a dead end with --abandon, official never moved). NEVER hand-check off a task and NEVER author a progress/status/checkbox file — completeness is always derived; "tasks" names the derived view only.
-    - Engine commands (docspec new/render/ready/check/status/stale/normalize/tidy/mv/rename-term/change …) are the agent's internal machinery — run them autonomously, never ask the human "should I run docspec X?", never narrate command invocations. The human interface is intent-in / deliverable-out (they read docs/, not corpus/ or the engine). This is a runtime-conversation discipline the engine cannot observe — it is doctrine and reviewer vigilance, NOT a mechanical gate; the projection must not claim enforcement it does not have.
+    - Engine commands (docspec put/render/check/status/stale/normalize/tidy/mv/rename-term/change …) are the agent's internal machinery — run them autonomously, never ask the human "should I run docspec X?", never narrate command invocations. The human interface is intent-in / deliverable-out (they read docs/, not corpus/ or the engine). This is a runtime-conversation discipline the engine cannot observe — it is doctrine and reviewer vigilance, NOT a mechanical gate; the projection must not claim enforcement it does not have.
     - Contradictory inherited writing requirements converging on ONE section (a tree-parent brief vs a cross-tree governor brief, or two sibling governors) → STOP and surface both sources verbatim to the human; never pick a winner yourself (no precedence order is defined — it is a semantic call). check/lint back you up with a WARN when the aperture ancestor set supplies one brief field from two sources with divergent values, but the stop-and-ask is yours.
   # Migration onboarding: how an EXISTING project (pre-docspec published versions + an existing
   # version history) enters docspec. The recipe lives here and is projected by `docspec guide` —
@@ -264,8 +258,8 @@ filing-rules:
     rule: "concept.governed-by must point only at a live concept.id of a real parent document — never a decision/history id, never a parallel sibling."
     enforced-by: check
   - id: crystallize-four-way
-    rule: "develop.md content distributes into exactly scope→concept / rulings→decisions / facts→material; rejected/superseded reasoning is recorded as a status:superseded decision that stays in decisions.yaml (never moved to a live-tree history.yaml); genuine throwaway is deleted. concept is required; decisions/material are on-demand (build only when the section owns rulings / has facts — never a fabricated empty container)."
-    enforced-by: ready
+    rule: "crystallized thinking distributes into exactly scope→concept / rulings→decisions / facts→material (via docspec put); rejected/superseded reasoning is recorded as a status:superseded decision that stays in decisions (never moved to a live-tree history); genuine throwaway is deleted. concept is required; decisions/material are on-demand (build only when the section owns rulings / has facts — never a fabricated empty container)."
+    enforced-by: put
   - id: retire-via-transaction
     rule: "Retire a decision by marking it status: superseded/deprecated IN PLACE in its decisions.yaml (it stays addressable; view them with docspec show <article> --decisions --all-status, nothing is moved); retire a whole section with docspec retire; rename/move a section folder ONLY via docspec mv — never hand-move/delete; published archive/ is immutable (hash-netted by lint)."
     enforced-by: retire / mv / lint
@@ -441,9 +435,8 @@ relation-kinds: [realizes, governs, supersedes]
 # concept` still emits editable `concept.yaml` content for the agent to edit, `docspec put` validates
 # and writes it back into the store block). The yaml skeleton is DERIVED from each artifact's field
 # schema (yaml_skeleton) — a single source, no hand-maintained templates/{concept,decisions,history}.yaml.
-# develop.md is a WORKFILE (workbench in docspec/work/, drained at ready) — outside the store; history
-# is a store record category surfaced only in retirement archive packages. Only the .md artifacts
-# (material/develop/history-md) keep a real `template:` — they have no yaml fields to derive a skeleton from.
+# history is a store record category surfaced only in retirement archive packages. Only the .md artifacts
+# (material/history-md) keep a real `template:` — they have no yaml fields to derive a skeleton from.
 artifacts:
   - id: concept
     generates: concept.yaml   # get/put export-filename convention (store block, not a per-section file)
@@ -451,7 +444,7 @@ artifacts:
     description: The leaf section's governance and structural contract (one-line concept + writing envelope + source pointers + references).
     # Single source of truth = this schema: the fillable scaffold is DERIVED (yaml_skeleton from the field
     # contract below); there is no hand-maintained templates/concept.yaml to drift against. A fresh section's
-    # id/title/order are seeded into develop.md by `docspec new` and read at crystallization.
+    # id/order are stamped by the first `docspec put <section> concept` (path-fingerprint id, sibling-count order).
     instruction: instructions/concept.md
     requires: []
     aperture:
@@ -532,20 +525,6 @@ artifacts:
     block-grammar:
       heading: "## <類型>: <標題> {#m-<錨>}"
       types:   [src, fact, framing, eg, layout]
-
-  - id: develop
-    generates: develop.md
-    kind: md
-    description: Thinking draft / workbench (TRANSIENT — a meeting-minutes-style thinking pad, drained and hard-deleted at `docspec ready`). develop thinks here, then crystallizes into concept/decisions/material.
-    template: templates/develop.md
-    instruction: instructions/develop.md
-    requires: []
-    aperture:
-      read:  [develop]
-      write: [develop]
-      projects-into: null
-    block-grammar:
-      free: true
 
   - id: history
     generates: history.yaml

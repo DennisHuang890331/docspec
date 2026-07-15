@@ -1,6 +1,6 @@
 # 寫 decisions.yaml（本節活著的決策）
 
-決策記憶是**留史型**：append / supersede，不就地砍。判準＝**歷史重不重要**——重要走這裡，還在 churn 的留 develop.md。
+決策記憶是**留史型**：append / supersede，不就地砍。判準＝**歷史重不重要**——重要走這裡，還在 churn 的先別結晶（等想清楚再 put）。
 
 **本檔＝按需**：只有當這一節**擁有自己的規範裁決**才建 decisions.yaml。沒有裁決＝不建這個檔（合法空——別為了「湊齊檔案」造一個空殼 `entries: []`）。一個純綜述、只用 `realizes` 指向別節裁決的 leaf，正當地只有 concept.yaml 一個檔。
 

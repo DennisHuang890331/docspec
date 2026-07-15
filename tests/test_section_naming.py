@@ -1,10 +1,9 @@
-"""corpus-section-naming：marker 空格容忍（round-trip）＋ new 的路徑安全驗證。"""
+"""corpus-section-naming：marker 空格容忍（round-trip）＋ put 首寫的路徑安全驗證。"""
 
 from __future__ import annotations
 
 import pytest
 
-from dspx.commands.corpus import new as new_cmd
 from dspx.commands.deliverable import render as render_cmd
 from dspx.engine.render import (
     GROUP_MARKER_RE,
@@ -117,35 +116,40 @@ REJECTED_PATHS = [
 ]
 
 
+def _put_concept(home, tmp_path, section, exit_expected=0):
+    """經 put 首寫 concept（★retire-develop-workbench：put＝唯一建節入口、路徑驗證隨之搬家）。"""
+    from dspx.commands.corpus import put as put_cmd
+    cpt = tmp_path / "_c.yaml"
+    cpt.write_text("title: 測\nstatus: draft\nconcept: 一句話\n", encoding="utf-8")
+    return put_cmd.run([section, "concept", str(cpt)])
+
+
 @pytest.mark.parametrize("path", REJECTED_PATHS)
-def test_new_rejects_dangerous_path(path, make_project, monkeypatch, capsys):
-    """命中黑名單 → exit 非零、訊息指明壞段、corpus 無任何目錄被建立。"""
+def test_put_rejects_dangerous_path(path, make_project, monkeypatch, capsys):
+    """命中黑名單 → exit 非零、訊息指明壞段、corpus 無任何檔被建立（驗證在寫入之前）。"""
+    from dspx.commands.corpus import put as put_cmd
     home = make_project()
     monkeypatch.chdir(home.parent)
-    assert new_cmd.run([path]) == 2
+    assert put_cmd.run([path, "concept", "-"]) == 2
     err = capsys.readouterr().err
-    assert "refusing to create" in err and "invalid path segment" in err
-    assert not (home / "corpus").exists()   # 任何目錄都不建（驗證在 mkdir 之前）
+    assert "refusing to write" in err and "invalid path segment" in err
+    assert not (home / "corpus").exists()
 
 
-def test_new_accepts_legal_chinese_path(make_project, monkeypatch, capsys):
-    """合法中文路徑照常建立：只建末端 develop.md、無任何警告。"""
+def test_put_accepts_legal_chinese_path(make_project, monkeypatch, capsys, tmp_path):
+    """合法中文路徑照常首寫：記錄進 store、零散檔、零工作台目錄、無任何警告。"""
     home = make_project()
     monkeypatch.chdir(home.parent)
-    assert new_cmd.run(["測試文章/適用範圍"]) == 0
+    assert _put_concept(home, tmp_path, "測試文章/適用範圍") == 0
     assert capsys.readouterr().err == ""
-    # ★store-only：develop.md 住 work/（結晶前工作台）；corpus 不建任何散檔
-    leaf = home / "work" / "測試文章" / "適用範圍"
-    assert (leaf / "develop.md").is_file()
-    assert list(p.name for p in leaf.iterdir()) == ["develop.md"]
-    # 中間段是純目錄、不被鋪任何檔案
-    assert [p.name for p in (home / "work" / "測試文章").iterdir()] == ["適用範圍"]
-    assert not (home / "corpus" / "測試文章").exists()
+    assert (home / "corpus" / "測試文章.yaml").is_file()
+    assert not (home / "corpus" / "測試文章").exists()   # 零散檔
+    assert not (home / "work").exists()                   # 零工作台目錄
 
 
-def test_new_accepts_spaced_and_numbered_names(make_project, monkeypatch):
+def test_put_accepts_spaced_and_numbered_names(make_project, monkeypatch, tmp_path):
     """段內空格與含數字的章名合法（引擎不做語義判斷）；`第 3 層防護` 這類名不誤殺。"""
     home = make_project()
     monkeypatch.chdir(home.parent)
-    assert new_cmd.run(["手冊/第 3 層防護"]) == 0
-    assert new_cmd.run(["手冊/附錄 A"]) == 0
+    assert _put_concept(home, tmp_path, "手冊/第 3 層防護") == 0
+    assert _put_concept(home, tmp_path, "手冊/附錄 A") == 0

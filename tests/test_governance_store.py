@@ -97,8 +97,9 @@ def test_sibling_files_not_loaded_as_articles(make_project, write_leaf):
     assert "g.audit" not in store_articles(layout)
 
 
-def test_new_forbids_dot_in_article_name():
-    from dspx.commands.corpus.new import validate_section_path
+def test_put_forbids_dot_in_article_name():
+    # ★retire-develop-workbench：路徑驗證住 put（唯一建節入口）
+    from dspx.commands.corpus.put import validate_section_path
     assert validate_section_path("a.b/intro") is not None   # 首段含點 → 錯
     assert validate_section_path("ab/intro") is None         # 正常
 
