@@ -76,5 +76,6 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
         warnings.extend(_hygiene._scan_hygiene(layout))   # 衛生 WARN（衝突副本/死資料夾，非阻塞）
         warnings.extend(_authored.check_inherited_conflicts(leaves))   # ★#27 繼承信封矛盾（非阻塞）
         warnings.extend(_authored.check_authored_state(layout, leaves))  # ★#6.2b 手寫規定檔帶狀態
+        warnings.extend(_roadmap._roadmap_id_collisions(layout, leaves))  # B5 活躍/封存撞號（非阻塞）
 
     return CheckResult(ok=not errors, errors=errors, index=index, warnings=warnings)

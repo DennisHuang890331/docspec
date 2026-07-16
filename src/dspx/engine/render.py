@@ -147,7 +147,12 @@ def read_ledger_groups(layout: Layout, article: str) -> str | None:
 
 
 def verdicts_path(layout: Layout, article: str):
-    """verdicts journal 的家：`docspec/.ledger/<article>.verdicts.yaml`（機器簿記、不進 docs/）。"""
+    """verdicts journal 的家：`docspec/.ledger/<article>.verdicts.yaml`（機器簿記、不進 docs/）。
+    B1（engine-record-integrity）：change 情境的 OverlayLayout 覆寫 `verdicts_journal` 導向
+    preview 區——change 期間的裁決屬 change 歷史、官方 journal 凍結。"""
+    override = getattr(layout, "verdicts_journal", None)
+    if override is not None:
+        return override(article)
     return layout.planning_home / LEDGER_DIR_NAME / f"{article}.verdicts.yaml"
 
 

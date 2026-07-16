@@ -52,4 +52,15 @@ def _validate_changes(layout, leaves: list[Leaf], id_set: set[str],
                 errs.append(f"change[{cid}] target[{t.ref}]: ref points to nonexistent section "
                             f"id/path \"{t.ref}\" (use --action create for a new section, or "
                             "--kind file for an external file)")
+
+    # ── decided-in 溯源驗證（human-decision-provenance）：指向不存在的 change＝壞紀錄 ERROR；
+    #    缺席＝合法（紀律前語料／非 change 寫入）。abandoned 也算存在（dossier 在、可考古）。──
+    for leaf in leaves:
+        for e in leaf.decisions:
+            di = e.get("decided-in")
+            if di and chg.change_state(layout, str(di)) is None:
+                errs.append(
+                    f"{leaf.section}: decisions[{e.get('id', '?')}].decided-in points to unknown "
+                    f"change \"{di}\" (no active/archived/abandoned dossier) — broken provenance; "
+                    "fix the id or drop the field")
     return errs

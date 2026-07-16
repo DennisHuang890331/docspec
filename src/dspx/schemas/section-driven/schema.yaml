@@ -70,8 +70,29 @@ workflow:
         - >-
           Think BEFORE crystallizing — in your working context, not in a scratch file. Durable
           discussion has ONE home: a change container's notes.md (open `docspec change new` the moment
-          the work touches a normative ruling or spans sections — the change is archived with its
-          notes, so the discussion record survives). Genuine throwaway reasoning needs no file.
+          the work touches a normative ruling or spans sections — work that AUTHORS normative
+          decisions runs inside a change, first authoring included: the document's initial decision
+          batch is a change and its notes.md is the human-decision record). Genuine throwaway
+          reasoning needs no file.
+        - >-
+          Per-decision human confirmation (three-role doctrine: the human is the only source of
+          decisions — you draft, record, compare and render; you never rule). Present each normative
+          decision to the human INDIVIDUALLY and put it only after the human confirms it — batch
+          nodding a group of decisions is not confirmation. At the moment of confirmation, record
+          the human's ruling (gist or verbatim words) into the governing change's notes.md — that
+          file is the durable record of WHAT the human decided, distinct from the crystallized
+          decision text (put --change stamps decided-in mechanically, so every decision traces to
+          its change). NEVER put a normative decision that has no human confirmation behind it.
+          (Honest boundary: the engine cannot observe the conversation — this is doctrine enforced
+          by projection + notes.md/journal audit + human review, not a mechanical gate.)
+        - >-
+          Value crystallization self-check: for every value you are about to write (a threshold,
+          cap, cycle, tolerance), ask "will another section or document OBEY or RESTATE this?" —
+          if yes it is a NORMATIVE VALUE and must be raised as a decision carrying the value in its
+          statement (with the human's per-decision confirmation), so a realizes edge can attach and
+          staleness can propagate; prose and material only REFERENCE such a value, never act as its
+          source of truth (a bare number in prose has no edge — the real corpus drifted silently on
+          exactly this).
         - >-
           Crystallize via four-question triage → scope→concept / rulings→decisions / facts→material /
           rejected→recorded; write each part with docspec put <section> <artifact> (the single write
@@ -131,6 +152,11 @@ workflow:
       summary: Adversarial red-team. The only full reader; flags findings, never fixes.
       steps:
         - Check every claim against a primary source; record a verdict (entailed / contradicted / unsupported).
+        - >-
+          When find --numbers shows the same quantity disagreeing across documents, check whether
+          that quantity is crystallized as a decision; when it is NOT, the finding recommends
+          crystallization (raise it as a decision + attach realizes edges) as the structural fix —
+          the human ratifies; you never restructure on your own.
         - Audit the outline for MECE gaps/overlaps; detect deliverable-vs-source drift (docspec diff).
         - Route findings via docspec audit raise (non-blocking).
       transaction: audit
@@ -216,10 +242,15 @@ authoring:
     `[!WARNING]` too, so neither can ship to the reader silently).
   verdict_verbs:
     intro: >-
-      Clear a staleness verdict with the MATCHING verb, and give a REAL --reason (every verdict is
-      journaled in the article's append-only verdicts log). NEVER fabricate an edit, nor run the
-      perturb-render-revert dance (change a character, render, revert, render): its end state is
-      byte-identical to an honest ack but leaves zero trace and launders the verdict.
+      A verdict is the HUMAN's semantic ruling, not yours (three-role doctrine: the human is the
+      only judge). Before running ANY --ack / --ack-own, present the section, its staleness state,
+      and the proposed justification to the human and get explicit consent; the journaled --reason
+      MUST carry the human's ruling (gist or verbatim). Clear a staleness verdict with the MATCHING
+      verb (every verdict is journaled in the article's append-only verdicts log). NEVER fabricate
+      an edit, nor run the perturb-render-revert dance (change a character, render, revert,
+      render): its end state is byte-identical to an honest ack but leaves zero trace and launders
+      the verdict. (Honest boundary: the engine cannot observe the conversation — this is doctrine
+      enforced by projection + journal audit + human review, not a mechanical gate.)
     whitelist:
       - "prose changed → docspec render <article> (plain re-stamp)."
       - "stale-inherited / stale-style / stale-norm, prose reviewed against the moved brief / ruling / doctrine and legitimately unchanged → docspec render <article> --ack <section> (refused if the section is actually stale-own / stale-upstream — that means its own source changed and the prose genuinely needs rewriting)."
@@ -265,6 +296,8 @@ filing-rules:
     enforced-by: retire / mv / lint
   - id: sibling-dependency-via-realizes
     rule: "A dependency on ANOTHER section's decision — sibling or cross-document — is declared as a structural edge: concept.realizes (list of decision ids). Never park an internal decision id in sources: (external provenance only) and never rely on a bare id mention in prose — staleness (stale-upstream) and impact only see structural edges."
+  - id: value-crystallization
+    rule: "A NORMATIVE VALUE — a threshold / cap / cycle / tolerance that other sections or documents will obey or restate — is crystallized as a decision entry carrying the value in its statement (so a realizes edge can attach and staleness propagates); sections restating it attach realizes; prose and material only REFERENCE such a value, never act as its source of truth. Whether a value is normative is a semantic call: the agent asks, the human ratifies — the engine gains no gate from this rule."
     enforced-by: check
 
 # Project-level files: not artifacts (no corpus field schema, not in the leaf-section directory), but contracts the agent must know.
@@ -509,7 +542,7 @@ artifacts:
       trace:         { type: object, required: false, relation: governs }
       supersedes:    { type: ref,    required: false, relation: supersedes }
       superseded-by: { type: ref,    required: false, relation: supersedes }
-      decided-in:    { type: string, required: false }
+      decided-in:    { type: string, required: false }   # change 溯源：put --change 自動蓋（新 id／statement 變更）；check 驗 dangling（指向不存在的 change＝ERROR）；缺席合法（紀律前語料）
 
   - id: material
     generates: material.md

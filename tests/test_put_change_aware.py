@@ -355,16 +355,18 @@ def test_referenced_by_addressing_path_and_concept_id_equivalent(
 
 
 def test_realized_by_accepts_section_path_form(make_project, write_leaf, monkeypatch, capsys):
-    """--realized-by 也吃節路徑（解析成該節 concept.id）——原本只吃 decision id。"""
+    """--realized-by 也吃節路徑——★B4（engine-record-integrity）：節輸入＝聚合該節 concept＋
+    全部自有決策的下游（原本只查 concept.id → 深耦合節誤報「沒人用」）。"""
     home = _addr_project(make_project, write_leaf)
     monkeypatch.chdir(home.parent)
-    # decision id 直查（原行為）
+    # decision id 直查（原行為不變）
     assert show_cmd.run(["dec-x", "--realized-by", "--json"]) == 0
     assert json.loads(capsys.readouterr().out)["realizedBy"] == ["b/impl"]
-    # 節路徑形式：不再報「takes a decision id」而拒絕——解析成 c-arules 查（無 realizer→誠實空集）
+    # 節路徑形式：聚合——a/rules 的 concept 沒人 realize，但它擁有的 dec-x 有下游 → 不再假空集
     assert show_cmd.run(["a/rules", "--realized-by", "--json"]) == 0
     q = json.loads(capsys.readouterr().out)
-    assert q["definedAt"] == "a/rules" and q["realizedBy"] == []
+    assert q["section"] == "a/rules" and q["realizedBy"] == ["b/impl"]
+    assert any(g["id"] == "dec-x" and g["realizedBy"] == ["b/impl"] for g in q["ids"])
 
 
 def test_misaddress_gives_pointing_message(make_project, write_leaf, monkeypatch, capsys):

@@ -410,6 +410,42 @@ def _realized_by_payload(leaves, decision_id: str) -> dict:
             "realizedBy": realizers}
 
 
+def _realized_by_section_payload(leaves, section: str) -> dict:
+    """`show <節> --realized-by`（B4，engine-record-integrity）：節輸入＝聚合該節 concept id
+    ＋**全部自有決策 id** 的下游（按 id 分組）——深耦合節不再因 concept 無人 realize 而
+    誤報 not-yet-consumed（下游其實 realize 它的決策）。"""
+    from dspx.engine.crossref import build_reverse_indices
+
+    ri = build_reverse_indices(leaves)
+    lf = next((l for l in leaves if l.section == section), None)
+    ids: list[str] = []
+    if lf is not None and lf.concept and lf.concept.get("id"):
+        ids.append(str(lf.concept["id"]))
+    for e in (lf.decisions if lf is not None else []):
+        if e.get("id"):
+            ids.append(str(e["id"]))
+    groups = [{"id": i,
+               "realizedBy": sorted(x.section for x in ri.reverse_realizes.get(i, []))}
+              for i in ids]
+    return {"kind": "realized-by-section", "section": section, "ids": groups,
+            "realizedBy": sorted({s for g in groups for s in g["realizedBy"]})}
+
+
+def _print_realized_by_section(payload: dict) -> None:
+    total = payload["realizedBy"]
+    if not total:
+        print(f"{payload['section']}: no section realizes its concept or any of its decisions "
+              "(not-yet-consumed — no inbound realizes edge, not unused).")
+        return
+    print(f"{payload['section']} is realized by {len(total)} section(s) "
+          "(aggregated over its concept + owned decisions):")
+    for g in payload["ids"]:
+        if g["realizedBy"]:
+            print(f"  {g['id']}:")
+            for s in g["realizedBy"]:
+                print(f"    {s}")
+
+
 def _print_realized_by(payload: dict) -> None:
     realizers = payload["realizedBy"]
     where = f" (defined at {payload['definedAt']})" if payload["definedAt"] else ""
@@ -536,21 +572,32 @@ def run(argv: list[str]) -> int:
             _print_impact(payload)
         return 0
     if args.realized_by:
-        # decision/concept id 直查；節路徑形式 → 解析成該節 concept.id 當查詢鍵
+        # B4（engine-record-integrity）：節形輸入（路徑 or concept id）＝聚合該節 concept＋全部
+        # 自有決策的下游（按 id 分組）；decision id 輸入＝單鍵直查（行為不變）。
         query = args.id.strip("/")
-        if "/" in args.id:
-            section = _resolve_to_section(leaves, args.id)
-            if section is None:
-                sys.stderr.write(f"docspec: --realized-by could not resolve \"{args.id}\". "
-                                 + _addr_hint(leaves, args.id) + "\n")
-                return 1
-            lf = next((l for l in leaves if l.section == section), None)
-            cid = str(lf.concept.get("id")) if lf and lf.concept and lf.concept.get("id") else None
-            if cid is None:
-                sys.stderr.write(f"docspec: section \"{section}\" has no concept id to query "
-                                 "realizers for (crystallize its concept first).\n")
-                return 1
-            query = cid
+        from dspx.engine.model import decision_index
+        section = None
+        if query not in decision_index(leaves):   # decision id 優先直查（行為不變）
+            if any(lf.section == query for lf in leaves):
+                section = query                    # 節路徑（含根節＝單段）
+            else:
+                for lf in leaves:                  # 裸 id 是 concept id ⇒ 也是節形輸入（聚合）
+                    if lf.concept and str(lf.concept.get("id")) == query:
+                        section = lf.section
+                        break
+            if section is None and "/" in args.id:
+                section = _resolve_to_section(leaves, args.id)
+                if section is None:
+                    sys.stderr.write(f"docspec: --realized-by could not resolve \"{args.id}\". "
+                                     + _addr_hint(leaves, args.id) + "\n")
+                    return 1
+        if section is not None:
+            payload = _realized_by_section_payload(leaves, section)
+            if args.as_json:
+                print(json.dumps({"id": args.id, **payload}, ensure_ascii=False, indent=2))
+            else:
+                _print_realized_by_section(payload)
+            return 0
         payload = _realized_by_payload(leaves, query)
         if args.as_json:
             print(json.dumps({"id": args.id, **payload}, ensure_ascii=False, indent=2))

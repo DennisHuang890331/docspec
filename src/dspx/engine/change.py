@@ -624,6 +624,11 @@ class OverlayLayout:
         # preview 無 legacy sidecar：回一個不存在的路徑（read_ledger 會略過）。
         return self._preview / f".{article}.legacy.none"
 
+    def verdicts_journal(self, article: str) -> Path:
+        """B1（engine-record-integrity）：change 內 render --ack/--ack-own 的 verdict 落 preview
+        journal（＝review target 判定讀的位置）；官方 `.ledger/*.verdicts.yaml` change 期間凍結。"""
+        return self._preview / f"{article}.verdicts.yaml"
+
 
 # ── preview seed（★G2）＋ render ──────────────────────────────────────
 
@@ -924,6 +929,13 @@ def _derive_one(layout, change, schema, t, section, leaves, by_section, dindex,
 
     if t.action in ("revise", "redraft"):
         if sync != "synced":
+            # B6（engine-record-integrity）：stale-own 卡住的節帶診斷——plain render 對「散文未變」
+            # 刻意不清（F2 保信號），別讓 agent 逆向工程 ledger 或 perturb-revert。
+            if sync in ("stale-own", "stale-upstream"):
+                return False, (f"{sync} — source changed, prose not rewritten (a plain render "
+                               "keeps the signal on purpose): rewrite the prose then render; if "
+                               "the prose truly needs no change, the ack path requires the "
+                               "human's confirmation (see the projected verdict verbs)")
             return False, f"{sync} (rewrite the prose)"
         # ★反作弊：synced 還不夠——散文必須真的改過（preview prose ≠ 正式 baseline）
         pv_prose = _prose_of(preview_ledger.get(section))

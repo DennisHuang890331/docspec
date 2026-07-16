@@ -99,7 +99,12 @@ _CATEGORIES = {
     "concept": "concept.yaml",
     "decisions": "decisions.yaml",
     "material": "material.md",
+    "group": "group.yaml",
 }
+
+# group 節點欄位白名單（schema group-node 契約；B3：群組的正當 API 寫入口）
+_GROUP_FIELDS = {"title", "order", "numbering"}
+_GROUP_NUMBERING = ("arabic", "appendix", "none")
 
 # run_file_check 的「完整性」訊息（必填未齊／佔位字）＝寫入當下合法（developing）、put 不擋。
 _COMPLETENESS_MARKERS = ("missing or empty", "is a placeholder")
@@ -196,6 +201,73 @@ def _read_source(source: str) -> str:
     return p.read_text(encoding="utf-8")
 
 
+def _put_group(layout, schema, section: str, text: str, change) -> int:
+    """group 節點的 API 寫入口（B3，engine-record-integrity）：title/order/numbering 白名單、
+    驗證後走同一 canonical save；leaf 撞名拒收。密封 store 不再需要「手改＋fsck --accept」後門。"""
+    from dspx.engine import store as _store
+
+    try:
+        raw = _parse_yaml_text(text, section)
+    except ModelError as exc:
+        sys.stderr.write(f"docspec: put rejected (no write): {exc}\n")
+        return 1
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        sys.stderr.write(f"docspec: put rejected — {section}: group top level must be a mapping\n")
+        return 1
+    errs: list[str] = []
+    for k in sorted(set(raw) - _GROUP_FIELDS):
+        errs.append(f"unknown group field \"{k}\" (allowed: title / order / numbering)")
+    if "title" in raw and not isinstance(raw["title"], str):
+        errs.append("group title must be a string")
+    if "order" in raw and not isinstance(raw["order"], (int, float)):
+        errs.append("group order must be a number")
+    if "numbering" in raw and raw["numbering"] not in _GROUP_NUMBERING:
+        errs.append(f"group numbering must be one of {' | '.join(_GROUP_NUMBERING)}")
+    if errs:
+        sys.stderr.write(f"docspec: put rejected — {len(errs)} error(s), the store record for "
+                         f"{section}/group is left unchanged:\n")
+        for e in errs:
+            sys.stderr.write(f"    ✗ {e}\n")
+        return 1
+    meta = {k: raw[k] for k in ("title", "order", "numbering") if k in raw}
+
+    article = layout.article_of(section)
+    if change is not None:
+        chg.stage_section(change, layout, section)
+        art_obj = chg._load_staging_article(change.dir, article)
+    elif _store.article_has_store(layout, article):
+        art_obj = _store.load_article(_store.store_path(layout, article), verify=True)
+    else:
+        art_obj = _store.Article(name=article, revision=0, records=[])
+
+    rec = art_obj.record_by_path(section)
+    if rec is not None and rec.kind == "leaf" and (rec.concept or rec.decisions or rec.material):
+        sys.stderr.write(f"docspec: put rejected — \"{section}\" is a leaf section; a section "
+                         "cannot be both a leaf and a grouping node\n")
+        return 1
+    had = rec is not None and rec.kind == "group"
+    if rec is None:
+        rec = _store.SectionRecord(path=section, kind="group", group=meta)
+        art_obj.records.append(rec)
+    else:
+        rec.kind = "group"
+        rec.group = meta
+
+    if change is not None:
+        chg._save_staging_article(change.dir, art_obj, schema)
+    else:
+        art_obj.revision += 1
+        _store.save_article(layout, art_obj, schema)
+    verb = "updated" if had else "created"
+    where = f" into change \"{change.id}\" staging" if change is not None else ""
+    print(f"put: {verb} {section}/group in store{where} "
+          f"({', '.join(f'{k}={v}' for k, v in meta.items()) or 'empty meta'})")
+    print("  next: docspec render projects the group heading/order into the deliverable.")
+    return 0
+
+
 def _put_store(layout, schema, args, section: str, text: str, change) -> int:
     """store 篇 put：把分類寫進正式 store 記錄（無 --change）或 change 的 partial store staging 記錄
     （有 --change，official byte 凍結）。同一驗證管線（欄位 check＋重複 id＋relation 目標＋enum）；
@@ -203,6 +275,9 @@ def _put_store(layout, schema, args, section: str, text: str, change) -> int:
     from dspx.engine import store as _store
     category = args.category
     article = layout.article_of(section)
+
+    if category == "group":
+        return _put_group(layout, schema, section, text, change)
 
     # 取目標 Article（staging 或正式）＋ id 唯一/relation 宇宙（others）
     if change is not None:
@@ -230,6 +305,8 @@ def _put_store(layout, schema, args, section: str, text: str, change) -> int:
     # ── 解析 + 形狀（壞 YAML／壞形狀 fail-loud、記錄不動）──
     parsed: object
     stamped = False
+    preserved: list[str] = []      # B2 身份保全：omission 沿用的欄（回報用）
+    stamped_decided: int = 0       # decided-in 機械溯源：本次蓋章的決策數（回報用）
     try:
         if category == "concept":
             raw = _parse_yaml_text(text, section)
@@ -243,9 +320,42 @@ def _put_store(layout, schema, args, section: str, text: str, change) -> int:
                 if parsed.get("order") is None:
                     parsed["order"] = _next_order(layout, section)
                     stamped = True
+            else:
+                # B2 身份保全（engine-record-integrity）：記錄已有引擎蓋的 id——
+                # 新內容缺 id/order＝omission 沿用（清空會斷掉所有指向此 id 的 realizes 邊）；
+                # 帶不同 id＝改寫身份，拒收（換身份的正道＝retire＋重建）。
+                existing = rec.concept or {}
+                if not parsed.get("id"):
+                    parsed["id"] = existing.get("id")
+                    preserved.append("id")
+                elif parsed["id"] != existing.get("id"):
+                    raise ModelError(
+                        f"{section}: concept id cannot be rewritten through put "
+                        f"(record has \"{existing.get('id')}\", incoming has \"{parsed['id']}\") — "
+                        "identity is engine-stamped; to change it, retire the section and recreate")
+                if parsed.get("order") is None and existing.get("order") is not None:
+                    parsed["order"] = existing.get("order")
+                    preserved.append("order")
         elif category == "decisions":
             raw = _parse_yaml_text(text, section)
             parsed = _entries(raw, Path(section))
+            if isinstance(parsed, list):
+                # decided-in 機械溯源（human-decision-provenance）：
+                # ①保全——條目 statement 未變且新內容缺 decided-in → 沿用記錄裡既有值
+                #   （omission 不清引擎蓋的溯源，同 B2 身份保全）；
+                # ②蓋章——change 內落地時，新 id／statement 變更的條目 → 蓋 decided-in=change id
+                #   （agent 帶值尊重不覆蓋）。
+                prior = {e.get("id"): e for e in rec.decisions if isinstance(e, dict)}
+                for e in parsed:
+                    if not isinstance(e, dict) or e.get("decided-in"):
+                        continue
+                    old = prior.get(e.get("id"))
+                    if old is not None and old.get("statement") == e.get("statement"):
+                        if old.get("decided-in"):
+                            e["decided-in"] = old["decided-in"]      # ①保全
+                    elif change is not None:
+                        e["decided-in"] = change.id                   # ②蓋章
+                        stamped_decided += 1
         else:  # material（存原文；序列化時正規化換行）
             parsed = text
     except ModelError as exc:
@@ -293,6 +403,11 @@ def _put_store(layout, schema, args, section: str, text: str, change) -> int:
           "duplicate-id + relation-target + enum)")
     if stamped:
         print(f"  stamped id: {parsed['id']}  order: {parsed['order']} (first write of concept)")
+    if preserved:
+        print(f"  preserved {'/'.join(preserved)} from the existing record "
+              "(omission never erases engine-stamped identity)")
+    if stamped_decided:
+        print(f"  stamped decided-in: {change.id} on {stamped_decided} new/changed decision(s)")
     if change is not None:
         print("  official store is byte-frozen (changes land at archive); "
               f"next: docspec render --change {change.id}  then  docspec change status {change.id}.")
@@ -305,7 +420,7 @@ def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec put", description=HELP)
     parser.add_argument("section", help="leaf section path (relative to corpus/)")
     parser.add_argument("category", choices=sorted(_CATEGORIES),
-                        help="which artifact to write: concept | decisions | material")
+                        help="which artifact to write: concept | decisions | material | group (grouping-node title/order/numbering)")
     parser.add_argument("source", help="FILE with the new content, or - for stdin")
     parser.add_argument("--change", default=None, metavar="ID",
                         help="route the write into this active change's staging (required to "

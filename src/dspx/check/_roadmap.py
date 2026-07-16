@@ -27,6 +27,17 @@ def _promoted_to_errors(where: str, promoted_to, change_states: dict[str, str],
     return [f"{where}: promoted-to points to a nonexistent change/roadmap id \"{pid}\""]
 
 
+def _roadmap_id_collisions(layout, leaves: list[Leaf]) -> list[str]:
+    """B5（engine-record-integrity）：活躍 roadmap entry 與 roadmap-archive 同 id ＝ WARN（非阻塞）。
+    歷史撞號（id 重用修正前產生的）點名給人改名，不炸也不默認正常。"""
+    from dspx.reports import roadmap as _roadmap
+    live = {str(e.get("id")) for e in _roadmap.all_entries(layout, leaves) if e.get("id")}
+    archived = set(_roadmap.archived_roadmap_ids(layout))
+    return [f"roadmap id \"{rid}\" exists both live and in roadmap-archive.yaml (two different "
+            "items share one id — rename the live one; new allocations no longer reuse "
+            "archived numbers)" for rid in sorted(live & archived)]
+
+
 def _validate_roadmap(layout, leaves: list[Leaf], id_set: set[str],
                       concept_ids: set[str]) -> list[str]:
     """roadmap.yaml 結構閘（跟 concept/decisions 同級：結構查、語義/「做不做」不查）：

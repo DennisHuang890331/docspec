@@ -419,6 +419,13 @@ def run(argv: list[str]) -> int:
         moved = ("" if not r.get("styleMoved")
                  else " (" + "+".join(r["styleMoved"]) + " moved)")
         print(f"  {r['section']:<28} {r['state']:<16} {r['sync']:<16} [{flags}]{moved}{drift}")
+    # B6（engine-record-integrity）：stale-own/upstream 且散文未動（非 drifted）＝F2 刻意保信號
+    # 的卡住狀態——補一行診斷指路，別讓 agent 逆向工程 ledger 或 perturb-revert。
+    if any(r["sync"] in ("stale-own", "stale-upstream") and not r.get("drifted") for r in rows):
+        print("\n  ⚠ stale-own/upstream with unchanged prose: the source changed but the prose was "
+              "not rewritten — a plain render keeps the signal on purpose. Rewrite the prose then "
+              "render; if the prose truly needs no change, the ack path requires the human's "
+              "confirmation (see the projected verdict verbs).")
     for art in skeleton_stale:
         print(f"\n  ⚠ deliverable skeleton of \"{art}\" is stale: a group.yaml title/order "
               f"changed since the last render — run docspec render {art}")

@@ -22,6 +22,8 @@ from __future__ import annotations
 import datetime
 from pathlib import Path
 
+import yaml
+
 from dspx.engine.layout import Layout
 
 KINDS = ("gap", "task")
@@ -206,11 +208,28 @@ def mark_done(layout: Layout, leaves: list, rid: str, note: str) -> dict:
     raise RoadmapError(f"no roadmap entry \"{rid}\" found (searched forest + per-doc stores)")
 
 
+def archived_roadmap_ids(layout: Layout) -> list[str]:
+    """roadmap-archive.yaml 裡已封存的 entry id 清單（B5：id 配置跨區唯一＋check 撞號用）。"""
+    path = forest_roadmap_archive_path(layout)
+    if not path.is_file():
+        return []
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return []
+    entries = data.get("entries") if isinstance(data, dict) else data   # {entries:[…]}（現行）或裸 list（防禦）
+    if not isinstance(entries, list):
+        return []
+    return [str(e.get("id")) for e in entries if isinstance(e, dict) and e.get("id")]
+
+
 def next_roadmap_id(layout: Layout, leaves: list) -> str:
-    """全庫下一個 `R<n>` id（掃 forest + 各 doc，避免撞號）。"""
+    """全庫下一個 `R<n>` id——掃 forest＋各 doc＋**roadmap archive**（B5，engine-record-integrity）：
+    done 封存過的序號永不重發，「R3」不會前世今生指兩件事。"""
     nums: list[int] = []
-    for e in all_entries(layout, leaves):
-        rid = str(e.get("id", ""))
+    ids = [str(e.get("id", "")) for e in all_entries(layout, leaves)]
+    ids += archived_roadmap_ids(layout)
+    for rid in ids:
         if rid.startswith("R") and rid[1:].isdigit():
             nums.append(int(rid[1:]))
     return f"R{(max(nums) + 1) if nums else 1}"

@@ -413,6 +413,18 @@ def _cmd_archive(argv: list[str]) -> int:
     if args.abandon:
         return _abandon(layout, change, args.reason)
 
+    # human-decision-provenance：notes.md＝人的決策原文記錄。只剩 --why 種入內容＝記錄空白，
+    # WARN 提醒（非阻擋——archive 是人的閘，人可無視）。
+    notes = chg.notes_path(change.dir)
+    body = notes.read_text(encoding="utf-8").strip() if notes.is_file() else ""
+    seeded = {f"# {change.title}".strip(), (change.why or "").strip()}
+    substantive = [ln for ln in body.splitlines() if ln.strip() and ln.strip() not in seeded]
+    if not substantive:
+        sys.stderr.write(
+            "docspec: ⚠ notes.md carries nothing beyond the --why seed — the human-decision "
+            "record for this change is empty (the agent should have recorded the human's rulings "
+            "as they were confirmed). Archiving anyway (your gate, your call).\n")
+
     from dspx.commands.change.change_archive import run_archive
     return run_archive(layout, schema, change, override_drift=args.override_drift)
 
