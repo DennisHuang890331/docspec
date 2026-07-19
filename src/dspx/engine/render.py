@@ -45,7 +45,8 @@ def read_ledger(layout: Layout, article: str) -> dict:
     `docs/.../.sections.yaml`（自動遷移：下次 render 會寫進 ①）；③ 更舊格式 ＝`_latest.md`
     frontmatter 的 `sections`。都沒有 → {}。"""
     import sys
-    for ledger in (layout.docs_ledger(article), layout.docs_ledger_legacy(article)):
+    for ledger in (layout.docs_ledger(article), layout.docs_ledger_prev(article),
+                   layout.docs_ledger_legacy(article)):
         if not ledger.is_file():
             continue
         try:
@@ -104,7 +105,8 @@ def read_ledger_version(layout: Layout, article: str) -> int | None:
     壞檔（不可解析）→ None——壞帳本由 render 的隔離閘／read_ledger 的警告另行負責，這裡不重複。
     v1 的舊值與 v2 算法現值**不可比**：status 顯 needs-migration、render 拒跑，
     `docspec render <article> --rebaseline` 一次遷移。"""
-    for ledger in (layout.docs_ledger(article), layout.docs_ledger_legacy(article)):
+    for ledger in (layout.docs_ledger(article), layout.docs_ledger_prev(article),
+                   layout.docs_ledger_legacy(article)):
         if not ledger.is_file():
             continue
         try:
@@ -134,7 +136,8 @@ def ledger_needs_migration(layout: Layout, article: str) -> bool:
 
 def read_ledger_groups(layout: Layout, article: str) -> str | None:
     """讀帳本記的 group.yaml 骨架面指紋；缺檔/壞檔/舊帳本（無 groups 欄）→ None（無信號）。"""
-    for ledger in (layout.docs_ledger(article), layout.docs_ledger_legacy(article)):
+    for ledger in (layout.docs_ledger(article), layout.docs_ledger_prev(article),
+                   layout.docs_ledger_legacy(article)):
         if not ledger.is_file():
             continue
         try:
@@ -147,12 +150,14 @@ def read_ledger_groups(layout: Layout, article: str) -> str | None:
 
 
 def verdicts_path(layout: Layout, article: str):
-    """verdicts journal 的家：`docspec/.ledger/<article>.verdicts.yaml`（機器簿記、不進 docs/）。
+    """verdicts journal 的家：dossier-layout＝隨卷 `corpus/<article>/verdicts.yaml`。
     B1（engine-record-integrity）：change 情境的 OverlayLayout 覆寫 `verdicts_journal` 導向
     preview 區——change 期間的裁決屬 change 歷史、官方 journal 凍結。"""
-    override = getattr(layout, "verdicts_journal", None)
-    if override is not None:
-        return override(article)
+    return layout.verdicts_journal(article)
+
+
+def _verdicts_prev_path(layout: Layout, article: str):
+    """前一代 journal 位置（docspec/.ledger/）；append 端一次性收編用。"""
     return layout.planning_home / LEDGER_DIR_NAME / f"{article}.verdicts.yaml"
 
 
@@ -185,6 +190,12 @@ def append_verdicts(layout: Layout, article: str, entries: list[dict]) -> None:
         return
     path = verdicts_path(layout, article)
     path.parent.mkdir(parents=True, exist_ok=True)
+    # dossier-layout 一次性收編：新位尚無檔、前一代（.ledger/）有 → 先把舊 journal 內容
+    # 搬進新位再 append（append-only 歷史不斷代；舊檔留待 migrate-layout 收）。
+    if not path.is_file():
+        prev = _verdicts_prev_path(layout, article)
+        if prev.is_file():
+            path.write_text(prev.read_text(encoding="utf-8"), encoding="utf-8", newline="\n")
     with path.open("a", encoding="utf-8", newline="\n") as fh:
         for e in entries:
             fh.write(yaml.safe_dump([e], allow_unicode=True, sort_keys=False))

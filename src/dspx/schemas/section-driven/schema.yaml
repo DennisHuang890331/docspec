@@ -296,6 +296,8 @@ filing-rules:
     enforced-by: retire / mv / lint
   - id: sibling-dependency-via-realizes
     rule: "A dependency on ANOTHER section's decision — sibling or cross-document — is declared as a structural edge: concept.realizes (list of decision ids). Never park an internal decision id in sources: (external provenance only) and never rely on a bare id mention in prose — staleness (stale-upstream) and impact only see structural edges."
+  - id: exploration-never-truth
+    rule: "docspec/explorations/*.md is the home for pre-change exploratory thinking (plain markdown, hand-written, ungoverned — no seal, no fingerprint, invisible to check/lint). An exploration is NEVER a source of truth: truth lives only in the store (concept/decisions/material). When thinking crystallizes into work, PROMOTE its conclusions into a change's notes.md (move, don't copy; the exploration file may note the promotion)."
   - id: value-crystallization
     rule: "A NORMATIVE VALUE — a threshold / cap / cycle / tolerance that other sections or documents will obey or restate — is crystallized as a decision entry carrying the value in its statement (so a realizes edge can attach and staleness propagates); sections restating it attach realizes; prose and material only REFERENCE such a value, never act as its source of truth. Whether a value is normative is a semantic call: the agent asks, the human ratifies — the engine gains no gate from this rule."
     enforced-by: check

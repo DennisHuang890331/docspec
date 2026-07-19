@@ -92,7 +92,7 @@ def test_store_never_persists_empty_shell_decisions(make_project, write_leaf, mo
     assert _art(home, "sc").record_by_path("sc/殼節").decisions == []
     assert _art(home, "sc").record_by_path("sc/實節").decisions[0]["id"] == "d1"
     # store 檔文字裡沒有空殼節的 decisions 區塊
-    store_text = (home / "corpus" / "sc.yaml").read_text(encoding="utf-8")
+    store_text = (home / "corpus" / "sc" / "article.yaml").read_text(encoding="utf-8")
     assert "d1" in store_text and store_text.count("decisions:") == 1   # 只有實節那一塊
 
     assert store_cmd.run(["tidy"]) == 0

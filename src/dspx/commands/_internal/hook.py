@@ -46,6 +46,13 @@ def _is_store_file(token: str) -> bool:
     # 但同為封條保護，手改必壞；doc 級 sibling `<a>.audit.yaml` 走下面 corpus-parent 規則）。
     if p.name in ("audit.yaml", "roadmap.yaml"):
         return True
+    # dossier-layout：案卷內定名檔 `corpus/<夾>/{article,ledger,verdicts}.yaml`（活案卷）
+    # 與 `corpus/_archive/<夾>/…`（退場案卷）——一條形狀規則守全案卷。
+    if p.name in ("article.yaml", "ledger.yaml", "verdicts.yaml"):
+        gp = p.parent.parent
+        if gp.name == "corpus" or (gp.name == "_archive" and gp.parent.name == "corpus"):
+            return True
+    # 前一代扁平形（fallback 期）：corpus 直下 *.yaml
     return (p.suffix == ".yaml" and p.parent.name == "corpus"
             and not p.name.startswith("_"))
 

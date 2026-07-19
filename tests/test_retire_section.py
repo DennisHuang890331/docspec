@@ -23,15 +23,16 @@ def test_retire_section_moves_and_records(make_project, write_leaf, monkeypatch,
 
     assert rs_cmd.run(["zenoh/hello-world", "--in", "v2"]) == 0
 
-    # 原位已不在、扁平 archive 有了
+    # 原位已不在、dossier 退場案卷有了（corpus/_archive/<article>/，同拓撲）
     assert not (home / "corpus" / "zenoh" / "hello-world").exists()
-    dest = home / "corpus" / "_archive" / "zenoh__hello-world"
+    dest = home / "corpus" / "_archive" / "zenoh"
     assert dest.is_dir()
-    # 退場記錄＝該節 history.yaml 一筆 kind:section entry（id=concept.id 非路徑、含 archive link）
+    # 退場記錄＝退場案卷 history.yaml 一筆 kind:section entry（id=concept.id 非路徑、含 archive link）
     data = yaml.safe_load((dest / "history.yaml").read_text(encoding="utf-8"))
     sec = next(e for e in data["entries"] if e.get("kind") == "section")
     assert sec["id"] == "c1"                                  # ★concept.id，不是路徑
-    assert sec["archive"] == "corpus/_archive/zenoh__hello-world"   # link → folder
+    assert sec["archive"] == "corpus/_archive/zenoh"          # link → 退場案卷
+    assert sec["section"] == "zenoh/hello-world"              # 原路徑入 entry（共用索引）
     assert sec["status"] == "retired"
     assert sec["statement"] == "新手第一個 pub/sub"            # note 預設取 concept.concept
     assert sec["retired-in"] == "v2"

@@ -10,6 +10,18 @@ a minor bump.
 
 ## [Unreleased]
 
+### Changed — the dossier layout: one folder per article, everything about an article lives in it
+
+The planning home now follows one rule — **the level of a record decides its address**: forest-level records live at the root, article-level records live in `corpus/<article>/`, change-level in `changes/<id>/`, and exploratory thinking in `explorations/`.
+
+- **`corpus/<article>/` is the article's dossier** with fixed inner names: `article.yaml` (the sealed store), `audit.yaml` / `roadmap.yaml` (per-doc governance), `ledger.yaml` (render fingerprint baseline), `verdicts.yaml` (append-only verdict journal). The flat `corpus/<article>.yaml` + sibling-suffix convention and the separate `.ledger/` directory are gone — per-article records no longer live in three places, and a whole-article retirement can no longer orphan its ledgers (the dossier moves as one).
+- **Retirement keeps the topology**: `corpus/_archive/<article>/` is a dossier too — retired section records land in a **sealed archived store** (`_archive/<article>/article.yaml`, append semantics) with a light `history.yaml` index (entries now carry the real `section` path); the scattered per-section dump folders are gone. Old scattered archive packages remain readable.
+- **`explorations/`** is the recognized home for pre-change thinking (plain markdown, engine-ungoverned — no seal, no fingerprint, invisible to check/lint; searchable via `find --in explorations`). The projected filing rule states an exploration is never a source of truth; conclusions promote into a change's `notes.md`.
+- **`docspec store migrate-layout`** performs the one-shot move (idempotent; copies, verifies seals at the new location, only then deletes the old file; refuses when an article exists in both layouts — `fsck` flags that state too). Until migrated, readers fall back to the old locations.
+- `store migrate` (scattered→store) now parks the scattered tree aside atomically before writing the dossier — the old ordering would have deleted the freshly written store together with the scatter tree, since the dossier now occupies the same path.
+- Hygiene, hook guards, and `Layout` path resolution all follow the dossier shapes; one guard rule covers an article's entire dossier.
+
+
 ### Changed — skill descriptions now state WHEN to use them (host agents decide skill loading from the description alone)
 
 Audited the bundled skills against Anthropic's official skill-creator criteria; the one real gap was trigger information. `dspx-apply` and `dspx-factcheck` gained positive trigger sentences (apply's names the engine states that summon it: stale-*/unwritten/revise-align targets); `dspx-publish` and `dspx-release` gained CONDITIONAL triggers that bind invocation to the human's explicit ask and state never-self-initiated — assertive auto-trigger phrasing is deliberately absent on the human-gate skills. Tests pin all six descriptions.

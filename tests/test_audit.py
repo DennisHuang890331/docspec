@@ -15,7 +15,7 @@ from dspx.engine.schema import load_schema
 def _doc_audit(home, article):
     """per-doc audit 路徑＝corpus/<article>/audit.yaml。★store-only：store 是 corpus/<article>.yaml
     檔，corpus/<article>/ 夾不再由 write_leaf 順帶建出——測試直寫前先建夾（引擎 save() 亦自建）。"""
-    p = home / "corpus" / f"{article}.audit.yaml"
+    p = home / "corpus" / article / "audit.yaml"     # dossier-layout 案卷內定名檔
     p.parent.mkdir(parents=True, exist_ok=True)
     return p
 

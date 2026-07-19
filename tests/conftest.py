@@ -46,7 +46,8 @@ def _corpus_store():
         recs = list(buffers[(str(home), article)].values())
         art = _store.Article(name=article, revision=1, records=recs)  # type: ignore[arg-type]
         text = _store.dump_article(art, schema)
-        path = home / "corpus" / f"{article}.yaml"
+        # dossier-layout：案卷夾＋定名檔 corpus/<article>/article.yaml
+        path = home / "corpus" / article / "article.yaml"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8", newline="\n")
 

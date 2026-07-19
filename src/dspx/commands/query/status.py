@@ -174,7 +174,8 @@ def _retired_sections(layout) -> list[dict]:
                            or hist.parent.relative_to(layout.planning_home).as_posix())
             out.append({
                 "id": e.get("id"),
-                "section": hist.parent.name.replace("__", "/"),   # 原路徑（從封存資料夾名還原）
+                # 原路徑：新載體 entry 自帶 section 欄（退場案卷共用索引）；舊散檔包由夾名還原。
+                "section": e.get("section") or hist.parent.name.replace("__", "/"),
                 "note": e.get("statement", ""),
                 "in": e.get("retired-in"),
                 "archive": archive_rel,

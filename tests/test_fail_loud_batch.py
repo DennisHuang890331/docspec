@@ -318,10 +318,10 @@ def test_retire_rejects_id_collision_with_archive(make_project, write_leaf,
     from dspx.engine import store as _store       # ★store-only：a/x 記錄沒被抽走
     assert _store.load_article(_store.store_path(Layout(home), "a"), verify=False) \
         .record_by_path("a/x") is not None
-    # 換新 id 就放行
+    # 換新 id 就放行（dossier 退場案卷＝_archive/a/；把先前退場記錄挪開讓路徑空出）
     write_leaf(home, "a/x", concept={"id": "c1b", "title": "X2", "order": 1})
-    (home / "corpus" / "_archive" / "a__x").rename(
-        home / "corpus" / "_archive" / "a__x-old")         # 讓 dest 空出（扁平名另案）
+    (home / "corpus" / "_archive" / "a").rename(
+        home / "corpus" / "_archive" / "a-old")
     assert rs_cmd.run(["a/x"]) == 0
 
 
@@ -357,7 +357,7 @@ def test_whole_article_retire_migrates_deliverable_and_ledger(make_project, writ
                                                               monkeypatch, capsys):
     home, layout, latest, ledger = _rendered_article(make_project, write_leaf, monkeypatch)
     assert rs_cmd.run(["a/x"]) == 0              # a 只有一節 → 整篇退場
-    dest = home / "corpus" / "_archive" / "a__x"
+    dest = home / "corpus" / "_archive" / "a"    # dossier 退場案卷（整卷同拓撲）
     assert not latest.exists() and not ledger.exists()     # docs/.ledger 無殘留
     assert (dest / latest.name).is_file()                   # 散文隨封存包
     assert (dest / ledger.name).is_file()                   # 帳本隨封存包

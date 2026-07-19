@@ -87,9 +87,15 @@ class AuditStore:
 # ── 儲存路徑與 load helpers（比照 roadmap.py）─────────────────────────
 
 def doc_audit_path(layout: Layout, article: str) -> Path:
-    """per-doc audit 檔＝**sibling 密封檔** `corpus/<article>.audit.yaml`（一篇一檔 store 的兄弟；
-    形狀命中 hook `_is_store_file`＝自動守手改）。"""
-    return layout.corpus_dir / f"{article}.audit.yaml"
+    """per-doc audit 檔（dossier-layout）＝案卷內定名檔 `corpus/<article>/audit.yaml`。
+    fallback：新位不存在而前一代 sibling（`corpus/<article>.audit.yaml`）存在 → 回舊位
+    （migrate-layout 一次收編）。hook 兩形皆守。"""
+    new = layout.article_audit(article)
+    if not new.is_file():
+        old = layout.corpus_dir / f"{article}.audit.yaml"
+        if old.is_file():
+            return old
+    return new
 
 
 def forest_audit_path(layout: Layout) -> Path:

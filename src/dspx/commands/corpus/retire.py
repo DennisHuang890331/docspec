@@ -109,7 +109,9 @@ def _migrate_orphan_deliverable(layout, article: str, dest) -> list[str]:
     圖檔不搬（archive/ 不可變；圖可能被其他文件共用）。"""
     moved: list[str] = []
     for f in (layout.docs_latest(article),
-              layout.docs_ledger(article),
+              layout.docs_ledger(article),          # 案卷 ledger.yaml（隨卷）
+              layout.verdicts_journal(article),     # 裁決日誌隨卷保全、不遺孤兒
+              layout.docs_ledger_prev(article),     # 前一代 .ledger/ 位置（fallback 期）
               layout.docs_ledger_legacy(article)):
         if f.is_file():
             target = dest / f.name
@@ -187,11 +189,11 @@ def _retire_store(layout, schema, section: str, args) -> int:
             "concept id, or resolve the archived entry first, then retire again.\n")
         return 1
 
-    archive_root = layout.corpus_archive_dir
-    dest = archive_root / section.replace("/", "__")
-    if dest.exists():
-        sys.stderr.write(f"docspec: archive destination already exists: {dest}. Resolve it before retiring.\n")
-        return 1
+    # 退場案卷（dossier-layout）：corpus/_archive/<article>/——與活案卷同拓撲、state=location。
+    # 內容記錄進**密封退場 store**（_archive/<article>/article.yaml，append 語義：同篇多次退場
+    # 共用一份）；history.yaml＝輕量 kind:section 索引（readers 既有掃描形狀不變）。
+    # 廢散檔 dump（一節一夾三小檔＝前世形態；舊封存包唯讀相容、readers 照讀）。
+    dest = layout.archived_article_dir(article)
     archive_link = dest.relative_to(layout.planning_home).as_posix()
 
     # 反向引用警告（子樹 concept.id 由記錄收集）。
@@ -199,36 +201,39 @@ def _retire_store(layout, schema, section: str, args) -> int:
                if r.kind == "leaf" and r.concept and r.concept.get("id")}
     _warn_back_references(layout, section, sub_ids)
 
-    # ── dump 封存包（可回復的散檔形態；子樹相對位置保留）＋history.yaml（kind:section entry）──
-    from pathlib import Path
+    # ── 記錄進密封退場 store（load-or-create、append、重封）──
     dest.mkdir(parents=True, exist_ok=True)
-    dest_history: list = []
-    for r in subtree:
-        rel = r.path[len(section):].lstrip("/")
-        rdir = dest / Path(*[p for p in rel.split("/") if p]) if rel else dest
-        rdir.mkdir(parents=True, exist_ok=True)
-        if r.kind == "group":
-            meta = {k: v for k, v in (r.group or {}).items() if v is not None}
-            (rdir / "group.yaml").write_text(
-                yaml.safe_dump(meta, allow_unicode=True, sort_keys=False),
-                encoding="utf-8", newline="\n")
-            continue
-        if r.concept is not None:
-            (rdir / "concept.yaml").write_text(
-                yaml.safe_dump(r.concept, allow_unicode=True, sort_keys=False),
-                encoding="utf-8", newline="\n")
-        if r.decisions:
-            (rdir / "decisions.yaml").write_text(
-                yaml.safe_dump({"entries": list(r.decisions)}, allow_unicode=True, sort_keys=False),
-                encoding="utf-8", newline="\n")
-        if r.material is not None:
-            (rdir / "material.md").write_text(r.material, encoding="utf-8", newline="\n")
-        # 該節自己既有的 history（退場記錄）併進退場根的 history.yaml（子節罕見有）
-        if r.path == section:
-            dest_history.extend(e for e in (r.history or []) if isinstance(e, dict))
+    archived_store = dest / "article.yaml"
+    if archived_store.is_file():
+        arch = _store.load_article(archived_store, verify=True)
+    else:
+        arch = _store.Article(name=article, revision=0, records=[])
+    dup = [r.path for r in subtree if arch.record_by_path(r.path) is not None]
+    if dup:
+        sys.stderr.write(
+            f"docspec: refusing to retire \"{section}\": the archived store already holds "
+            f"record(s) for {dup} — resolve the earlier retirement first.\n")
+        return 1
+    arch.records.extend(subtree)
+    arch.revision += 1
+    _store.save_article_to(archived_store, arch, schema)
 
-    dest_history.append(_section_entry(sec_id, note, archive_link, args.retired_in))
-    _write_history_yaml(dest / "history.yaml", dest_history)
+    # ── history.yaml 索引（append；entry 帶真實 section 路徑）──
+    dest_history: list = []
+    hist_path = dest / "history.yaml"
+    if hist_path.is_file():
+        try:
+            prior = yaml.safe_load(hist_path.read_text(encoding="utf-8")) or {}
+            dest_history = list(prior.get("entries") or [])
+        except yaml.YAMLError:
+            dest_history = []
+    own_rec = art.record_by_path(section)
+    if own_rec is not None:
+        dest_history.extend(e for e in (own_rec.history or []) if isinstance(e, dict))
+    entry = _section_entry(sec_id, note, archive_link, args.retired_in)
+    entry["section"] = section          # 共用索引下保住原路徑（reader 優先讀它）
+    dest_history.append(entry)
+    _write_history_yaml(hist_path, dest_history)
 
     # ── 活 store 移除記錄、revision+1、原子重寫（或整篇退役→刪 store 檔＋搬交付物）──
     keep = [r for r in art.records
@@ -241,13 +246,17 @@ def _retire_store(layout, schema, section: str, args) -> int:
         _store.save_article(layout, art, schema)
     else:
         # 整篇退役：活 store 已無任何 leaf → 刪 store 檔（文章從活樹消失），
-        # 交付檔＋帳本搬進封存包（D6：content is recoverable）。
+        # 交付檔＋帳本＋裁決日誌＋治理帳搬進退場案卷（D6：content is recoverable；
+        # dossier-layout：整卷同拓撲、零孤兒），活案卷夾清空即移除。
         store_file.unlink()
         moved_deliverables = _migrate_orphan_deliverable(layout, article, dest)
-        _carry_governance_siblings(layout, article, dest)   # #8：sibling audit/roadmap 搬進封存包、不孤兒化
+        _carry_governance_siblings(layout, article, dest)   # #8：audit/roadmap 隨卷、不孤兒化
+        live_dossier = layout.article_dir(article)
+        if live_dossier.is_dir() and not any(live_dossier.iterdir()):
+            live_dossier.rmdir()
 
     print(f"retire: \"{section}\" retired -> {dest.relative_to(layout.project_root)} "
-          f"(store corpus/{article}.yaml: {len(subtree)} record(s) extracted, revision {art.revision})")
+          f"({len(subtree)} record(s) moved into the sealed archived store, revision {art.revision})")
     print(f"  one-liner: {note}")
     print(f"  link (archive): {archive_link}")
     if moved_deliverables:

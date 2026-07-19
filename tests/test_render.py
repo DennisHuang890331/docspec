@@ -37,8 +37,8 @@ def test_ledger_lives_in_sidecar_not_frontmatter(make_project, write_leaf, monke
     assert "sections" not in meta and set(meta) <= {"article", "version"}
     ledger_file = Layout(home).docs_ledger("g")
     assert ledger_file.is_file()
-    # 機器簿記住 docspec/（planning_home）底下的 .ledger/、**不在 docs/（交付物）**
-    assert ledger_file.parent.name == ".ledger"
+    # dossier-layout：機器簿記隨卷住 corpus/<article>/ledger.yaml、**不在 docs/（交付物）**
+    assert ledger_file == Layout(home).article_ledger("g")
     assert home in ledger_file.parents
     assert Layout(home).docs_dir not in ledger_file.parents
     assert "g/intro" in read_ledger(Layout(home), "g")

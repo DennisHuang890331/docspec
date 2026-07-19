@@ -3,7 +3,7 @@
 兩類都是「疑似」狀態（可能正在施工），WARN 提示人裁決、不當閘門：
   - 衝突副本：`* (N)` 檔/夾（Drive 衝突副本模式）與 `*.tmp.drive*` 暫存——引擎只讀固定
     檔名，副本內容不生效，人以為改了其實沒改。
-  - 死資料夾：非 `_` 前綴、但不含 concept.yaml/group.yaml 且無有效後代——
+  - 死資料夾：非 `_` 前綴、但不含 article.yaml（dossier 案卷）/concept.yaml/group.yaml 且無有效後代——
     引擎全體對它隱形（status/list/check 均不列）。
 """
 
@@ -14,7 +14,7 @@ import re
 # Drive 衝突副本檔名模式：`<stem> (N)` 或 `<stem> (N).<ext>`
 _CONFLICT_COPY_RE = re.compile(r"^.* \(\d+\)(\.[^.]+)?$")
 # 引擎的「活」標記檔：含任一＝該資料夾（或其祖先鏈）對引擎可見
-_ALIVE_MARKERS = ("concept.yaml", "group.yaml")
+_ALIVE_MARKERS = ("concept.yaml", "group.yaml", "article.yaml")   # article.yaml＝dossier 案卷
 # 慣例資料夾（非節點、不算死資料夾）：節的圖資產夾
 _CONVENTION_DIRS = frozenset({"assets"})
 
@@ -75,7 +75,7 @@ def _scan_hygiene(layout) -> list[str]:
             continue
         rel = p.relative_to(corpus)
         warnings.append(
-            f"corpus/{rel.as_posix()}: dead folder — no concept.yaml/group.yaml "
+            f"corpus/{rel.as_posix()}: dead folder — no article.yaml/concept.yaml/group.yaml "
             "here or below, so the engine cannot see it (status/list/check all skip it); "
             "add the missing file or clean it up")
     return warnings

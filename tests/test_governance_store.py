@@ -54,7 +54,7 @@ def test_roadmap_add_routes_to_doc_and_seals(make_project, write_leaf, monkeypat
     assert rmcmd.run(["add", "--kind", "gap", "--title", "補圖", "--target", "sc/x"]) == 0
     layout = Layout(home)
     p = doc_roadmap_path(layout, "sc")                     # target 落在 sc → doc 檔
-    assert p.name == "sc.roadmap.yaml" and p.is_file()
+    assert p == layout.article_roadmap("sc") and p.is_file()   # dossier 案卷內定名檔
     text = p.read_text(encoding="utf-8")
     assert "integrity: sha256:" in text                    # 封條在
     rev, entries = sealed.load_sealed(p, list_key="entries", error_cls=ValueError)
@@ -80,7 +80,7 @@ def test_audit_doc_file_is_sibling_and_sealed(make_project, write_leaf):
     raise_finding(store, face="logic", severity="med", finding="x", targets=["sc/x"])
     store.save()
     p = doc_audit_path(layout, "sc")
-    assert p.name == "sc.audit.yaml" and p.is_file()       # sibling，非幻影夾
+    assert p == layout.article_audit("sc") and p.is_file()    # dossier 案卷內定名檔
     assert "integrity: sha256:" in p.read_text(encoding="utf-8")
 
 

@@ -76,14 +76,14 @@ def _assert_rejected_unchanged(run_args, target_path):
 
 def test_put_rejects_bad_yaml(make_project, write_leaf, monkeypatch, tmp_path):
     home = _project(make_project, write_leaf, monkeypatch)
-    dpath = home / "corpus" / "doc.yaml"   # ★store-only：拒收要驗 store 檔 byte 不變
+    dpath = home / "corpus" / "doc" / "article.yaml"   # dossier：拒收要驗 store 檔 byte 不變
     src = _src(tmp_path, "bad.yaml", "entries: [ {id: d9, kind: normative, ")  # 未閉合
     _assert_rejected_unchanged(["doc/intro", "decisions", src], dpath)
 
 
 def test_put_rejects_duplicate_id(make_project, write_leaf, monkeypatch, tmp_path):
     home = _project(make_project, write_leaf, monkeypatch)
-    dpath = home / "corpus" / "doc.yaml"   # ★store-only：拒收要驗 store 檔 byte 不變
+    dpath = home / "corpus" / "doc" / "article.yaml"   # dossier：拒收要驗 store 檔 byte 不變
     src = _src(tmp_path, "dup.yaml",
                "entries:\n"
                "  - {id: dd, kind: normative, status: accepted, statement: \"一\"}\n"
@@ -104,7 +104,7 @@ def test_put_rejects_id_claimed_by_other_section(make_project, write_leaf, monke
 
 def test_put_rejects_bad_enum(make_project, write_leaf, monkeypatch, tmp_path):
     home = _project(make_project, write_leaf, monkeypatch)
-    dpath = home / "corpus" / "doc.yaml"   # ★store-only：拒收要驗 store 檔 byte 不變
+    dpath = home / "corpus" / "doc" / "article.yaml"   # dossier：拒收要驗 store 檔 byte 不變
     src = _src(tmp_path, "enum.yaml",
                "entries:\n  - {id: d9, kind: normative, status: bogus, statement: \"x\"}\n")
     _assert_rejected_unchanged(["doc/intro", "decisions", src], dpath)
@@ -112,7 +112,7 @@ def test_put_rejects_bad_enum(make_project, write_leaf, monkeypatch, tmp_path):
 
 def test_put_rejects_dangling_relation(make_project, write_leaf, monkeypatch, tmp_path):
     home = _project(make_project, write_leaf, monkeypatch)
-    cpath = home / "corpus" / "doc.yaml"   # ★store-only：拒收要驗 store 檔 byte 不變
+    cpath = home / "corpus" / "doc" / "article.yaml"   # dossier：拒收要驗 store 檔 byte 不變
     src = _src(tmp_path, "rel.yaml",
                "id: c-impl\ntitle: 實作\norder: 2\nstatus: draft\nconcept: 實作\n"
                "realizes: [ghost-id]\n")

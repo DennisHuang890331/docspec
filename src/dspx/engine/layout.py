@@ -125,6 +125,41 @@ class Layout:
             return self.docs_dir / ASSET_DIR_NAME
         return self.docs_dir / article / ASSET_DIR_NAME
 
+    # ── 文章案卷（dossier-layout：一篇一夾、內檔定名、層級決定住址）──────
+
+    def article_dir(self, article: str) -> Path:
+        """文章案卷夾 `corpus/<article>/`——該篇**全部**紀錄住同一夾、內檔定名
+        （article/audit/roadmap/ledger/verdicts.yaml）；文章名只出現在夾名，
+        改名＝改一個夾名全部跟著走。"""
+        return self.corpus_dir / article
+
+    def article_store(self, article: str) -> Path:
+        """密封 store（真相）＝案卷內定名檔 article.yaml。"""
+        return self.article_dir(article) / "article.yaml"
+
+    def article_audit(self, article: str) -> Path:
+        return self.article_dir(article) / "audit.yaml"
+
+    def article_roadmap(self, article: str) -> Path:
+        return self.article_dir(article) / "roadmap.yaml"
+
+    def article_ledger(self, article: str) -> Path:
+        """render 指紋帳本（機器簿記，隨卷）。"""
+        return self.article_dir(article) / "ledger.yaml"
+
+    def article_verdicts(self, article: str) -> Path:
+        """裁決日誌（append-only，隨卷；整篇退役隨夾保全、不再變孤兒）。"""
+        return self.article_dir(article) / "verdicts.yaml"
+
+    def archived_article_dir(self, article: str) -> Path:
+        """退場案卷 `corpus/_archive/<article>/`——與活案卷同拓撲（state=location）。"""
+        return self.corpus_archive_dir / article
+
+    @property
+    def explorations_dir(self) -> Path:
+        """思考級記錄的家（比照 OpenSpec explorations/）：純 md、不密封、引擎零管理。"""
+        return self.planning_home / "explorations"
+
     # ── section 路徑 ↔ 資料夾 ────────────────────────────────────
 
     def section_dir(self, section: str) -> Path:
@@ -159,17 +194,24 @@ class Layout:
         return self.docs_dir / article / "_latest.md"
 
     def docs_ledger(self, article: str) -> Path:
-        """機器簿記：存 render 記的各節指紋表（`sections` 帳本）。住在 **docspec/（planning_home）
-        底下的 `.ledger/`、不在 docs/**——docs/ 只放人讀的交付物，指紋表是引擎內部簿記、非交付物，
-        不該汙染交付資料夾。人讀的是 `docs/<article>_latest.md`，這檔純機器用。"""
+        """機器簿記：render 記的各節指紋表。dossier-layout：**隨卷**住 `corpus/<article>/ledger.yaml`
+        ——per-article 紀錄不散居；docs/ 只放人讀的交付物。"""
+        return self.article_ledger(article)
+
+    def docs_ledger_prev(self, article: str) -> Path:
+        """前一代帳本位置（`docspec/.ledger/<article>.sections.yaml`）。讀端 fallback：
+        舊佈局照讀、下次 render 寫進案卷；`store migrate-layout` 一次收編。"""
         return self.planning_home / LEDGER_DIR_NAME / f"{article}.sections.yaml"
 
     def docs_ledger_legacy(self, article: str) -> Path:
-        """舊版指紋帳本位置（docs/ 底下的隱藏 sidecar）。read_ledger 用它做**自動遷移** fallback：
-        舊專案的帳本還在 docs/ 時照常讀得到，下次 render 會寫進新位置（docspec/.ledger/）。"""
+        """最舊帳本位置（docs/ 底下的隱藏 sidecar）。read_ledger 的最後一層 fallback。"""
         if self.docs_layout == "flat":
             return self.docs_dir / f".{article}.sections.yaml"
         return self.docs_dir / article / ".sections.yaml"
+
+    def verdicts_journal(self, article: str) -> Path:
+        """裁決日誌的家（隨卷）；change 情境由 OverlayLayout 覆寫導向 preview。"""
+        return self.article_verdicts(article)
 
     def docs_snapshot(self, article: str, version: str) -> Path:
         # version＝semver 字串（X.Y.Z）。凍結快照一律收進 archive/ 子夾（兩種 layout 皆然）
@@ -265,4 +307,9 @@ class Layout:
                 if (p.is_file() and not p.name.startswith("_") and p.stem not in seen
                         and not conflict.match(p.stem) and ".tmp.drive" not in p.name.lower()):
                     seen.append(p.stem)
+            # dossier-layout：案卷夾（corpus/<article>/article.yaml）＝文章（夾名即文章名）。
+            for d in sorted(self.corpus_dir.iterdir()):
+                if (d.is_dir() and not d.name.startswith("_") and d.name not in seen
+                        and not conflict.match(d.name) and (d / "article.yaml").is_file()):
+                    seen.append(d.name)
         return seen

@@ -171,27 +171,46 @@ def _migrate_one(layout: Layout, article: str, schema) -> int:
             sys.stderr.write(f"    ✗ {m}\n")
         return 1
 
-    # 平價閘過關 → 寫 store 檔、收編治理散檔、刪散檔樹（工作台散檔在 guard 已 fail-loud 擋下）。
-    st.save_article(layout, article_obj, schema)
-    folded_gov = _fold_governance(layout, article)
-    _delete_scatter_tree(layout, article)
-    print(f"store migrate: {article} -> corpus/{article}.yaml "
+    # 平價閘過關。dossier-layout：散檔樹與案卷夾**同名同位**（corpus/<article>/）——
+    # 先把散檔樹整夾挪到暫置區（同目錄 rename＝原子），再寫案卷、從暫置區收編治理檔，
+    # 全綠才刪暫置區；中途任何失敗＝挪回原位、零損失。
+    art_dir = layout.section_dir(article)
+    tmp = layout.corpus_dir / f"_migrating_{article}"
+    if tmp.exists():
+        sys.stderr.write(f"docspec: store migrate {article}: leftover {tmp.name}/ from an aborted "
+                         "run — resolve it (restore or delete) before migrating.\n")
+        return 1
+    art_dir.rename(tmp)
+    try:
+        st.save_article(layout, article_obj, schema)
+        folded_gov = _fold_governance(layout, article, src_dir=tmp)
+    except Exception as exc:  # noqa: BLE001 — 失敗挪回、fail-loud
+        dossier = layout.article_dir(article)
+        if dossier.is_dir():
+            shutil.rmtree(dossier)
+        tmp.rename(art_dir)
+        sys.stderr.write(f"docspec: store migrate {article}: failed mid-write ({exc}); "
+                         "scattered tree restored, nothing lost.\n")
+        return 1
+    shutil.rmtree(tmp)
+    print(f"store migrate: {article} -> corpus/{article}/article.yaml "
           f"({len(article_obj.leaf_records())} leaves, {len(article_obj.group_records())} groups; "
           f"parity gate passed).")
     if folded_gov:
-        print(f"  folded {folded_gov} governance file(s) into sealed sibling/forest stores")
-    print(f"  reverse anytime: docspec store dump {article} <DIR>  then delete corpus/{article}.yaml")
+        print(f"  folded {folded_gov} governance file(s) into the sealed dossier/forest stores")
+    print(f"  reverse anytime: docspec store dump {article} <DIR>  then delete the dossier")
     return 0
 
 
-def _fold_governance(layout: Layout, article: str) -> int:
-    """migrate 收編：散檔 `<article>/{audit,roadmap}.yaml` → sibling 密封檔；
-    `roadmap-archive.yaml` → 單一 forest archive。回傳收編的檔數。"""
+def _fold_governance(layout: Layout, article: str, src_dir: Path | None = None) -> int:
+    """migrate 收編：散檔 `<article>/{audit,roadmap}.yaml` → 案卷密封檔；
+    `roadmap-archive.yaml` → 單一 forest archive。回傳收編的檔數。
+    `src_dir`：散檔根（dossier-layout 遷移時散檔樹已被挪到暫置夾，從那裡讀）。"""
     from dspx.engine.sealed import load_sealed
     from dspx.reports.audit import AuditError, AuditStore, doc_audit_path
     from dspx.reports.roadmap import (RoadmapError, _append_archive, _write_entries,
                                       doc_roadmap_path, forest_roadmap_archive_path)
-    art_dir = layout.section_dir(article)
+    art_dir = src_dir if src_dir is not None else layout.section_dir(article)
     folded = 0
     old_audit = art_dir / "audit.yaml"
     if old_audit.is_file():
@@ -297,6 +316,68 @@ def _load_one(layout: Layout, article: str, src_dir: Path, schema) -> int:
     return 0
 
 
+# ── migrate-layout（前一代扁平佈局 → 案卷佈局；冪等、fail-loud、新位驗證綠才刪舊）────────
+
+def _cmd_migrate_layout(layout: Layout, schema) -> int:
+    """一次性搬進 dossier 佈局：corpus/<a>.yaml → corpus/<a>/article.yaml、sibling 治理檔與
+    .ledger/ 帳本/日誌隨卷。逐檔「複製→新位驗證→刪舊」；任何驗證失敗＝停在當步、舊檔不動。"""
+    from dspx.engine.sealed import load_sealed
+    moved: list[str] = []
+    rc = 0
+    for article in st.store_articles(layout):
+        new_store = layout.article_store(article)
+        old_store = st.legacy_store_path(layout, article)
+        if new_store.is_file() and old_store.is_file():
+            sys.stderr.write(
+                f"docspec: store migrate-layout: article \"{article}\" exists in BOTH layouts — "
+                "delete or merge the legacy flat file first (refusing to guess which is truth).\n")
+            rc = 1
+            continue
+        dossier = layout.article_dir(article)
+        plan = [
+            (old_store, new_store, "store"),
+            (layout.corpus_dir / f"{article}.audit.yaml", layout.article_audit(article), "audit"),
+            (layout.corpus_dir / f"{article}.roadmap.yaml", layout.article_roadmap(article), "roadmap"),
+            (layout.docs_ledger_prev(article), layout.article_ledger(article), "ledger"),
+            (layout.planning_home / ".ledger" / f"{article}.verdicts.yaml",
+             layout.article_verdicts(article), "verdicts"),
+        ]
+        for old, new, kind in plan:
+            if not old.is_file() or new.is_file():
+                continue
+            new.parent.mkdir(parents=True, exist_ok=True)
+            new.write_text(old.read_text(encoding="utf-8"), encoding="utf-8", newline="")
+            try:  # 新位驗證（密封類驗封條、簿記類驗可解析）——綠才刪舊
+                if kind == "store":
+                    st.load_article(new, verify=True)
+                elif kind in ("audit", "roadmap"):
+                    load_sealed(new, list_key=("findings" if kind == "audit" else "entries"),
+                                error_cls=st.StoreError, verify=True)
+                else:
+                    yaml.safe_load(new.read_text(encoding="utf-8"))
+            except Exception as exc:  # noqa: BLE001 — 任何驗證失敗都停手保舊檔
+                new.unlink(missing_ok=True)
+                sys.stderr.write(f"docspec: store migrate-layout: {article}/{kind}: verification "
+                                 f"at the new location failed ({exc}); old file left intact.\n")
+                rc = 1
+                break
+            old.unlink()
+            moved.append(f"{article}: {old.name} -> corpus/{article}/{new.name}")
+        _ = dossier  # 案卷夾由首個搬入檔建立
+    ledger_dir = layout.planning_home / ".ledger"
+    if ledger_dir.is_dir() and not any(ledger_dir.iterdir()):
+        ledger_dir.rmdir()
+        moved.append(".ledger/ removed (empty)")
+    layout.explorations_dir.mkdir(exist_ok=True)
+    if moved:
+        print(f"store migrate-layout: {len(moved)} move(s):")
+        for m in moved:
+            print(f"  {m}")
+    else:
+        print("store migrate-layout: already on the dossier layout (nothing to move)")
+    return rc
+
+
 # ── fsck（驗封條）──────────────────────────────────────────────────────
 
 def _fsck_governance(layout: Layout, articles: list[str], accept: bool) -> int:
@@ -332,6 +413,16 @@ def _fsck_governance(layout: Layout, articles: list[str], accept: bool) -> int:
 def _fsck(layout: Layout, articles: list[str], accept: bool, schema) -> int:
     rc = 0
     for article in articles:
+        # dossier-layout 兩位並存偵測：新位（案卷）與前一代扁平位都有料＝舊位被遮蔽、
+        # 極易誤編——fail-loud 指路 migrate-layout（它會拒收這種狀態要人先裁）。
+        if (layout.article_store(article).is_file()
+                and st.legacy_store_path(layout, article).is_file()):
+            sys.stderr.write(
+                f"docspec: store fsck: article \"{article}\" exists in BOTH layouts — "
+                f"corpus/{article}/article.yaml (active) shadows corpus/{article}.yaml "
+                "(legacy, silently ignored). Delete or merge the legacy file "
+                "(`docspec store migrate-layout` refuses until resolved).\n")
+            rc = 1
         path = st.store_path(layout, article)
         try:
             st.load_article(path, verify=True)
@@ -364,6 +455,11 @@ def run(argv: list[str]) -> int:
     p_load = sub.add_parser("load", help="import scattered files into a store (full validation)")
     p_load.add_argument("article")
     p_load.add_argument("src", help="source directory of scattered files")
+
+    p_ml = sub.add_parser("migrate-layout",
+                          help="one-shot move to the dossier layout: corpus/<article>/{article,"
+                               "audit,roadmap,ledger,verdicts}.yaml (idempotent; verifies seals "
+                               "at the new location before deleting the old files)")
 
     p_fsck = sub.add_parser("fsck", help="verify integrity seals; --accept re-seals external edits")
     p_fsck.add_argument("article", nargs="?", help="article name (default: all store articles)")
@@ -402,6 +498,9 @@ def run(argv: list[str]) -> int:
         return _dump_one(layout, args.article, Path(args.out), schema)
     if args.sub == "load":
         return _load_one(layout, args.article, Path(args.src), schema)
+    if args.sub == "migrate-layout":
+        return _cmd_migrate_layout(layout, schema)
+
     if args.sub == "fsck":
         arts = [args.article] if args.article else st.store_articles(layout)
         if not arts:

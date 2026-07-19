@@ -43,9 +43,14 @@ class RoadmapError(ModelError):
 
 
 def _roadmap_scope(path: Path) -> str:
-    """密封 scope 標籤（自 path.name 推得）：forest 檔＝roadmap.yaml、doc 檔＝<article>.roadmap.yaml。"""
+    """密封 scope 標籤（自路徑推得）：forest＝`<planning_home>/roadmap.yaml`；
+    doc＝案卷內 `corpus/<article>/roadmap.yaml`（dossier-layout）或前一代 sibling
+    `corpus/<article>.roadmap.yaml`。案卷判別＝上上層夾名為 corpus。"""
     n = path.name
     if n == ROADMAP_FILE:
+        from dspx.engine.layout import CORPUS_DIR_NAME
+        if path.parent.parent.name == CORPUS_DIR_NAME:
+            return f"doc:{path.parent.name}"      # 案卷內定名檔
         return "forest"
     suffix = ".roadmap.yaml"
     return f"doc:{n[:-len(suffix)]}" if n.endswith(suffix) else f"doc:{n}"
@@ -59,9 +64,14 @@ def _load_entries(path: Path, store: str) -> list[dict]:
 
 
 def doc_roadmap_path(layout: Layout, article: str) -> Path:
-    """per-doc roadmap 檔＝**sibling 密封檔** `corpus/<article>.roadmap.yaml`（一篇一檔 store 兄弟；
-    形狀命中 hook `_is_store_file`＝自動守手改）。"""
-    return layout.corpus_dir / f"{article}.roadmap.yaml"
+    """per-doc roadmap 檔（dossier-layout）＝案卷內定名檔 `corpus/<article>/roadmap.yaml`。
+    fallback：新位不存在而前一代 sibling（`corpus/<article>.roadmap.yaml`）存在 → 回舊位。"""
+    new = layout.article_roadmap(article)
+    if not new.is_file():
+        old = layout.corpus_dir / f"{article}.roadmap.yaml"
+        if old.is_file():
+            return old
+    return new
 
 
 def forest_roadmap_path(layout: Layout) -> Path:

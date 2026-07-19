@@ -299,6 +299,7 @@ def run(argv: list[str]) -> int:
 
     home.mkdir(parents=True, exist_ok=True)
     (home / CORPUS_DIR_NAME).mkdir(exist_ok=True)
+    (home / "explorations").mkdir(exist_ok=True)   # 思考級記錄的家（純 md、引擎零管理）
     # scaffold：既有檔不覆寫（保留使用者客製的 config/writing-guide/glossary），只補缺
     # config/glossary/writing-guide 骨架一律英文（語言中性 doctrine）；交付語言由 develop 填進
     # writing-guide 的 Project conventions 區，config.language 先放 --lang 預設提示。

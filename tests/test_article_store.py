@@ -221,7 +221,10 @@ def test_migrate_creates_store_deletes_scatter_and_is_reversible(make_project, m
     monkeypatch.chdir(home.parent)
     assert store_cmd.run(["migrate", "g"]) == 0
     assert st.store_path(Layout(home), "g").is_file()
-    assert not (home / "corpus" / "g").exists()      # 散檔樹已刪
+    # dossier-layout：corpus/g/ 現在是案卷夾（只含定名檔）；散檔樹（concept.yaml 們）已消滅
+    assert (home / "corpus" / "g" / "article.yaml").is_file()
+    assert not list((home / "corpus" / "g").rglob("concept.yaml"))
+    assert not (home / "corpus" / "_migrating_g").exists()   # 暫置區收乾淨
     # store 篇仍完整載入（4 leaves）
     leaves = load_project(Layout(home))
     assert {lf.section for lf in leaves} == {"g", "g/intro", "g/rules", "g/impl", "g/grp/leaf"}
@@ -465,13 +468,17 @@ def test_store_retire_extracts_record_and_archives(make_project, monkeypatch, ca
     assert art.record_by_path("g/other") is not None             # 旁節存活
     assert art.record_by_path("g") is not None                   # 根存活
     assert art.revision == rev_before + 1
-    # 封存包＝可回復的散檔形態＋history.yaml（kind:section entry）
-    dest = home / "corpus" / "_archive" / "g__intro"
-    assert (dest / "concept.yaml").is_file()
-    assert (dest / "material.md").read_text(encoding="utf-8") == "材料內容\n"
+    # 退場案卷（dossier-layout）＝corpus/_archive/g/：記錄進**密封退場 store**（同拓撲、零散檔）
+    # ＋history.yaml 輕量索引（entry 帶真實 section 路徑）
+    dest = home / "corpus" / "_archive" / "g"
+    arch = st.load_article(dest / "article.yaml", verify=True)
+    rec = arch.record_by_path("g/intro")
+    assert rec is not None and rec.material == "材料內容\n"      # 記錄完整、封條有效
+    assert not (dest / "concept.yaml").exists()                   # 零散檔 dump
     hist = yaml.safe_load((dest / "history.yaml").read_text(encoding="utf-8"))
     sec = next(e for e in hist["entries"] if e.get("kind") == "section")
     assert sec["id"] == "c-in" and sec["statement"] == "新手第一課" and sec["retired-in"] == "v2"
+    assert sec["section"] == "g/intro"                            # 共用索引帶原路徑
     # 引擎隱形：load_project 不再看到退場節
     assert "g/intro" not in {lf.section for lf in load_project(Layout(home))}
     # retired 查得到
@@ -495,11 +502,13 @@ def test_store_retire_whole_article_removes_store_and_migrates_deliverable(
 
     capsys.readouterr()
     assert retire_cmd.run(["solo"]) == 0
-    assert not st.store_path(Layout(home), "solo").is_file()      # 整篇退役＝刪 store 檔
+    assert not st.store_path(Layout(home), "solo").is_file()      # 整篇退役＝活 store 檔消失
     dest = home / "corpus" / "_archive" / "solo"
-    assert (dest / "concept.yaml").is_file()                      # 記錄 dump 成散檔（可回復）
-    assert not latest.exists() and (dest / "_latest.md").is_file()  # 交付物搬進封存包
-    assert (dest / "solo.sections.yaml").is_file()               # 帳本一併搬走、docs/.ledger 無孤兒
+    arch = st.load_article(dest / "article.yaml", verify=True)    # 記錄在密封退場 store（同拓撲）
+    assert arch.record_by_path("solo") is not None
+    assert not latest.exists() and (dest / "_latest.md").is_file()  # 交付物搬進退場案卷
+    assert (dest / "ledger.yaml").is_file()                        # 指紋帳隨卷、零孤兒
+    assert not (home / "corpus" / "solo").exists()                 # 活案卷夾清空即移除
 
 
 def test_store_get_put_roundtrip(make_project, monkeypatch, tmp_path, capsys):

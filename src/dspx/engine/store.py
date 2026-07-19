@@ -372,17 +372,31 @@ def load_article(path: Path, *, verify: bool = True) -> Article:
 
 # ── per-article 自動偵測 ──────────────────────────────────────────────
 
-def store_path(layout: Layout, article: str) -> Path:
-    """一篇的 store 檔路徑：`<corpus>/<article>.yaml`。"""
+def legacy_store_path(layout: Layout, article: str) -> Path:
+    """前一代扁平位置 `corpus/<article>.yaml`（dossier-layout 前）。讀端 fallback 用。"""
     return layout.corpus_dir / f"{article}.yaml"
 
 
+def store_path(layout: Layout, article: str) -> Path:
+    """一篇的 store 檔路徑（dossier-layout）：`corpus/<article>/article.yaml`。
+
+    fallback：新位不存在而**舊扁平位存在** → 回舊位（讀寫都留在舊位＝不隱式半遷移；
+    `docspec store migrate-layout` 一次收編）。新專案/已遷專案一律新位。"""
+    new = layout.article_store(article)
+    if not new.is_file():
+        old = legacy_store_path(layout, article)
+        if old.is_file():
+            return old
+    return new
+
+
 def article_has_store(layout: Layout, article: str) -> bool:
-    return store_path(layout, article).is_file()
+    return layout.article_store(article).is_file() or legacy_store_path(layout, article).is_file()
 
 
 def article_has_tree(layout: Layout, article: str) -> bool:
-    """該篇有散檔 leaf 夾樹（`<corpus>/<article>/` 下任一 concept.yaml，非封存）。"""
+    """該篇有散檔 leaf 夾樹（`<corpus>/<article>/` 下任一 concept.yaml，非封存）。
+    dossier 案卷夾（只含定名 yaml、無 concept.yaml）不算散檔樹。"""
     art_dir = layout.section_dir(article)
     if not art_dir.is_dir():
         return False
@@ -416,19 +430,25 @@ _CONFLICT_STORE_RE = _re.compile(r".* \(\d+\)$")
 
 
 def store_articles(layout: Layout) -> list[str]:
-    """corpus/ 下所有 store 檔對應的文章名（依名排序，`_` 前綴隱形；Drive 衝突副本/暫存隱形）。"""
+    """corpus/ 下所有文章名（依名排序）：dossier 案卷夾（`corpus/<夾>/article.yaml`）∪
+    前一代扁平檔（`corpus/<article>.yaml`，fallback 期）。`_` 前綴隱形；Drive 衝突副本/暫存隱形。"""
     if not layout.corpus_dir.is_dir():
         return []
-    out = []
-    for p in sorted(layout.corpus_dir.glob("*.yaml")):
+    names: set[str] = set()
+    for d in layout.corpus_dir.iterdir():
+        if (d.is_dir() and not d.name.startswith("_")
+                and not _CONFLICT_STORE_RE.match(d.name)
+                and (d / "article.yaml").is_file()):
+            names.add(d.name)
+    for p in layout.corpus_dir.glob("*.yaml"):
         if not (p.is_file() and not p.name.startswith("_")):
             continue
         if p.name.endswith((".audit.yaml", ".roadmap.yaml")):
-            continue   # sibling 治理密封檔不是文章 store
+            continue   # 前一代 sibling 治理密封檔不是文章 store
         if _CONFLICT_STORE_RE.match(p.stem) or ".tmp.drive" in p.name.lower():
             continue   # Drive 同步垃圾：引擎隱形（衛生 check 會 WARN）
-        out.append(p.stem)
-    return out
+        names.add(p.stem)
+    return sorted(names)
 
 
 # ── store → Leaf（讀端窄腰；上層無感）─────────────────────────────────

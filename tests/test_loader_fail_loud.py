@@ -130,7 +130,7 @@ def test_cli_wraps_domain_error_friendly(make_project, write_leaf, monkeypatch, 
     home = make_project()
     write_leaf(home, "a/x", concept={"id": "c1", "title": "X", "order": 1})
     # 手改 store 檔 body（破 integrity 封條）→ load 時 StoreError（ModelError 子類）
-    sp = home / "corpus" / "a.yaml"
+    sp = home / "corpus" / "a" / "article.yaml"
     sp.write_text(sp.read_text(encoding="utf-8").replace("title: X", "title: TAMPERED"),
                   encoding="utf-8")
     monkeypatch.chdir(home.parent)

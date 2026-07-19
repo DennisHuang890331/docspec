@@ -26,7 +26,7 @@ HELP = ("locate a keyword/term across all faces (prose/concept/decisions/materia
         "returns section + face + line/position + snippet so an agent jumps straight there; "
         "--numbers aggregates number+unit values by referent (present-only, for the agent to judge)")
 
-_ALL_FACES = ("prose", "concept", "decisions", "material", "glossary", "audit")
+_ALL_FACES = ("prose", "concept", "decisions", "material", "glossary", "audit", "explorations")
 # 值層呈現器：數字＋單位（放寬 V10 的封閉集，含常見中文量詞）。單位後不得緊接英文字母
 # （#12：擋「5 steps」→「5 s」這類垃圾組）；長單位在前，避免 m 先吃掉 mm/ms。
 _NUM_UNIT_RE = re.compile(
@@ -87,6 +87,20 @@ def _search_prose(layout, articles, query, regex, hits, scope_sections=None):
             line = text.count("\n", 0, start) + 1
             hits.append({"section": sec, "face": "prose",
                          "loc": f"docs/{art}/_latest.md L{line} (snapshot)",
+                         "snippet": _snippet(text, start, end), "id": None})
+
+
+def _search_explorations(layout, query, regex, hits):
+    """explorations/（思考級記錄；引擎唯一接點＝這個唯讀搜尋面）。"""
+    root = layout.explorations_dir
+    if not root.is_dir():
+        return
+    for p in sorted(root.glob("*.md")):
+        text = p.read_text(encoding="utf-8")
+        for start, end in _match_positions(text, query, regex):
+            line = text.count(chr(10), 0, start) + 1
+            hits.append({"section": None, "face": "explorations",
+                         "loc": f"explorations/{p.name} L{line}",
                          "snippet": _snippet(text, start, end), "id": None})
 
 
@@ -281,6 +295,8 @@ def run(argv: list[str]) -> int:
             _search_glossary(layout, args.query, args.regex, hits)
         if "audit" in faces:
             _search_audit(layout, leaves, args.query, args.regex, hits)
+        if "explorations" in faces:
+            _search_explorations(layout, args.query, args.regex, hits)
     except ValueError as exc:
         sys.stderr.write(f"docspec find: {exc}\n")
         return 2

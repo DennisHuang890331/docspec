@@ -620,6 +620,33 @@ class OverlayLayout:
     def docs_ledger(self, article: str) -> Path:
         return self._preview / f"{article}.sections.yaml"
 
+    # ── dossier-layout 案卷方法（透傳 base；store 讀寫由 staging/union 層另管）──
+    def article_dir(self, article: str) -> Path:
+        return self._base.article_dir(article)
+
+    def article_store(self, article: str) -> Path:
+        return self._base.article_store(article)
+
+    def article_audit(self, article: str) -> Path:
+        return self._base.article_audit(article)
+
+    def article_roadmap(self, article: str) -> Path:
+        return self._base.article_roadmap(article)
+
+    def article_ledger(self, article: str) -> Path:
+        return self._base.article_ledger(article)
+
+    def article_verdicts(self, article: str) -> Path:
+        return self._base.article_verdicts(article)
+
+    @property
+    def explorations_dir(self) -> Path:
+        return self._base.explorations_dir
+
+    def docs_ledger_prev(self, article: str) -> Path:
+        # preview 無前代帳本：回不存在路徑（read_ledger 會略過）。
+        return self._preview / f".{article}.prev.none"
+
     def docs_ledger_legacy(self, article: str) -> Path:
         # preview 無 legacy sidecar：回一個不存在的路徑（read_ledger 會略過）。
         return self._preview / f".{article}.legacy.none"

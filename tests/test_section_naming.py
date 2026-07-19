@@ -142,8 +142,8 @@ def test_put_accepts_legal_chinese_path(make_project, monkeypatch, capsys, tmp_p
     monkeypatch.chdir(home.parent)
     assert _put_concept(home, tmp_path, "測試文章/適用範圍") == 0
     assert capsys.readouterr().err == ""
-    assert (home / "corpus" / "測試文章.yaml").is_file()
-    assert not (home / "corpus" / "測試文章").exists()   # 零散檔
+    assert (home / "corpus" / "測試文章" / "article.yaml").is_file()   # dossier-layout 案卷
+    assert not list((home / "corpus" / "測試文章").rglob("concept.yaml"))   # 零散檔
     assert not (home / "work").exists()                   # 零工作台目錄
 
 
