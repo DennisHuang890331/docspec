@@ -6,7 +6,8 @@ description: >-
   its aperture (create/revise/redraft targets, or stale-own/upstream/unwritten sections); align
   narrative-aligns existing prose on docs/_latest or acknowledges it with a verdict verb (align/review
   targets, or stale-inherited/style/norm/drifted). You pick the mode from the engine's routing, never
-  from an operator-read table.
+  from an operator-read table. Use whenever a docspec section's prose needs writing, rewriting, or
+  aligning — any stale-*/unwritten state in docspec status, or any revise/align change target.
 license: PolyForm-Noncommercial-1.0.0
 compatibility: Requires the docspec CLI (installed via uv tool; not on PATH in a fresh shell — run it from the dir printed by `uv tool dir --bin`, never reinstall).
 metadata:

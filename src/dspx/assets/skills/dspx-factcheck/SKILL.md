@@ -5,6 +5,8 @@ description: >-
   for MECE gaps, overlaps, and cross-section contradictions. It only FLAGS (raises located findings via
   docspec audit), never fixes, and is non-blocking, unlike the engine gates. It runs as a clean-context
   subagent with fresh eyes and no loyalty to the author: distrust the confident, uncited sentence most.
+  Use before any publish, after substantive content changes, or whenever the human asks to
+  verify/review a docspec document.
 license: PolyForm-Noncommercial-1.0.0
 compatibility: Requires the docspec CLI (installed via uv tool; not on PATH in a fresh shell — run it from the dir printed by `uv tool dir --bin`, never reinstall).
 metadata:

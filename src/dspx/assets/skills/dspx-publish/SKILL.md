@@ -4,7 +4,8 @@ description: >-
   Ship a docspec document — only when the human explicitly pulls the trigger. Confirms the engine gate,
   runs the one irreversible publish (promote byte-for-byte, freeze a read-only snapshot, bump the
   version, log the changelog), then independently verifies the frozen artifact. Unlike apply it authors
-  nothing — it gates and freezes already-finished content.
+  nothing — it gates and freezes already-finished content. Use ONLY when the human explicitly asks
+  to publish/ship a version — never self-initiated.
 license: PolyForm-Noncommercial-1.0.0
 compatibility: Requires the docspec CLI (installed via uv tool; not on PATH in a fresh shell — run it from the dir printed by `uv tool dir --bin`, never reinstall).
 metadata:

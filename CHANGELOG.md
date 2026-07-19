@@ -10,6 +10,11 @@ a minor bump.
 
 ## [Unreleased]
 
+### Changed — skill descriptions now state WHEN to use them (host agents decide skill loading from the description alone)
+
+Audited the bundled skills against Anthropic's official skill-creator criteria; the one real gap was trigger information. `dspx-apply` and `dspx-factcheck` gained positive trigger sentences (apply's names the engine states that summon it: stale-*/unwritten/revise-align targets); `dspx-publish` and `dspx-release` gained CONDITIONAL triggers that bind invocation to the human's explicit ask and state never-self-initiated — assertive auto-trigger phrasing is deliberately absent on the human-gate skills. Tests pin all six descriptions.
+
+
 ### Fixed / Changed — the engine keeps its records straight (three-role doctrine: the engine is the filing cabinet — it must never lose, misfile, or mis-report a record)
 
 Stress-test v2 (deep three-document corpus, cross-document ripple scenarios) caught six ways the record layer could betray its keeper. All fixed:

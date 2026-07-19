@@ -68,3 +68,31 @@ def test_develop_teaches_rethink_via_put_and_fractional_order():
     assert "notes.md" in body                          # 耐久討論的家＝change notes.md
     assert "roadmap" in body and "task" in body
     assert "order: 2.5" in body                        # fractional order（task 1.3）
+
+
+# ── skill-trigger-descriptions：description 觸發契約（載入決定只憑 description）────
+
+
+def test_all_skill_descriptions_carry_trigger_sentences():
+    """六份 bundled skill 的 description 必含明確「何時用」觸發句——host agent 的載入決定發生在
+    讀到本文/投影之前，description 是唯一線索（官方 skill-creator 判準：治 undertriggering）。"""
+    from dspx.env.skills import available_skills
+    desc = {s.name: s.description for s in available_skills()}
+    assert "Use whenever" in desc["dspx-apply"]
+    assert "stale-" in desc["dspx-apply"]            # 引擎狀態字入 description（最大槓桿）
+    assert "Use before any publish" in desc["dspx-factcheck"]
+    assert "Use when starting" in desc["dspx-develop"]          # 既有合格句（防回退）
+    assert "Use for architecture" in desc["dspx-diagram"]       # 既有合格句（防回退）
+
+
+def test_human_gate_skills_use_conditional_triggers():
+    """publish/release＝人閘 skill：觸發句必須是 human-only 條件式、含 never-self-initiated 語義；
+    禁積極自動觸發措辭（會招來自動觸發＝違反自己的人閘鐵律）。"""
+    from dspx.env.skills import available_skills
+    desc = {s.name: s.description for s in available_skills()}
+    assert "ONLY when the human" in desc["dspx-publish"]
+    assert "never self-initiated" in desc["dspx-publish"]
+    assert "human asks to typeset" in desc["dspx-release"]
+    assert "never self-initiated" in desc["dspx-release"]
+    for name in ("dspx-publish", "dspx-release"):
+        assert "make sure to use" not in desc[name].lower()     # 積極措辭禁入人閘 skill

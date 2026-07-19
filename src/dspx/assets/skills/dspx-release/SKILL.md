@@ -4,7 +4,9 @@ description: >-
   Interactive typesetting gate AFTER publish — turn a frozen snapshot into a delivered PDF. Export →
   proof to page images → read them WITH the human → adjust ONLY the format layer (validated knobs first)
   → re-export until it looks right. Unlike the content skills it touches no word of content (the
-  template pack only), and it converges over rounds with the human in every round.
+  template pack only), and it converges over rounds with the human in every round. Use when the
+  human asks to typeset/export a published snapshot into a delivered PDF — never before publish,
+  never self-initiated.
 license: PolyForm-Noncommercial-1.0.0
 compatibility: Requires the docspec CLI with the export extra (pandoc + the bundled typst binary for the default track), pdfplumber, and pypdfium2; installed via uv tool — not on PATH in a fresh shell, run it from the dir printed by `uv tool dir --bin`, never reinstall. The journal track is emit-only (it produces a .tex for an external toolchain like Overleaf, docspec does not compile it); local journal compilation is optional and on-demand (`docspec setup --with-latex`).
 metadata:
