@@ -10,6 +10,14 @@ a minor bump.
 
 ## [Unreleased]
 
+### Fixed — a brand-new article is now born entirely inside a change, and chapter groups join change governance
+
+Stress-test v3 (clean-slate full lifecycle) caught two seams between the change layer and the dossier world. Both fixed:
+
+- **A document's first decision batch can now actually BE a change**, as the doctrine always said: `add-target --action create`, `put --change`, union view, and preview render all treat a missing official store as an empty official record set (previously they crashed with `store file not found`, forcing the agent to bootstrap with a bare put that violated the official-face freeze). The official store file is born at `change archive`. The union's article set now includes staging-only new articles.
+- **Staged chapter groups count**: a group target completes once its staged record carries a title/order (previously it reported "not in union view" forever, and the agent had to pull groups out of the change), and the union preview resolves group metadata staging-first — the preview's chapter order now matches what will land, instead of the reversed-looking order produced by reading the official (empty) values.
+
+
 ### Changed — the dossier layout: one folder per article, everything about an article lives in it
 
 The planning home now follows one rule — **the level of a record decides its address**: forest-level records live at the root, article-level records live in `corpus/<article>/`, change-level in `changes/<id>/`, and exploratory thinking in `explorations/`.

@@ -116,3 +116,78 @@ def test_guide_projects_exploration_rule(make_project, monkeypatch, capsys):
     assert guide_cmd.run([]) == 0
     out = capsys.readouterr().out
     assert "exploration" in out and "NEVER a source of truth" in out
+
+
+# ── C1/C2（壓測 v3）：change 層 × 案卷世界的兩個接縫 ─────────────────────
+
+
+def test_c1_brand_new_article_first_put_inside_change(make_project, monkeypatch,
+                                                      tmp_path, capsys):
+    """C1：全新文章（尚無 store 檔）的首個 put 就該能進 change——doctrine「文件首建決策批＝
+    一張 change」；archive 落地時官方 store 檔誕生。不再逼 agent 裸 put 繞凍結。"""
+    import yaml as _yaml
+    from dspx.commands.change import change as change_cmd
+    from dspx.commands.corpus import put as put_cmd
+    from dspx.commands.deliverable import render as render_cmd
+    from dspx.engine import store as st
+    from dspx.engine.layout import Layout
+    home = make_project()
+    monkeypatch.chdir(home.parent)
+    assert change_cmd.run(["new", "chg-birth", "--publish", "advisory"]) == 0
+    # 官方連 store 檔都沒有 → add-target create + put --change 都要能走
+    assert change_cmd.run(["add-target", "chg-birth", "新文件/簡介", "--action", "create"]) == 0
+    cpt = tmp_path / "c.yaml"
+    cpt.write_text("title: 簡介\nstatus: draft\nconcept: 首建即在 change 內\n", encoding="utf-8")
+    assert put_cmd.run(["新文件/簡介", "concept", str(cpt), "--change", "chg-birth"]) == 0
+    layout = Layout(home, "per-article")
+    assert not st.legacy_store_path(layout, "新文件").is_file()      # 官方面凍結：尚無官方檔
+    assert not layout.article_store("新文件").is_file()
+    # render preview + 補散文 → archive 落地 → 官方 store 誕生
+    render_cmd.run(["新文件", "--change", "chg-birth"])
+    from dspx.engine import change as chg
+    change = chg.load_change(layout, "chg-birth")
+    pv = chg.preview_dir(change.dir) / "新文件_latest.md"
+    txt = pv.read_text(encoding="utf-8")
+    pv.write_text(txt.replace("## 1. 簡介", "## 1. 簡介\n\n首建散文。"),
+                  encoding="utf-8", newline="\n")
+    render_cmd.run(["新文件", "--change", "chg-birth"])
+    capsys.readouterr()
+    assert change_cmd.run(["archive", "chg-birth"]) == 0
+    art = st.load_article(layout.article_store("新文件"), verify=True)   # 官方檔此刻誕生、封條有效
+    assert art.record_by_path("新文件/簡介") is not None
+
+
+def test_c2_group_target_completes_and_preview_order_correct(make_project, write_leaf,
+                                                             monkeypatch, tmp_path, capsys):
+    """C2：group 進 change 治理——staged group 的 target 可判 done；union preview 的章序
+    用 staging 的 order（不再拿官方空值排出顛倒章序）。"""
+    import yaml as _yaml
+    from dspx.commands.change import change as change_cmd
+    from dspx.commands.corpus import put as put_cmd
+    from dspx.commands.deliverable import render as render_cmd
+    from dspx.engine import change as chg
+    from dspx.engine.layout import Layout
+    from dspx.engine.schema import load_schema
+    home = make_project()
+    write_leaf(home, "g", concept={"id": "sec-root", "title": "G", "order": 1,
+                                   "brief": {"audience": "a", "depth": "d", "breadth": "b"}})
+    write_leaf(home, "g/乙章/末節B", concept={"id": "sec-b", "title": "末節B", "order": 1})
+    write_leaf(home, "g/甲章/末節A", concept={"id": "sec-a", "title": "末節A", "order": 1})
+    monkeypatch.chdir(home.parent)
+    change_cmd.run(["new", "chg-grp", "--publish", "advisory"])
+    # staging 內 put group：甲章 order=1、乙章 order=2（字典序會排反——正是 v3 撞的形）
+    for sec, meta in (("g/甲章", {"title": "甲章", "order": 1}),
+                      ("g/乙章", {"title": "乙章", "order": 2})):
+        gf = tmp_path / "grp.yaml"
+        gf.write_text(_yaml.safe_dump(meta, allow_unicode=True), encoding="utf-8")
+        assert change_cmd.run(["add-target", "chg-grp", sec, "--action", "create"]) == 0
+        assert put_cmd.run([sec, "group", str(gf), "--change", "chg-grp"]) == 0
+    capsys.readouterr()
+    render_cmd.run(["g", "--change", "chg-grp"])
+    change = chg.load_change(Layout(home, "per-article"), "chg-grp")
+    pv = (chg.preview_dir(change.dir) / "g_latest.md").read_text(encoding="utf-8")
+    assert pv.index("甲章") < pv.index("乙章")          # preview 章序照 staging order（不顛倒）
+    # group target 判得了 done
+    statuses = chg.derive_change_status(Layout(home, "per-article"), change, load_schema())
+    by_ref = {s.ref: s for s in statuses}
+    assert by_ref["g/甲章"].done and by_ref["g/乙章"].done

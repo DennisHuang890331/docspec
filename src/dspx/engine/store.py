@@ -583,6 +583,15 @@ def group_meta(layout: Layout, section: str) -> dict | None:
     """render/lint/forest 的 store-aware group 查詢：該篇是 store → 回 group meta（非 group＝{}）；
     非 store → None（呼叫端回退讀 group.yaml 檔）。"""
     article = layout.article_of(section)
+    # C2（壓測 v3）：change 情境（OverlayLayout）staging 優先——staged group 的 title/order
+    # 要在 union preview 就生效（否則 preview 章序用官方空值排＝顛倒、假除錯）。
+    sa = getattr(layout, "staging_article", None)
+    if callable(sa):
+        staged = sa(article)
+        if staged is not None:
+            rec = staged.record_by_path(section)
+            if rec is not None and rec.kind == "group":
+                return dict(rec.group or {})
     if not article_has_store(layout, article):
         return None
     art = cached_article(layout, article)

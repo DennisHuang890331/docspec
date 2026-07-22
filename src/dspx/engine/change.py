@@ -458,7 +458,13 @@ def _stage_store_section(change: Change, layout: Layout, section: str) -> None:
         staging = _store.Article(name=article, revision=0, records=[])
     if staging.record_by_path(section) is not None:
         return   # 已 stage：不覆蓋既有暫存編輯（承檔案粒度 stage 的語義）
-    official = _store.load_article(_store.store_path(layout, article), verify=False)
+    # C1（壓測 v3）：全新文章尚無官方 store 檔＝合法 create 情境（doctrine：文件首建決策批
+    # 就該在 change 裡）——缺檔視為空 Article，別炸 store file not found 逼 agent 裸 put 繞凍結。
+    sp = _store.store_path(layout, article)
+    if sp.is_file():
+        official = _store.load_article(sp, verify=False)
+    else:
+        official = _store.Article(name=article, revision=0, records=[])
     off_rec = official.record_by_path(section)
     if off_rec is not None:
         staging.records.append(copy.deepcopy(off_rec))
@@ -530,12 +536,22 @@ def load_union(layout: Layout, change: Change) -> list[Leaf]:
 
 def _union_store_leaves(layout: Layout, change: Change) -> list[Leaf]:
     """每個 store 篇：正式記錄 dict ← staging overlay（整記錄蓋／tombstone 刪／pending-create 佔位）
-    → 建 Leaf。concept=None（尚未首寫 concept 的 create）＝不入 union。"""
+    → 建 Leaf。concept=None（尚未首寫 concept 的 create）＝不入 union。
+
+    C1（壓測 v3）：文章集合＝官方 ∪ **staging-only 新文章**（首建文章只活在 staging、
+    官方檔 archive 才誕生——它必須入 union，否則 preview/render 對首建文章全瞎）。"""
     from dspx.engine import store as _store
     out: list[Leaf] = []
-    for article in _store.store_articles(layout):
-        official = _store.load_article(_store.store_path(layout, article), verify=False)
-        recs = {r.path: r for r in official.records}
+    articles = set(_store.store_articles(layout))
+    sdir = staging_dir(change.dir)
+    if sdir.is_dir():
+        articles |= {p.stem for p in sdir.glob("*.yaml")}
+    for article in sorted(articles):
+        sp = _store.store_path(layout, article)
+        recs: dict = {}
+        if sp.is_file():
+            official = _store.load_article(sp, verify=False)
+            recs = {r.path: r for r in official.records}
         staging = _load_staging_article(change.dir, article)
         if staging is not None:
             for r in staging.records:
@@ -655,6 +671,11 @@ class OverlayLayout:
         """B1（engine-record-integrity）：change 內 render --ack/--ack-own 的 verdict 落 preview
         journal（＝review target 判定讀的位置）；官方 `.ledger/*.verdicts.yaml` change 期間凍結。"""
         return self._preview / f"{article}.verdicts.yaml"
+
+    def staging_article(self, article: str):
+        """C2（壓測 v3）：union/preview 的 group meta「staging 優先」鉤子——store.group_meta
+        看到這個方法就先查 staged 記錄（staged group 的 title/order 在 preview 即生效）。"""
+        return _load_staging_article(self._change.dir, article)
 
 
 # ── preview seed（★G2）＋ render ──────────────────────────────────────
@@ -937,6 +958,15 @@ def _derive_one(layout, change, schema, t, section, leaves, by_section, dindex,
     if leaf is None:
         if t.action == "retire":
             return True, "section retired in staging"
+        # C2（壓測 v3）：group target——staging 有該路徑的 group 記錄（帶 title/order 任一）
+        # ＝分章已立，done；否則講清楚欠什麼（別再永遠卡 not in union view）。
+        article0 = section.split("/", 1)[0]
+        staging0 = _load_staging_article(change.dir, article0)
+        grec = staging0.record_by_path(section) if staging0 is not None else None
+        if grec is not None and grec.kind == "group":
+            if grec.group and (grec.group.get("title") or grec.group.get("order") is not None):
+                return True, "group staged (title/order present)"
+            return False, "group staged but empty (put <group-path> group with title/order)"
         return False, f"section \"{section}\" not in union view"
 
     article = section.split("/", 1)[0]
@@ -1060,7 +1090,12 @@ def _land_store_section(layout: Layout, change: Change, section: str, schema=Non
     staged_rec = staging.record_by_path(section) if staging is not None else None
     if staged_rec is None:
         return   # 該節未被 stage（純 prose revise、記錄零改）→ 正式 store 不動
-    official = _store.load_article(_store.store_path(layout, article), verify=False)
+    sp = _store.store_path(layout, article)
+    if sp.is_file():
+        official = _store.load_article(sp, verify=False)
+    else:
+        # C1：首建文章的 landing＝官方檔在此刻誕生（案卷夾由 save_article 自建）
+        official = _store.Article(name=article, revision=0, records=[])
     is_tombstone = staged_rec.kind == "tombstone"
     new_records: list = []
     replaced = False
