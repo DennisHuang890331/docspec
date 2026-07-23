@@ -2,141 +2,145 @@
 
 <img src="docs/assets/logo.png" alt="docspec logo" width="200">
 
-### docspec — 跟 AI agent 一起寫長篇技術文件，愈寫愈長也不走樣，最後匯出乾淨的 Markdown 或排版完整的 PDF
+### docspec — Write long technical documents with an AI agent that keeps them consistent as they grow, then export clean Markdown or a typeset PDF
 
 ![CI](https://github.com/DennisHuang890331/docspec/actions/workflows/test.yml/badge.svg) ![Python](https://img.shields.io/badge/python-%E2%89%A53.11-blue) ![License](https://img.shields.io/badge/license-PolyForm%20NC%201.0.0-orange) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 
-[English](README.en.md) · [中文](README.md)
-
 </div>
 
-docspec 是給長篇技術文件用的 spec-driven 撰寫工具，要解決的是「漂移」：文件愈長，前面某節一改，後面某節就悄悄跟它對不上，往往要等讀者發現才有人知道。用 docspec，你和 agent 先在結構化的後台敲定每一節的概念與決策，再由一層薄的確定性引擎渲染成散文；上游一改，引擎就點名哪些節因此過期。你只審結構，只讀渲染出來的成品。
+docspec is a spec-driven authoring tool for long technical documents. The problem it fights is drift: as a document grows, an edit in an early section quietly stops matching a later one, and nobody notices until a reader does. In docspec you and an agent settle each section's concepts and decisions in a structured backstage, a thin deterministic engine renders those into prose, and whenever you change something upstream the engine names every section that has fallen out of sync. You review the structure and read only the finished document.
 
-> 採 PolyForm Noncommercial 1.0.0，source-available：非商業用途免費；商業使用須另行取得授權。見[授權](#-授權)。
+> Source-available under PolyForm Noncommercial 1.0.0: free for non-commercial use; commercial use needs a separate license. See [License](#-license).
 
-## ✨ 重點
+## ✨ Highlights
 
-- 🌱 **長了也不走樣。** 不論改一節、改一條共享決策，還是改全域文風，引擎都會指出哪些節因此過期、為什麼過期。它追蹤的是每一節所依賴內容的雜湊值，不是檔案的修改時間；Google Drive、OneDrive 每次同步都會改寫時間戳，專案放在裡面照樣判得準。
-- 🧱 **先結構、後散文。** 每一節都是盲渲染：agent 只看得到這一節自己的後台，外加引擎算好的一份投影——也就是這節必須遵守的上游事實；文件整體長到多大，它都看不到。各節要一致，靠的是一份共用的寫作守則，不是反覆重讀全文。所以文件再長，寫一節、改一節，費的工都差不多。
-- ⚙️ **確定性引擎，不靠 LLM 打分。** 它只擋自己能百分之百判定的機械性錯誤：死引用、相依環、缺欄或格式壞掉的欄位、內部術語洩漏、`[TBD]` 殘留。凡取決於文意的，一律只給非阻塞的提示，不設閘門；也因為它只擋斷得定的錯，真正擋下來的才值得信。
-- 🧹 **交付物潔淨。** 內部 id、鷹架、佔位符、殘留的後台術語一旦洩進散文，publish 就拒絕執行。另有一道非阻塞 lint，照固定字表標出常見的 AI 腔詞——只標不擋，算不算問題由你判斷。
-- 📄 **可驗證的 PDF。** 匯出時，引擎會回頭核對成品 PDF：原文少一個字元就判失敗。渲染悄悄吃掉 CJK 文字這種事，當下就攔下來，不會出貨到讀者手上。PDF 預設由 Typst 渲染；要投稿期刊，也能改成 emit 一份 `.tex`。
-- 🔗 **整組文件一起同步。** 用 `governed-by` 和 `realizes` 把相關文件連起來；上游文件一改，過期狀態會一路傳到每一個依賴它的下游節。整組規格裡哪些該重新同步一目了然，不會無聲地各自漂走。
+- 🌱 **Stays consistent as it grows.** Change a section, a shared decision, or the house style, and the engine names exactly which sections you stranded and why they no longer fit. It tracks this by hashing the content each section depends on rather than by file timestamps, so the signal stays reliable even inside a Google Drive or OneDrive folder that rewrites modification times on every sync.
+- 🧱 **Structure before prose.** Each section is drafted blind: the agent sees only that section's own backstage plus a computed projection of the specific upstream facts it must honor, never the whole growing document. Consistency across sections comes from one shared writing guide instead of constant rereading, which also keeps the cost of authoring or editing a section roughly flat however long the document gets.
+- ⚙️ **A deterministic engine, not an LLM judge.** It blocks only on mechanical faults it can settle for certain: dead references, dependency cycles, missing or malformed fields, leaked internal jargon, and `[TBD]` stubs. Anything that turns on the meaning of the text becomes a non-blocking note rather than a gate, which is exactly why the checks that do block are ones you can trust.
+- 🧹 **Clean deliverables.** Publish refuses to run if internal ids, scaffolding, placeholders, or leftover authoring vocabulary have leaked into the prose. A separate advisory lint flags common AI-register tells from a fixed word list, but that one only warns: you stay the judge of whether each flag is really a problem.
+- 📄 **A provable PDF.** On export the engine re-reads the finished PDF and fails if a single character of the source text went missing, so a rendering glitch that silently dropped CJK text is caught instead of shipped. Typst renders the PDF by default; for journal submission you can emit a `.tex` instead.
+- 🔗 **Document families that stay in sync.** Link related documents with `governed-by` and `realizes`, and a change to an upstream document propagates staleness to every downstream section that depends on it, so a set of specs flags what must re-sync instead of drifting apart in silence.
 
-## 📚 成品展示
+## 📚 Showcase
 
-六份文件，橫跨三種文體、兩種語言，每一份都是 agent 從零用 docspec 寫出來的，結構、潔淨、渲染忠實度各道閘全過，最後出成排版完整的 PDF。
+Six documents across three genres and two languages, each written from scratch by an agent driving docspec and carried all the way through the structural, cleanliness, and render-fidelity gates to a typeset PDF.
 
-| 文體 | 語言 | 讀全文 | PDF |
+| Genre | Language | Read | PDF |
 |---|---|---|---|
-| 小說——短篇 | 正體中文 | [讀](docs/showcase/deliverables/novel-zh.md) | [PDF](docs/showcase/pdfs/novel-zh.pdf) |
-| 小說——短篇奇幻 | 英文 | [讀](docs/showcase/deliverables/novel-en.md) | [PDF](docs/showcase/pdfs/novel-en.pdf) |
-| 隨筆 | 正體中文 | [讀](docs/showcase/deliverables/essay-zh.md) | [PDF](docs/showcase/pdfs/essay-zh.pdf) |
-| 隨筆 | 英文 | [讀](docs/showcase/deliverables/essay-en.md) | [PDF](docs/showcase/pdfs/essay-en.pdf) |
-| 學術綜述 | 正體中文 | [讀](docs/showcase/deliverables/academic-zh.md) | [PDF](docs/showcase/pdfs/academic-zh.pdf) |
-| 學術綜述 | 英文 | [讀](docs/showcase/deliverables/academic-en.md) | [PDF](docs/showcase/pdfs/academic-en.pdf) |
+| Fiction — short story | Traditional Chinese | [read](docs/showcase/deliverables/novel-zh.md) | [PDF](docs/showcase/pdfs/novel-zh.pdf) |
+| Fiction — short fantasy | English | [read](docs/showcase/deliverables/novel-en.md) | [PDF](docs/showcase/pdfs/novel-en.pdf) |
+| Essay | Traditional Chinese | [read](docs/showcase/deliverables/essay-zh.md) | [PDF](docs/showcase/pdfs/essay-zh.pdf) |
+| Essay | English | [read](docs/showcase/deliverables/essay-en.md) | [PDF](docs/showcase/pdfs/essay-en.pdf) |
+| Academic survey | Traditional Chinese | [read](docs/showcase/deliverables/academic-zh.md) | [PDF](docs/showcase/pdfs/academic-zh.pdf) |
+| Academic survey | English | [read](docs/showcase/deliverables/academic-en.md) | [PDF](docs/showcase/pdfs/academic-en.pdf) |
 
-用了哪些模型、怎麼跑、完整 prompt 是什麼，都在 [docs/showcase/](docs/showcase/)；連做得不夠好的地方也照實交代。
+The method, the models, and the exact prompts are in [docs/showcase/](docs/showcase/), including where the results fell short.
 
-## 🚀 快速開始
+## 🚀 Quick start
 
-需要 `uv` 與 Python ≥ 3.11（Windows／Linux 已測，macOS 尚未實機驗證）。
+Requires `uv` and Python ≥ 3.11 (tested on Windows and Linux; macOS is not yet verified).
 
 ```bash
 uv tool install git+https://github.com/DennisHuang890331/docspec
-uv tool update-shell          # 把 uv 的工具 bin 加進 PATH（只需一次），再開新終端
-docspec init                  # 建專案；裝進 Claude Code、Codex 或 Antigravity（擇一，或 --tool all 全裝）
+uv tool update-shell          # add uv's tool bin to PATH (once), then open a new terminal
+docspec init                  # scaffold a project; installs into Claude Code, Codex, or Antigravity (pick one, or --tool all)
 ```
 
-寫作全在 agent 對話裡走內建 skill，你親手要打的 docspec 指令，只有安裝與維護那幾個：
+You author inside your agent's chat through the installed skills, so the docspec commands you type by hand are only the ones for setup and maintenance:
 
-| 指令 | 做什麼 |
+| Command | Purpose |
 |---|---|
-| `docspec init` | 建專案、把 skill 裝進 agent |
-| `docspec setup` | 下載 PDF 排版工具鏈（只在要出 PDF 時） |
-| `docspec doctor` / `upgrade` / `version` | 環境體檢 / 對齊受控 PDF 工具鏈 / 看版本 |
+| `docspec init` | create a project and install the skills into your agent |
+| `docspec setup` | download the PDF typesetting toolchain (only when you export a PDF) |
+| `docspec update` | detect how docspec was installed and print the exact update command (`--run` launches it) |
+| `docspec doctor` / `version` | diagnose the environment / show versions and the install source |
 
-`docspec --help` 列的是這些給人用的指令，agent 在背後用的完整清單則在 `docspec --help-all`。注意 `docspec setup` 對齊的是 PDF 工具鏈（冪等，且會對齊已裝資產），而不是 docspec 程式本身；要更新 docspec，重跑上面的安裝指令即可。
+`docspec --help` lists these human-facing commands, and the full agent-facing set is under `docspec --help-all`. Note that `docspec setup` aligns the PDF toolchain (idempotent, and it also re-aligns already-installed assets) rather than docspec's own code; updating docspec itself is what `docspec update` is for.
 
-## 🧠 運作方式
+## 🧠 How it works
 
-docspec 專案分兩層。**後台**（`corpus/`）每節放幾個 YAML 檔：一段簡短的概念、這節的決策，還有一份 brief，定出受眾、深度、廣度。**前台**（`docs/`）是渲染出來的散文，一份文件一個檔，由各節組裝而成。兩層分開正是重點：你審結構與決策，不必在潤過的散文裡打撈；散文從結構重新生成，不必另外再維護一份。**你只讀前台。**
+A docspec project has two layers. The **backstage** (`corpus/`) holds one dossier folder per document: a single engine-owned YAML with every section's concept, brief (audience, depth, breadth), and decisions, plus the bookkeeping that sits beside it. The **front** (`docs/`) is the rendered prose, one file per document, assembled from the sections. Keeping them apart is the whole point, because you can review the structure and the decisions without wading through polished prose, and the prose is regenerated from the structure rather than hand-maintained beside it. **You read only the front.**
 
 ```text
 myproject/
-├─ docspec/corpus/peft-survey/       # 後台——給 agent 和引擎
-│  └─ lora-family/                    #   一個末節
-│     ├─ concept.yaml                 #     概念 + brief
-│     └─ decisions.yaml               #     這節的決策
-└─ docs/peft-survey_latest.md         # 前台——渲染出的散文（你只讀這個）
+├─ docspec/corpus/peft-survey/       # backstage — one dossier per document
+│  ├─ article.yaml                    #   every section: concept + brief + decisions (engine-owned, sealed)
+│  └─ ledger.yaml                     #   render bookkeeping the staleness signal is computed from
+└─ docs/peft-survey_latest.md         # front — rendered prose (you read only this)
 ```
 
-引擎把這些 YAML 渲染成散文：
+The article file is written through the engine's validating `get`/`put` API, never by hand — an integrity seal makes a hand edit fail loud on the next command. Inside it, each section looks like this:
 
 ```yaml
-# corpus/peft-survey/lora-family/concept.yaml
-title: "低秩重參數化：LoRA 及其變體"
-concept: "把 LoRA 及其後續方法，統一看成一個注入凍結權重矩陣的低秩更新。"
-brief:
-  audience: 與綜述其餘章節相同的技術讀者
-  depth: 機制層——說清楚分解方式，以及為什麼可以合併
-  breadth: "LoRA、QLoRA、AdaLoRA、DoRA、VeRA——並非每個變體"
-# corpus/peft-survey/lora-family/decisions.yaml
-entries:
+# docspec/corpus/peft-survey/article.yaml  (excerpt)
+sections:
+- path: peft-survey/lora-family
+  kind: leaf
+  concept:
+    id: sec-lora-family
+    title: "Low-Rank Reparameterization: LoRA and Its Variants"
+    concept: "LoRA and its descendants as one low-rank update injected into a frozen weight matrix."
+    brief:
+      audience: the survey's technical readership
+      depth: mechanism — the decomposition and why mergeability follows
+      breadth: "LoRA, QLoRA, AdaLoRA, DoRA, VeRA — not every variant"
+  decisions:
   - id: dec-lora-merge
-    statement: "LoRA 的更新活在權重空間，訓練後可併回凍結矩陣；併好的模型不增加任何推論延遲。"
+    statement: "LoRA's update lives in weight space, so it merges into the frozen
+      matrix — a merged checkpoint adds zero inference latency."
 ```
 ```markdown
-# docs/peft-survey_latest.md（渲染出來的；你只讀這個）
-## 低秩重參數化：LoRA 及其變體
-……這個低秩更新直接加進權重空間裡的凍結矩陣，因此可以永久併入；除了基礎模型本身既有的開銷之外，不增加任何延遲。
+# docs/peft-survey_latest.md  (rendered; you read only this)
+## Low-Rank Reparameterization: LoRA and Its Variants
+… the low-rank update is added directly into the frozen matrix in weight space,
+so it can be merged permanently … with no latency cost beyond the base model.
 ```
 
-這段是簡化版；真實的 `concept.yaml` 還會帶 `id`、`order`、`status`，每條決策也有 `kind` 與 `status`。欄位是固定的一套：多打一個引擎不認得的欄位，`check` 直接報錯，不會默默吞掉。章節 id 與內容無關且永久固定，把一節搬走或改名，指向它的引用都不會斷。
+The snippet is simplified; a real section also carries `order` and `status`, and each decision a `kind` and `status`. The field set is closed: a key the engine doesn't recognize is a hard `check` error, never silently ignored. Section ids are content-independent and permanent, so moving or renaming a section never breaks a reference to it.
 
-過期狀態沿四條軸傳遞，`docspec status` 逐節標出：這節自己的源料變了（own）、它 `realizes` 的決策變了（upstream）、上層某節的 brief 變了（inherited）、共用的寫作守則或 glossary 變了（style）。每一軸都對應到該做的修法——該重寫的重寫，只需重套文風的重套。
+Staleness travels along four axes, and `docspec status` names them per section: the section's own source changed (own), a decision it `realizes` changed (upstream), an ancestor's brief changed (inherited), or the shared writing guide or glossary changed (style). Each axis points at the right repair — rewrite where the content moved, restyle where only the voice did.
 
-## ✍️ 撰寫流程
+## ✍️ Authoring workflow
 
-你在 agent 對話裡說要寫什麼，它呼叫五個 skill，引擎在背後把關：
+You describe what you want in your agent's chat, and it invokes five skills while the engine gatekeeps behind them:
 
-| skill | 做什麼 |
+| Skill | What it does |
 |---|---|
-| **develop** | 長出／重整一節的概念與決策（受眾、深度、廣度）；先有骨架，不寫散文 |
-| **apply** | 將一節對齊其來源：rewrite 模式盲渲染散文（原 draft）、align 模式潤稿與對齊（原 edit） |
-| **factcheck** | 對抗式查核，每條主張對一手來源；只標記、不擋發行 |
-| **publish** | 不可逆發行：所有閘綠 → 凍結唯讀快照 → 升版 → 記 changelog |
-| **release** | 互動排版：匯出 → 看頁面圖 → 調旋鈕 → 重出 |
+| **develop** | grow or restructure a section's concepts and decisions (audience, depth, breadth); skeleton first, no prose |
+| **apply** | align a section to its source: rewrite mode blind-renders prose, align mode polishes and re-aligns |
+| **factcheck** | adversarial check of each claim against a source; flags only, never blocks a release |
+| **publish** | irreversible release: gates green → freeze a read-only snapshot → bump version → changelog |
+| **release** | interactive PDF layout: export → review page images → tune knobs → re-export |
 
-這是迴圈，不是流水線：factcheck 抓到問題，工作就退回 develop 或 apply，再重新走回 publish。節要晉級也得整批過關：develop 階段的思考草稿要先榨乾、欄位齊全，`docspec ready` 才放行，所以引擎的索引裡不會有看起來完成、其實還空著的節。agent 遵循的完整契約（欄位、流程、規則）由 `docspec guide` 即時投影，不靠會過時的說明文件。
+This is a loop, not a pipeline: when factcheck finds a problem, the work returns to develop or apply before it comes back through publish. Revisions run as **changes**: a batch of edits — including a document's very first build — stages inside a change while the official face stays frozen, previews render from the merged view, and archiving the change is what lands it. The full contract the agent follows (fields, workflow, rules) is projected live by `docspec guide`, not kept in documentation that can go stale.
 
-## 📄 匯出 PDF
+## 📄 PDF output
 
-裝上 export 相依套件，跑一次 setup。setup 會把受控工具鏈下載進使用者資料夾，不碰你的系統環境：
+Install the export extra and run setup once. Setup downloads a managed toolchain into your user data directory without touching your system:
 
 ```bash
 uv tool install "docspec[export] @ git+https://github.com/DennisHuang890331/docspec"
 docspec setup
 ```
 
-**預設 Typst。** docspec 自帶一套自家風格的 Typst 模板，原生 CJK、不依賴 LaTeX，還附隨筆、手冊、小說、學術論文等版面 profile。`docspec export <article>` 出 PDF 時會拿成品跟源料逐位元核對；渲染掉字，匯出當下就擋，不會留給讀者去發現。
+**Typst, by default.** docspec ships a house-style Typst template with native CJK and no LaTeX dependency, along with layout profiles for essays, manuals, novels, and academic papers. `docspec export <article>` builds the PDF and byte-checks it against the source, so a rendering failure that dropped text is caught at export time rather than discovered by a reader.
 
-**帶你自己的期刊模板。** docspec 還有一條「只 emit 不代編」的期刊軌，供投稿用：它填一份固定的 slot 契約（標題、作者、摘要、關鍵詞、正文），再寫出一份 `.tex` 給 Overleaf 或你自己的 LaTeX 工具鏈。內建 IEEE、Elsevier、IET 的 adapter，這幾本期刊用 `docspec export <article> --journal ieee` 就夠了。要用 docspec 沒內建的期刊，把那本期刊的 LaTeX 模板放進一個資料夾，傳 `--template <dir>`；release skill 會先讀該期刊自帶的 sample `.tex`，把你文章的標題、作者、摘要、關鍵詞、正文，對映到期刊自己的巨集上。這樣 emit 出來的 `.tex`，用期刊自己的流程就編得起來；編譯由你自己來。
+**Bring your own journal template.** docspec also has an emit-only journal track for submission: it fills a fixed slot contract of title, authors, abstract, keywords, and body, then writes a `.tex` for Overleaf or your own LaTeX toolchain. Adapters for IEEE, Elsevier, and IET ship in the box, so `docspec export <article> --journal ieee` is enough for those. For a journal docspec doesn't bundle, put that journal's LaTeX template in a directory and pass `--template <dir>`; the release skill reads the journal's own sample `.tex` and maps your article's title, authors, abstract, keywords, and body onto that journal's macros so the emitted file compiles the way the journal expects. docspec emits the `.tex` and leaves the compilation to you.
 
-## 📐 工程圖
+## 📐 Diagrams
 
-工程圖是文件的一部分，不是匯出時才硬加上去的。哪一節需要圖，`apply` 就交給專門的繪圖 skill **dspx-diagram**，由它畫成 draw.io 原生檔，再渲成高解析 PNG 嵌進交付物。落到頁面上的是向量的方塊與連線，不是 ASCII 圖，也不是沒渲染的 mermaid 區塊。要用繪圖功能，先跑一次 `docspec setup --with-drawio` 把繪圖器裝好。
+Engineering diagrams are part of the document, not something bolted on at export. When a section needs one, `apply` hands off to a support skill, **dspx-diagram**, which authors the figure as a real draw.io file and renders it to a high-resolution PNG embedded in the deliverable. What lands on the page is vector-drawn boxes and edges, not ASCII art and not an unrendered mermaid block. Install the renderer once with `docspec setup --with-drawio`.
 
-## ✂️ 刻意不做什麼
+## ✂️ What it deliberately leaves out
 
-引擎從不判斷語義。沒有「這段對不對」的語義閘、沒有 verbatim transclude、沒有文類型別系統——這些都認真評估過，最後刻意砍掉。連過期狀態也只作用在內容的位元層：兩節後來彼此矛盾、卻沒有任何一節的源料變動，引擎不會出聲；要調和，是 factcheck 的事——它只標記、不擋路，不是閘門。正因為引擎只裁決機械上能確定的事，它才是一道你信得過的閘；文意層的問題，全部留給人判斷。
+The engine never judges meaning. There is no semantic "is this correct" gate, no verbatim transclusion, and no genre type-system; each was considered and cut. Even staleness works at the level of content bytes, so if two sections come to contradict each other without either one's source changing, the engine stays quiet, and reconciling that is the job of the non-blocking factcheck rather than a gate. The engine stays a gate you can trust precisely because it only decides what is mechanically decidable, and it leaves every question of meaning to a human and an advisory pass.
 
-## 📜 授權
+## 📜 License
 
-docspec 採 **PolyForm Noncommercial 1.0.0**：個人寫作、學術研究、學生專題、開源專案文件、不收費的社群分享皆免費。商業使用（販售所寫內容、作為公司知識庫、撰寫商業產品的規格文件）須另向作者取得授權。本專案為 source-available，非 OSI 定義的開源。第三方元件見 [`LICENSE`](LICENSE) 與 [`NOTICE.md`](NOTICE.md)。
+docspec is licensed under **PolyForm Noncommercial 1.0.0**: free for personal writing, research, coursework, open-source documentation, and non-paid sharing. Commercial use (selling what you write, running it as a company knowledge base, or authoring specs for a commercial product) requires a separate license from the author. It is source-available, not OSI-approved open source. See [`LICENSE`](LICENSE) and [`NOTICE.md`](NOTICE.md) for bundled third-party components.
 
-## 🙏 致謝
+## 🙏 Acknowledgements
 
-docspec 是 [OpenSpec](https://github.com/Fission-AI/OpenSpec) 的 prose-first 衍生版本，可獨立運作，不依賴 OpenSpec（OpenSpec 只用在 docspec 自身的開發上）。
+docspec is a prose-first derivative of [OpenSpec](https://github.com/Fission-AI/OpenSpec). It runs standalone and does not depend on it (OpenSpec is used only to manage docspec's own development).
 
-docspec 由作者負責設計，程式實作與測試由 Anthropic 的 [Claude](https://claude.com/claude-code)（Claude Code）完成。
+docspec was designed by the author; the implementation and tests were written by Anthropic's [Claude](https://claude.com/claude-code) (Claude Code).
