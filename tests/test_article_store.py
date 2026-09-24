@@ -371,6 +371,21 @@ def test_hook_guard_allows_scattered_and_store_dir(monkeypatch):
     assert _run_guard(monkeypatch, {"tool_input": {"file_path": "docspec/corpus/_archive.yaml"}}) == 0
 
 
+@pytest.mark.parametrize("payload, blocked", [
+    # Gemini CLI BeforeTool payload：tool_name 為 Gemini 內建工具名，參數同名（file_path / command）
+    ({"hook_event_name": "BeforeTool", "tool_name": "write_file",
+      "tool_input": {"file_path": "docs/archive/g_v1.0.0.md", "content": "x"}}, True),
+    ({"hook_event_name": "BeforeTool", "tool_name": "replace",
+      "tool_input": {"file_path": "docspec/corpus/g/article.yaml", "old_string": "a", "new_string": "b"}}, True),
+    ({"hook_event_name": "BeforeTool", "tool_name": "run_shell_command",
+      "tool_input": {"command": "rm docs/archive/g_v1.0.0.md"}}, True),
+    ({"hook_event_name": "BeforeTool", "tool_name": "write_file",
+      "tool_input": {"file_path": "docs/notes.md", "content": "x"}}, False),
+])
+def test_hook_guard_handles_gemini_payloads(monkeypatch, payload, blocked):
+    assert _run_guard(monkeypatch, payload) == (2 if blocked else 0)
+
+
 def _section_block(text: str, path: str) -> str:
     """從 canonical store 文字抽出某 `- path: <path>` 記錄到下個 `- path:`（或檔尾）的 byte 區塊。"""
     lines = text.split("\n")

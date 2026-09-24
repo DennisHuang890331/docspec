@@ -214,10 +214,64 @@ _GITATTRIBUTES_TEMPLATE = """\
 """
 
 
-# 可整合的 agent 工具（chatgpt＝codex 別名）
-_AGENTS = ("claude", "antigravity", "codex")
+# 可整合的 agent 工具（chatgpt＝codex、google＝gemini 別名）
+_AGENTS = ("claude", "antigravity", "codex", "gemini")
 DEFAULT_AGENT = "claude"   # 非互動預設只裝這一家（要全裝＝ `--tool all`）
-_ALIASES = {"chatgpt": "codex", "openai": "codex", "gpt": "codex"}
+_ALIASES = {"chatgpt": "codex", "openai": "codex", "gpt": "codex", "google": "gemini"}
+
+
+# AGENTS.md 受管區塊（`--agents-md`，opt-in）：Codex／Gemini／Antigravity／Claude Code 都讀專案根
+# AGENTS.md。只寫 begin/end 標記之間，區塊外使用者內容原樣保留；重跑＝原地更新。
+_AGENTS_MD_BEGIN = "<!-- docspec:begin -->"
+_AGENTS_MD_END = "<!-- docspec:end -->"
+_AGENTS_MD_BLOCK = f"""{_AGENTS_MD_BEGIN}
+<!-- Managed by `docspec init --agents-md`; edits inside this block are overwritten. -->
+## docspec
+
+This project keeps its long-form documents in docspec.
+
+- Author documents through the docspec skills (`dspx-develop`, `dspx-apply`, `dspx-factcheck`,
+  `dspx-publish`, `dspx-release`); run `docspec guide` for the live contract.
+- `docspec/corpus/` is engine-owned and integrity-sealed: change it only through
+  `docspec get` / `docspec put`, never by hand.
+- `archive/` folders hold frozen published versions: never modify them; publish a new version.
+- Review the rendered prose under `docs/`, not the backstage YAML.
+{_AGENTS_MD_END}
+"""
+
+
+def _write_agents_md(project_root: Path) -> str:
+    """把 docspec 受管區塊寫進（或原地更新）專案根 AGENTS.md。回傳 created/updated/unchanged。"""
+    path = project_root / "AGENTS.md"
+    if not path.is_file():
+        path.write_text(_AGENTS_MD_BLOCK, encoding="utf-8", newline="\n")
+        return "created"
+    text = path.read_text(encoding="utf-8")
+    begin, end = text.find(_AGENTS_MD_BEGIN), text.find(_AGENTS_MD_END)
+    if begin != -1 and end > begin:
+        tail = text[end + len(_AGENTS_MD_END):]
+        new = text[:begin] + _AGENTS_MD_BLOCK.rstrip("\n") + tail
+    else:
+        new = text.rstrip("\n") + ("\n\n" if text.strip() else "") + _AGENTS_MD_BLOCK
+    if new == text:
+        return "unchanged"
+    path.write_text(new, encoding="utf-8", newline="\n")
+    return "updated"
+
+
+def _claude_md_shadows_agents_md(project_root: Path) -> Path | None:
+    """Claude Code 在有 CLAUDE.md 時不讀 AGENTS.md（除非 CLAUDE.md 以 `@AGENTS.md` 匯入）。
+    回傳那份遮住 AGENTS.md 的 CLAUDE.md（供提示），沒有則 None。"""
+    for cand in (project_root / "CLAUDE.md", project_root / ".claude" / "CLAUDE.md",
+                 project_root / "CLAUDE.local.md"):
+        if cand.is_file():
+            try:
+                if "@AGENTS.md" in cand.read_text(encoding="utf-8"):
+                    return None
+            except OSError:
+                pass
+            return cand
+    return None
 
 
 def _resolve_tools(raw: str | None) -> tuple[str, ...] | None:
@@ -239,14 +293,19 @@ def _resolve_tools(raw: str | None) -> tuple[str, ...] | None:
 def _select_tools_interactive(project_root: Path) -> tuple[str, ...] | None:
     """questionary 勾選 agent（箭頭鍵/Space/Enter）；偵測已裝者預勾。"""
     import questionary
-    # 偵測＝該工具的代表 skill 檔**真的裝好**（不只資料夾存在；資料夾可能是別的工具留的空殼）
-    _marker = {
-        "claude": project_root / ".claude" / "skills" / "dspx-develop" / "SKILL.md",
-        "antigravity": project_root / ".agent" / "skills" / "dspx-develop" / "SKILL.md",
-        "codex": project_root / ".codex" / "skills" / "dspx-develop" / "SKILL.md",
+    # 偵測＝該工具**專屬**的 docspec 產物真的在（不只資料夾存在；資料夾可能是別的工具留的空殼）。
+    # `.agents/skills` 由 codex/antigravity/gemini 共用、分不出是誰，故各取專屬記號；舊位也算。
+    _markers = {
+        "claude": [project_root / ".claude" / "skills" / "dspx-develop" / "SKILL.md"],
+        "antigravity": [project_root / ".agents" / "workflows" / "dspx-develop.md",
+                        project_root / ".agent" / "skills" / "dspx-develop" / "SKILL.md"],
+        "codex": [project_root / ".codex" / "hooks.json",
+                  project_root / ".codex" / "skills" / "dspx-develop" / "SKILL.md"],
+        "gemini": [project_root / ".gemini" / "commands" / "dspx" / "develop.toml"],
     }
-    detected = {tool for tool, marker in _marker.items() if marker.is_file()}
-    labels = {"claude": "Claude", "antigravity": "Antigravity", "codex": "Codex (ChatGPT)"}
+    detected = {tool for tool, ms in _markers.items() if any(m.is_file() for m in ms)}
+    labels = {"claude": "Claude", "antigravity": "Antigravity", "codex": "Codex (ChatGPT)",
+              "gemini": "Gemini CLI"}
     choices = [
         questionary.Choice(
             labels[a] + ("  (detected)" if a in detected else ""),
@@ -263,7 +322,11 @@ def run(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="docspec init", description=HELP)
     parser.add_argument("--path", default=".", help="project root (default: current directory)")
     parser.add_argument("--tool", default=None,
-                        help="agents to integrate (comma-separated): claude,antigravity,codex(chatgpt); default all")
+                        help="agents to integrate (comma-separated): claude,antigravity,codex(chatgpt),gemini; default all")
+    parser.add_argument("--agents-md", action="store_true",
+                        help="also write a docspec-managed block into the project-root AGENTS.md "
+                             "(read by Codex, Gemini, Antigravity and Claude Code); content outside "
+                             "the block is kept, re-running updates it in place")
     parser.add_argument("--lang", default="zh-TW",
                         help="default hint for config.language (zh-TW or en); the deliverable language is ultimately decided in develop")
     parser.add_argument("--no-tex-hint", action="store_true",
@@ -280,7 +343,7 @@ def run(argv: list[str]) -> int:
     is_reinit = config_path.is_file()   # 既有專案＝重新設定（照跑介面、不毀既有檔、刷新 skill）
 
     # 選 agent：--tool 優先；沒給且是真人終端→動畫＋questionary 勾選；否則預設**單一 claude**
-    # （別灑三家＝避免 .claude/.agent/.codex 三份污染專案；三家 skill 各自獨立、不共享 memory，
+    # （別灑全家＝避免 .claude/.agents/.codex/.gemini 多份污染專案；各家不共享 memory，
     #  故只該裝使用者實際在用的那家。要全裝＝明確 `--tool all`。）
     if args.tool is not None:
         tools = _resolve_tools(args.tool)
@@ -321,7 +384,7 @@ def run(argv: list[str]) -> int:
     from dspx.commands.maintenance._skills import _install
     from dspx.env.skills import SkillError
     try:
-        _install(project_root, tools, force=True)
+        install_results = _install(project_root, tools, force=True)
     except SkillError as exc:
         sys.stderr.write(
             f"docspec: project scaffold created, but skill install failed — {exc}\n"
@@ -336,13 +399,27 @@ def run(argv: list[str]) -> int:
     print("  .gitattributes: pins eol=lf for the fingerprinted text files (keeps fingerprints "
           "byte-identical across OS/worktrees)")
     print("  skills installed to (per tool = skill auto-load + command explicit invocation):")
+    shared = any(t in tools for t in ("antigravity", "codex", "gemini"))
     _dest = {
-        "claude": ".claude/skills/<name>/SKILL.md + .claude/commands/dspx/<id>.md (/dspx:<id>)",
-        "antigravity": ".agent/skills/<name>/SKILL.md + .agent/workflows/<name>.md (native invocation)",
-        "codex": ".codex/skills/<name>/SKILL.md + $CODEX_HOME/prompts/dspx-<id>.md (⚠️ global)",
+        "claude": (".claude/skills/<name> (linked to .agents/skills/<name>)" if shared
+                   else ".claude/skills/<name>/SKILL.md")
+                  + " + .claude/commands/dspx/<id>.md (/dspx:<id>)",
+        "antigravity": ".agents/skills/<name>/SKILL.md + .agents/workflows/<name>.md (native invocation)",
+        "codex": ".agents/skills/<name>/SKILL.md (skills-only: $dspx-<name>)",
+        "gemini": ".agents/skills/<name>/SKILL.md + .gemini/commands/dspx/<id>.toml (/dspx:<id>)",
     }
     for t in tools:
         print(f"    - {t:<11} → {_dest[t]}")
+    # 逐檔結果不印（太吵），但舊位遷移要讓人看得到（刪了什麼／留了什麼）。
+    for line in install_results:
+        if line.startswith(("  - retired legacy", "  ! legacy")):
+            print(f"  {line.strip()}")
+    if args.agents_md:
+        state = _write_agents_md(project_root)
+        print(f"  AGENTS.md: docspec block {state}")
+        if "claude" in tools and (shadow := _claude_md_shadows_agents_md(project_root)):
+            print(f"  ⚠ Claude Code reads {shadow.name} instead of AGENTS.md here — add a line "
+                  f"`@AGENTS.md` to {shadow.relative_to(project_root)} so Claude sees the block too.")
     print("\nNext: crystallize the article root with `docspec put <article> concept` (develop will ask you about audience/scope).")
 
     # 被動、離線、可關的排版環境提示：tex.lock 缺或與隨包期望錯位 → 叫跑 doctor。

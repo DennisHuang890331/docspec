@@ -43,8 +43,8 @@ def test_init_tool_selection_claude_only(tmp_path, monkeypatch):
     monkeypatch.chdir(proj)
     assert init_cmd.run(["--tool", "claude"]) == 0
     assert (proj / ".claude" / "skills" / "dspx-develop" / "SKILL.md").is_file()
-    assert not (proj / ".agent").exists()      # 只裝 claude
-    assert not (proj / ".codex").exists()
+    for d in (".agents", ".agent", ".codex", ".gemini"):   # 只裝 claude
+        assert not (proj / d).exists()
 
 
 def test_init_tool_chatgpt_alias(tmp_path, monkeypatch):
@@ -52,8 +52,58 @@ def test_init_tool_chatgpt_alias(tmp_path, monkeypatch):
     proj.mkdir()
     monkeypatch.chdir(proj)
     assert init_cmd.run(["--tool", "chatgpt"]) == 0   # chatgpt → codex
-    assert (proj / ".codex" / "skills" / "dspx-develop" / "SKILL.md").is_file()
+    assert (proj / ".agents" / "skills" / "dspx-develop" / "SKILL.md").is_file()
+    assert (proj / ".codex" / "hooks.json").is_file()
     assert not (proj / ".claude").exists()
+
+
+def test_init_tool_google_alias_installs_gemini(tmp_path, monkeypatch):
+    proj = tmp_path / "p5"
+    proj.mkdir()
+    monkeypatch.chdir(proj)
+    assert init_cmd.run(["--tool", "google"]) == 0
+    assert (proj / ".agents" / "skills" / "dspx-develop" / "SKILL.md").is_file()
+    assert (proj / ".gemini" / "commands" / "dspx" / "develop.toml").is_file()
+    assert (proj / ".gemini" / "settings.json").is_file()
+
+
+def test_init_agents_md_is_opt_in(tmp_path, monkeypatch):
+    proj = tmp_path / "p6"
+    proj.mkdir()
+    monkeypatch.chdir(proj)
+    assert init_cmd.run(["--tool", "codex"]) == 0
+    assert not (proj / "AGENTS.md").exists()
+
+
+def test_init_agents_md_block_preserves_user_content_and_updates_in_place(tmp_path, monkeypatch):
+    proj = tmp_path / "p7"
+    proj.mkdir()
+    monkeypatch.chdir(proj)
+    agents_md = proj / "AGENTS.md"
+    agents_md.write_text("# My project\n\nRun `make test` before committing.\n", encoding="utf-8")
+    assert init_cmd.run(["--tool", "codex", "--agents-md"]) == 0
+    text = agents_md.read_text(encoding="utf-8")
+    assert text.startswith("# My project\n\nRun `make test` before committing.\n\n")
+    assert text.count(init_cmd._AGENTS_MD_BEGIN) == 1 and "docspec get" in text
+    # 區塊內手改會被覆寫回去；區塊外（前後）的使用者內容都保留；重跑不重複
+    agents_md.write_text(text.replace("docspec get", "STALE") + "\n## Footer\n", encoding="utf-8")
+    assert init_cmd.run(["--tool", "codex", "--agents-md"]) == 0
+    text = agents_md.read_text(encoding="utf-8")
+    assert text.count(init_cmd._AGENTS_MD_BEGIN) == 1
+    assert "STALE" not in text and "docspec get" in text
+    assert text.startswith("# My project") and text.rstrip().endswith("## Footer")
+
+
+def test_init_agents_md_warns_when_claude_md_shadows_it(tmp_path, monkeypatch, capsys):
+    proj = tmp_path / "p8"
+    proj.mkdir()
+    monkeypatch.chdir(proj)
+    (proj / "CLAUDE.md").write_text("# rules\n", encoding="utf-8")
+    assert init_cmd.run(["--tool", "claude", "--agents-md"]) == 0
+    assert "@AGENTS.md" in capsys.readouterr().out
+    (proj / "CLAUDE.md").write_text("# rules\n@AGENTS.md\n", encoding="utf-8")
+    assert init_cmd.run(["--tool", "claude", "--agents-md"]) == 0
+    assert "@AGENTS.md" not in capsys.readouterr().out
 
 
 def test_init_bad_tool(tmp_path, monkeypatch):

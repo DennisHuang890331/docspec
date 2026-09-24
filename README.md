@@ -43,7 +43,7 @@ Requires `uv` and Python ≥ 3.11 (tested on Windows and Linux; macOS is not yet
 ```bash
 uv tool install git+https://github.com/DennisHuang890331/docspec
 uv tool update-shell          # add uv's tool bin to PATH (once), then open a new terminal
-docspec init                  # scaffold a project; installs into Claude Code, Codex, or Antigravity (pick one, or --tool all)
+docspec init                  # scaffold a project; installs into Claude Code, Codex, Gemini CLI, or Antigravity (pick one, or --tool all)
 ```
 
 You author inside your agent's chat through the installed skills, so the docspec commands you type by hand are only the ones for setup and maintenance:

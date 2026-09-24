@@ -10,6 +10,17 @@ a minor bump.
 
 ## [Unreleased]
 
+### Changed — agent integration follows the shared `.agents/` layout; Gemini CLI joins; optional AGENTS.md block
+
+Codex, Antigravity and Gemini CLI now all read skills from the vendor-neutral `.agents/skills/`, and OpenSpec moved its Codex/Antigravity installs there too. docspec was still writing to the old `.codex/skills/` and `.agent/` locations. `docspec init` now matches the current layout:
+
+- **One shared skill root**: Codex, Antigravity and Gemini share a single `.agents/skills/<name>/` copy instead of one copy per tool. Antigravity workflows move to `.agents/workflows/`.
+- **Claude reads the same copy**: Claude Code only reads `.claude/skills/`, so when a shared-root tool is also installed, `.claude/skills/<name>` becomes a relative symlink to `.agents/skills/<name>`. Where symlinks are unavailable (Windows without developer mode, for example) docspec copies the folder instead. A Claude-only install writes real files, as before.
+- **Codex is skills-only** (as in OpenSpec): docspec no longer writes global `$CODEX_HOME/prompts/dspx-*.md`. Invoke the skills as `$dspx-<name>`.
+- **Gemini CLI support** (`--tool gemini`, alias `google`): skills go to `.agents/skills/`, slash commands to `.gemini/commands/dspx/<id>.toml` (`/dspx:<id>`), and the freeze/store guard goes into `.gemini/settings.json` as a `BeforeTool` hook. `docspec hook guard` needed no change: Gemini uses the same `tool_input.file_path` / `command` fields and the same exit-2 block. No `AfterTool` completeness hook is installed, because in Gemini an exit 2 there hides the tool result and would make an applied write look like it failed.
+- **Legacy cleanup**: `docspec init` (which always refreshes with `--force`) removes the docspec-owned copies left in `.agent/skills`, `.agent/workflows`, `.codex/skills`, plus the old global Codex prompts. It only touches items with docspec's own skill names; a global prompt is removed only when it carries docspec's generated signature. Your own skills and prompts in those folders stay. Without `--force`, legacy copies are listed but kept.
+- **`docspec init --agents-md`** (opt-in) writes a short docspec block between `<!-- docspec:begin -->` / `<!-- docspec:end -->` markers into the project-root `AGENTS.md`. Content outside the markers is kept, and re-running updates the block in place. When a `CLAUDE.md` would stop Claude Code from reading `AGENTS.md`, init tells you to add `@AGENTS.md` to it.
+
 ### Fixed — a brand-new article is now born entirely inside a change, and chapter groups join change governance
 
 Stress-test v3 (clean-slate full lifecycle) caught two seams between the change layer and the dossier world. Both fixed:

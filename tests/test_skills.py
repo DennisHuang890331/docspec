@@ -1,6 +1,9 @@
-"""dspx skills — list / install 到三工具。"""
+"""dspx skills — list / install 到各 agent 工具。"""
 
 from __future__ import annotations
+
+import os
+from pathlib import Path
 
 from dspx.commands.maintenance import _skills as skills_cmd
 from dspx.env.frontmatter import parse_frontmatter
@@ -89,10 +92,10 @@ def test_install_claude_writes_skill_with_frontmatter(tmp_path):
 
 def test_install_all_writes_skill_and_command_per_tool(tmp_path, monkeypatch):
     codex_home = tmp_path / ".codexhome"
-    monkeypatch.setenv("CODEX_HOME", str(codex_home))   # codex command 全域→導向 tmp
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
     assert skills_cmd.run(["install", "--tool", "all", "--path", str(tmp_path)]) == 0
-    # (1) skill：三工具同一套結構 <tool 夾>/skills/<name>/SKILL.md（完整 SKILL.md）
-    for base in (".claude", ".agent", ".codex"):
+    # (1) skill：共用根 .agents/skills 寫一份（codex/antigravity/gemini 共讀）；Claude 經 .claude/skills 讀到同一份
+    for base in (".agents", ".claude"):
         for name in _EXPECTED:
             assert (tmp_path / base / "skills" / name / "SKILL.md").is_file()
         meta, body = parse_frontmatter(
@@ -100,12 +103,46 @@ def test_install_all_writes_skill_and_command_per_tool(tmp_path, monkeypatch):
             source=tmp_path)
         assert meta["name"] == "dspx-apply"
         assert meta["description"] and body.strip()
+    # 舊位不再產生
+    assert not (tmp_path / ".agent").exists()
+    assert not (tmp_path / ".codex" / "skills").exists()
     # (2) command：各工具原生叫用位置
     assert (tmp_path / ".claude" / "commands" / "dspx" / "apply.md").is_file()        # /dspx:apply
-    assert (tmp_path / ".agent" / "workflows" / "dspx-apply.md").is_file()            # antigravity
-    assert (codex_home / "prompts" / "dspx-apply.md").is_file()                        # codex 全域
-    # 不再產單檔 AGENTS.md（OpenSpec 已棄用）
+    assert (tmp_path / ".agents" / "workflows" / "dspx-apply.md").is_file()           # antigravity
+    assert (tmp_path / ".gemini" / "commands" / "dspx" / "apply.toml").is_file()      # gemini
+    assert not (codex_home / "prompts").exists()                                       # codex：skills-only
+    # AGENTS.md 只在 init --agents-md 時寫
     assert not (tmp_path / "AGENTS.md").exists()
+
+
+def test_install_claude_with_shared_root_links_to_agents(tmp_path):
+    """Claude 不讀 .agents/：同時裝共用根時，.claude/skills/<name> 指向 .agents/skills/<name>（單一來源）。"""
+    assert skills_cmd.run(["install", "--tool", "all", "--path", str(tmp_path)]) == 0
+    link = tmp_path / ".claude" / "skills" / "dspx-develop"
+    target = tmp_path / ".agents" / "skills" / "dspx-develop"
+    if link.is_symlink():                       # symlink 可用的平台
+        assert link.resolve() == target.resolve()
+        assert not Path(os.readlink(link)).is_absolute()   # 相對 link：搬 repo 不斷
+    else:                                       # 無 symlink 權限 → 退回複製
+        assert (link / "SKILL.md").read_text(encoding="utf-8") == \
+            (target / "SKILL.md").read_text(encoding="utf-8")
+    # support skill 的輔助檔也經由 link 可見
+    assert (tmp_path / ".claude" / "skills" / "dspx-diagram" / "scripts" / "validate.py").is_file()
+    # 重跑冪等
+    assert skills_cmd.run(["install", "--tool", "all", "--path", str(tmp_path), "--force"]) == 0
+    assert (link / "SKILL.md").is_file()
+
+
+def test_install_claude_only_after_shared_replaces_link_without_touching_agents(tmp_path):
+    """先裝全家（link）再只裝 claude（--force）：拆 link 改寫實檔，不得穿過 link 改到 .agents/。"""
+    assert skills_cmd.run(["install", "--tool", "all", "--path", str(tmp_path)]) == 0
+    shared = tmp_path / ".agents" / "skills" / "dspx-develop" / "SKILL.md"
+    shared.write_text("SHARED", encoding="utf-8")
+    assert skills_cmd.run(["install", "--tool", "claude", "--path", str(tmp_path), "--force"]) == 0
+    claude_dir = tmp_path / ".claude" / "skills" / "dspx-develop"
+    assert not claude_dir.is_symlink()
+    assert (claude_dir / "SKILL.md").read_text(encoding="utf-8") != "SHARED"
+    assert shared.read_text(encoding="utf-8") == "SHARED"
 
 
 def test_install_claude_writes_freeze_hook(tmp_path):
@@ -129,16 +166,98 @@ def test_install_codex_writes_freeze_hook(tmp_path, monkeypatch):
     assert "apply_patch" in guard["matcher"]
 
 
-def test_install_codex_only_writes_codex_skill_and_global_prompt(tmp_path, monkeypatch):
+def test_install_gemini_writes_before_tool_guard_and_keeps_user_hooks(tmp_path):
+    """Gemini CLI：.gemini/settings.json 的 BeforeTool（timeout 毫秒）；既有設定與使用者 hook 保留、重跑不重複。"""
+    import json
+    settings_file = tmp_path / ".gemini" / "settings.json"
+    settings_file.parent.mkdir(parents=True)
+    user_hook = {"matcher": "read_.*", "hooks": [{"type": "command", "command": "echo hi"}]}
+    settings_file.write_text(json.dumps({"theme": "dark", "hooks": {"BeforeTool": [user_hook]}}),
+                             encoding="utf-8")
+    for _ in range(2):
+        assert skills_cmd.run(["install", "--tool", "gemini", "--path", str(tmp_path)]) == 0
+    settings = json.loads(settings_file.read_text(encoding="utf-8"))
+    assert settings["theme"] == "dark"
+    before = settings["hooks"]["BeforeTool"]
+    assert before[0] == user_hook
+    guards = [e for e in before if "hook guard" in str(e)]
+    assert len(guards) == 1
+    assert guards[0]["matcher"] == "write_file|replace|run_shell_command"
+    assert guards[0]["hooks"][0]["timeout"] >= 1000              # 毫秒，不是秒
+    assert "PreToolUse" not in settings["hooks"]                 # 用 Gemini 的事件名
+    assert "AfterTool" not in settings["hooks"]                  # AfterTool exit 2 會隱藏結果，不裝
+
+
+def test_install_gemini_writes_valid_toml_commands(tmp_path):
+    import tomllib
+    assert skills_cmd.run(["install", "--tool", "gemini", "--path", str(tmp_path)]) == 0
+    assert (tmp_path / ".agents" / "skills" / "dspx-develop" / "SKILL.md").is_file()
+    by_name = {s.name: s for s in available_skills()}
+    for name in _EXPECTED:
+        toml_file = tmp_path / ".gemini" / "commands" / "dspx" / f"{name[len('dspx-'):]}.toml"
+        data = tomllib.loads(toml_file.read_text(encoding="utf-8"))
+        assert data["description"] == by_name[name].description
+        assert data["prompt"].strip() == by_name[name].body.strip()   # 跳脫往返無損
+    assert not (tmp_path / ".gemini" / "commands" / "dspx" / "diagram.toml").exists()
+    assert not (tmp_path / ".claude").exists()
+
+
+def test_toml_escape_round_trips_tricky_text():
+    import tomllib
+    tricky = 'quote " triple """ backslash \\ path C:\\x tab\t bell\x07 end'
+    data = tomllib.loads(f'v = """\n{skills_cmd._toml_basic(tricky, multiline=True)}"""\n'
+                         f'd = "{skills_cmd._toml_basic(tricky)}"\n')
+    assert data["v"] == tricky and data["d"] == tricky
+
+
+def test_install_codex_only_writes_shared_skill_no_global_prompt(tmp_path, monkeypatch):
     codex_home = tmp_path / ".codexhome"
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
     assert skills_cmd.run(["install", "--tool", "codex", "--path", str(tmp_path)]) == 0
-    assert (tmp_path / ".codex" / "skills" / "dspx-develop" / "SKILL.md").is_file()
-    assert (codex_home / "prompts" / "dspx-develop.md").is_file()
-    # codex 單獨不產 claude/antigravity，也不產 AGENTS.md
+    assert (tmp_path / ".agents" / "skills" / "dspx-develop" / "SKILL.md").is_file()
+    assert not (codex_home / "prompts").exists()        # skills-only：不再寫全域
+    # codex 單獨不產 claude/antigravity/gemini，也不產 AGENTS.md
     assert not (tmp_path / ".claude").exists()
-    assert not (tmp_path / ".agent").exists()
+    assert not (tmp_path / ".agents" / "workflows").exists()
+    assert not (tmp_path / ".gemini").exists()
     assert not (tmp_path / "AGENTS.md").exists()
+
+
+def _seed_legacy_install(root, codex_home):
+    """模擬前一代 docspec 的安裝形：.agent/、.codex/skills、全域 codex prompts。"""
+    for base in (".agent", ".codex"):
+        d = root / base / "skills" / "dspx-develop"
+        d.mkdir(parents=True)
+        (d / "SKILL.md").write_text("old", encoding="utf-8")
+    (root / ".agent" / "workflows").mkdir(parents=True)
+    (root / ".agent" / "workflows" / "dspx-develop.md").write_text("old", encoding="utf-8")
+    (codex_home / "prompts").mkdir(parents=True)
+    (codex_home / "prompts" / "dspx-develop.md").write_text(
+        "---\ndescription: x\nargument-hint: command arguments\n---\n\nbody", encoding="utf-8")
+    (codex_home / "prompts" / "dspx-apply.md").write_text("user's own prompt", encoding="utf-8")
+
+
+def test_legacy_locations_left_alone_without_force(tmp_path, monkeypatch, capsys):
+    codex_home = tmp_path / ".codexhome"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    _seed_legacy_install(tmp_path, codex_home)
+    assert skills_cmd.run(["install", "--tool", "all", "--path", str(tmp_path)]) == 0
+    assert "legacy docspec file left in place" in capsys.readouterr().out
+    assert (tmp_path / ".agent" / "skills" / "dspx-develop" / "SKILL.md").is_file()
+    assert (codex_home / "prompts" / "dspx-develop.md").is_file()
+
+
+def test_legacy_locations_retired_with_force(tmp_path, monkeypatch):
+    codex_home = tmp_path / ".codexhome"
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    _seed_legacy_install(tmp_path, codex_home)
+    (tmp_path / ".codex" / "skills" / "my-own-skill").mkdir()    # 使用者自己的 skill：不得動
+    assert skills_cmd.run(["install", "--tool", "all", "--path", str(tmp_path), "--force"]) == 0
+    assert not (tmp_path / ".agent").exists()                    # 空了就整個收掉
+    assert not (tmp_path / ".codex" / "skills" / "dspx-develop").exists()
+    assert (tmp_path / ".codex" / "skills" / "my-own-skill").is_dir()
+    assert not (codex_home / "prompts" / "dspx-develop.md").exists()   # 帶 docspec 簽名 → 收
+    assert (codex_home / "prompts" / "dspx-apply.md").is_file()        # 無簽名（使用者的）→ 留
 
 
 def test_install_skips_existing_then_force_overwrites(tmp_path, capsys):
@@ -165,18 +284,21 @@ def test_install_works_anywhere_no_project_required(tmp_path):
 
 
 def test_install_default_is_single_agent_not_all(tmp_path):
-    """預設只裝 claude 一家，不灑 .agent/.codex（三家不共享 memory，別污染專案）。"""
+    """預設只裝 claude 一家（寫實檔、不建共用根），不灑其他家（各家不共享 memory，別污染專案）。"""
     assert skills_cmd.run(["install", "--path", str(tmp_path)]) == 0
     assert (tmp_path / ".claude").is_dir()
-    assert not (tmp_path / ".agent").exists()
-    assert not (tmp_path / ".codex").exists()
+    assert not (tmp_path / ".claude" / "skills" / "dspx-develop").is_symlink()
+    for d in (".agents", ".agent", ".codex", ".gemini"):
+        assert not (tmp_path / d).exists()
 
 
 def test_install_tool_all_installs_every_agent(tmp_path):
-    """明確 `--tool all` 才裝三家（共享 memory 的場景）。"""
+    """明確 `--tool all` 才全裝（共享 memory 的場景）。"""
     assert skills_cmd.run(["install", "--tool", "all", "--path", str(tmp_path)]) == 0
-    for d in (".claude", ".agent", ".codex"):
+    for d in (".claude", ".agents"):
         assert (tmp_path / d / "skills" / "dspx-develop" / "SKILL.md").is_file()
+    assert (tmp_path / ".gemini" / "settings.json").is_file()
+    assert (tmp_path / ".codex" / "hooks.json").is_file()
 
 
 def test_skills_folded_into_init():

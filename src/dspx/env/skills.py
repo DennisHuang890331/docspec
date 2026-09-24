@@ -3,8 +3,8 @@
 權威 skill 原始檔以套件資料形式隨 dspx 散布（`src/dspx/assets/skills/<name>/SKILL.md`——
 住 `assets/` 底下，跟 `assets/templates/`／`assets/fonts/`／`assets/reference/` 同一類：
 出貨資料，非可執行程式碼；模組同名的 `src/dspx/skills.py` 才是讀它的程式碼，兩者不要混淆）。
-本模組只負責「列出有哪些、讀出 frontmatter＋本文」；安裝/產生到三工具
-（Claude／Antigravity／Codex）的邏輯在 commands/skills_cmd.py。
+本模組只負責「列出有哪些、讀出 frontmatter＋本文」；安裝/產生到各 agent 工具
+（Claude／Codex／Gemini／Antigravity）的邏輯在 commands/maintenance/_skills.py。
 """
 
 from __future__ import annotations
