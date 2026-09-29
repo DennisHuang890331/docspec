@@ -1,6 +1,6 @@
 # 第一期細部設計：治理層＋追溯
 
-- 狀態：草案，**等使用者確認（第一期架構關卡）**
+- 狀態：**已實作**（2026/09/29），等使用者驗收（第一期驗收關卡）
 - 依據：`docs/dev/system-design.md` 架構第二版（2026/09/29 確認）
 - 最後更新：2026/09/29
 - 第一期要滿足的系統需求：SR1–SR8、SR9（文件部分）、SR14、SR15（治理層與文件部分）、SR16–SR18、SR21（一頁現況部分）。
@@ -242,3 +242,27 @@ docspec/
 1. 確認方式：乙＋丁（見第 4 節）。
 2. 編號：流水號加工具前綴（見第 2.2 節）。
 3. 發布：agent 準備、使用者批准，並與裁定確認合併成同一個「待批准」清單（`docspec approve`）。
+
+---
+
+## 12. 實作與驗收紀錄（2026/09/29）
+
+**實作偏離或補充設計之處**
+
+- 決策連結分兩種：`gov:D-…`（決策）在工作項目上是「約束」，只用於追溯與影響分析，不算完成條件；問題與裁定的連結才算完成條件。原因是決策生效不代表工作做完（demo 中發現）。
+- 取代者生效時，被取代決策上的可疑標記會自動清除，理由寫「superseded by <新編號>」，避免雜訊。
+- 防護判斷相對路徑時，依 hook 輸入的 `cwd` 解析，同時分得出 `docs/g/archive/`（凍結）與 `openspec/changes/archive/`（不凍結）。
+- 使用者批准只在有治理層（`docspec/governance/`）的專案強制；舊專案維持原行為，新專案由 `docspec init` 自動啟用。
+- 一頁現況依 demo 盲測回饋補上：卡住原因、里程碑到期警告、待批准裁定的解讀、提醒 agent 用 `approve --list`。
+
+**驗收**
+
+- 自動測試：全部 1094 個通過（82 個略過），其中新增約 100 個治理層測試（`tests/test_governance.py`、`test_approve.py`、`test_roadmap_v2.py`、`test_hook_payloads.py`）。
+- S1（目前有效設計只出現完整新版，歷史可查）：`test_effective_design_shows_only_the_complete_new_version` 通過。
+- S2（第一期範圍：取代決策 → 依賴它的章節轉 stale-upstream，並列入 `impact` 附接替者）：`test_superseding_gov_decision_makes_realizing_section_stale`、`test_impact_lists_doc_sections_on_superseded_decision` 通過。
+- S3（未確認的裁定不能讓決策生效；agent 不能執行 approve）：`test_owner_confirms_ruling_then_decision_can_activate`、`test_hook_blocks_agent_calling_approve`、`test_approve_refused_in_agent_environment` 通過。
+- S4（一頁現況）：
+  - 用仿台中港結構的合成資料建立 demo，一頁現況 1772 字，在兩千字上限內。
+  - 兩次請沒看過專案的 agent 只讀這一頁。第二次時它正確說出：各里程碑進度、F-2 明天到期、兩個卡住的項目與原因、待批准事項與待裁定問題；它先用 `approve --list` 與 `docspec impact` 查看，也不代為批准。
+  - 它指出的剩餘缺口（上游具體改了什麼、問題的選項）屬於用 `docspec impact`、`question list` 查詢的細節，符合設計。
+- 使用者的實際專案資料沒有放進 repo；demo 只在本機產生。

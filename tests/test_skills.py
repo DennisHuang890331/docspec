@@ -16,6 +16,7 @@ _EXPECTED = {
     "dspx-factcheck",
     "dspx-publish",
     "dspx-release",
+    "dspx-govern",
 }
 # support skill（subagent 載入、隨帶 scripts/、不產 command）
 _SUPPORT = {"dspx-diagram"}
@@ -312,7 +313,7 @@ def test_skills_folded_into_init():
 # budgets (D1/D5); mechanics beyond the budget go to `docspec guide` / instructions / reference.md.
 _BODY_BUDGET = {
     "dspx-apply": 150, "dspx-develop": 120, "dspx-factcheck": 90,
-    "dspx-publish": 80, "dspx-release": 90, "dspx-diagram": 90,
+    "dspx-publish": 80, "dspx-release": 90, "dspx-diagram": 90, "dspx-govern": 80,
 }
 
 

@@ -8,7 +8,9 @@
     blocked（卡住：前置未完成，或有未處理的可疑標記）／not-started（未開始）。
 - 工作項目用 `refs` 指向實際執行的東西：
     `change:<id>`（文件 change；封存＝滿足）、`doc:<章節路徑>`（該節已同步＝滿足）、
-    `doc:<文章>`（已發布且全部章節已同步＝滿足）、`gov:<id>`（決策生效／問題已裁定／裁定已確認）。
+    `doc:<文章>`（已發布且全部章節已同步＝滿足）、`gov:Q-…`／`gov:RL-…`（問題已裁定／裁定已確認）。
+    `gov:D-…`（決策）是**約束**不是完成條件：它讓決策被取代時這個項目被標為可疑（影響分析），
+    但決策生效不代表工作做完。
 - 沒有 refs 的項目：有子項目就看子項目；否則只能以 `roadmap done --note` 手動結案。
 - 計畫查核點（checkpoint）與交付物（deliverable）是不同的里程碑型別（SR15）。
 舊專案用 `docspec roadmap migrate` 一次轉換（見 migrate_legacy）。
@@ -72,6 +74,11 @@ def build_context(layout: Layout, leaves: list, gov: gv.Governance | None = None
                                          if s.get("status") == "open"})
 
 
+def is_constraint_ref(ref: str) -> bool:
+    """`gov:D-…`：工作項目必須遵守的決策（只供追溯與影響分析，不算完成條件）。"""
+    return str(ref).startswith(gv.GOV_NAMESPACE) and gv.kind_of_id(gv.strip_ns(ref)) == "decision"
+
+
 def ref_state(ref: str, ctx: Context) -> str:
     """單一 ref 的狀態：done / in-progress / not-started / missing。"""
     ref = str(ref)
@@ -118,7 +125,7 @@ def item_status(item: dict, ctx: Context, _seen: frozenset = frozenset()) -> str
         return fin
     by_id = {str(w.get("id")): w for w in ctx.gov.work}
     children = [w for w in ctx.gov.work if str(w.get("parent")) == iid]
-    refs = gv._as_list(item.get("refs"))
+    refs = [r for r in gv._as_list(item.get("refs")) if not is_constraint_ref(r)]
     states = [ref_state(r, ctx) for r in refs]
     child_states = [item_status(c, ctx, seen) for c in children]
     parts = states + child_states
@@ -135,23 +142,58 @@ def item_status(item: dict, ctx: Context, _seen: frozenset = frozenset()) -> str
     return NOT_STARTED
 
 
+def block_reason(item: dict, ctx: Context, lang: str = "zh") -> str:
+    """卡住的原因（白話）：等哪些前置項目、或受上游變更影響需重看。"""
+    by_id = {str(w.get("id")): w for w in ctx.gov.work}
+    waiting = [by_id[d] for d in gv._as_list(item.get("depends-on"))
+               if d in by_id and item_status(by_id[d], ctx) not in _FINISHED]
+    parts = []
+    if waiting:
+        names = "、".join(f"{w.get('title')}（{w.get('id')}）" for w in waiting)
+        parts.append(f"等 {names} 完成" if lang == "zh" else f"waiting for {names}")
+    if str(item.get("id")) in ctx.open_suspect_targets:
+        parts.append("受上游變更影響，需重看（`docspec impact`）" if lang == "zh"
+                     else "affected by an upstream change; review with `docspec impact`")
+    return "；".join(parts) if lang == "zh" else "; ".join(parts)
+
+
+def due_note(milestone: dict, status: str, lang: str = "zh") -> str:
+    """里程碑到期提醒：未完成且已過期／7 天內到期。日期格式 YYYY/MM/DD 或 YYYY-MM-DD。"""
+    import datetime
+    raw = str(milestone.get("due") or "").replace("/", "-")
+    try:
+        due = datetime.date.fromisoformat(raw)
+    except ValueError:
+        return ""
+    if status in _FINISHED:
+        return ""
+    days = (due - datetime.date.today()).days
+    if days < 0:
+        return "⚠ 已逾期" if lang == "zh" else "⚠ overdue"
+    if days <= 7:
+        return f"⚠ {days} 天內到期" if lang == "zh" else f"⚠ due in {days} day(s)"
+    return ""
+
+
 def view(layout: Layout, leaves: list, gov: gv.Governance | None = None) -> dict:
     """roadmap 檢視：{milestones:[{…, progress, items:[…]}], unassigned:[…]}。"""
     ctx = build_context(layout, leaves, gov)
     rows = {}
     for w in ctx.gov.work:
+        st = item_status(w, ctx)
         rows[str(w["id"])] = {**{k: v for k, v in w.items() if not k.startswith("_")},
-                              "status": item_status(w, ctx)}
+                              "status": st}
+        if st == BLOCKED:
+            rows[str(w["id"])]["blocked-because"] = block_reason(w, ctx)
     out = {"milestones": [], "unassigned": []}
     for m in ctx.gov.milestones:
         items = [r for r in rows.values() if str(r.get("milestone")) == str(m["id"])
                  and not r.get("parent")]
         done = sum(1 for r in items if r["status"] in _FINISHED)
+        mst = DONE if items and done == len(items) else (IN_PROGRESS if done else NOT_STARTED)
         out["milestones"].append({**{k: v for k, v in m.items() if not k.startswith("_")},
-                                  "done": done, "total": len(items),
-                                  "status": DONE if items and done == len(items) else
-                                  (IN_PROGRESS if done else NOT_STARTED),
-                                  "items": items})
+                                  "done": done, "total": len(items), "status": mst,
+                                  "due-note": due_note(m, mst), "items": items})
     out["unassigned"] = [r for r in rows.values() if not r.get("milestone") and not r.get("parent")]
     out["children"] = {pid: [r for r in rows.values() if str(r.get("parent")) == pid]
                        for pid in rows}
@@ -168,12 +210,17 @@ def progress_lines(layout: Layout, leaves: list, gov: gv.Governance, lang: str =
     lines = []
     for m in v["milestones"]:
         due = f"，{m['due']}" if m.get("due") else ""
+        warn = f" {m['due-note']}" if m.get("due-note") else ""
         lines.append(f"- {m['title']}（{kind_name.get(m.get('type'), m.get('type'))}{due}，"
-                     f"{m['id']}）：{m['done']}/{m['total']}")
-    stuck = [r for r in v["milestones"] for r in r["items"] if r["status"] == BLOCKED]
-    stuck += [r for r in v["unassigned"] if r["status"] == BLOCKED]
-    for r in stuck:
-        lines.append(f"- {'卡住' if lang == 'zh' else 'blocked'}：{r['title']}（{r['id']}）")
+                     f"{m['id']}）：{m['done']}/{m['total']}{warn}")
+        for r in sorted(m["items"], key=lambda r: r["status"] != BLOCKED):   # 卡住的先列
+            if r["status"] not in _FINISHED:
+                lines.append(f"  - {status_label(r['status'], r, lang)}：{r['title']}（{r['id']}）"
+                             + (f"——{r['blocked-because']}" if r.get("blocked-because") else ""))
+    for r in v["unassigned"]:
+        if r["status"] not in _FINISHED:
+            lines.append(f"- {status_label(r['status'], r, lang)}：{r['title']}（{r['id']}）"
+                         + (f"——{r['blocked-because']}" if r.get("blocked-because") else ""))
     return lines
 
 

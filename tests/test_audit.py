@@ -171,7 +171,9 @@ def test_resolve_cross_doc_finding_in_forest(make_project, write_leaf, monkeypat
     monkeypatch.chdir(home.parent)
     audit_cmd.run(["raise", "--target", "a,b", "--face", "consistency",
                    "--sev", "high", "--finding", "x"])
-    assert audit_cmd.run(["resolve", "F1", "--status", "rejected"]) == 0
+    assert audit_cmd.run(["resolve", "F1", "--status", "rejected"]) == 1      # 駁回要理由（SR14）
+    assert audit_cmd.run(["resolve", "F1", "--status", "rejected",
+                          "--note", "來源確認無誤，不是錯誤"]) == 0
     assert load_forest_audit(Layout(home)).findings[0]["status"] == "rejected"
     assert audit_cmd.run(["show", "F1"]) == 0
 

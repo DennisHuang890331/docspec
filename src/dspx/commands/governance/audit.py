@@ -145,9 +145,14 @@ def run(argv: list[str]) -> int:
         store = find_store(layout, leaves, args.id)
         if store is None:
             sys.stderr.write(f"docspec: finding \"{args.id}\" not found\n"); return 1
+        note = _text_arg(args.note, args.note_file)
+        if args.status in ("rejected", "waived") and not (note or "").strip():
+            # SR14：每個審查發現都要被處置；駁回或延後必須寫明理由，否則等於沒處理。
+            sys.stderr.write(f"docspec: resolving a finding as {args.status} needs --note with the "
+                             "reason (what was checked and why no fix is made now)\n")
+            return 1
         try:
-            f = resolve_finding(store, args.id, status=args.status, actor=args.actor,
-                                note=_text_arg(args.note, args.note_file))
+            f = resolve_finding(store, args.id, status=args.status, actor=args.actor, note=note)
         except AuditError as exc:
             sys.stderr.write(f"docspec: {exc}\n"); return 1
         store.save()

@@ -297,3 +297,20 @@ def test_brief_write_regenerates_view_files(gov_project):
     assert brief_cmd.run(["--write"]) == 0
     out = gov_project.parent / "docs" / "project"
     assert sorted(p.name for p in out.iterdir()) == ["design.md", "pending.md", "status.md"]
+
+
+def test_activating_replacement_clears_flags_on_replaced_decision(gov_project):
+    ruling_cmd.run(["add", "--quote", "維持原樣", "--tier", "major"])
+    _confirm(gov_project, "RL-claude-1")
+    decision_cmd.run(["add", "--title", "首頁", "--statement", "維持。", "--based-on", "RL-claude-1"])
+    decision_cmd.run(["activate", "D-claude-1"])
+    ruling_cmd.run(["add", "--quote", "合併", "--tier", "major", "--supersedes", "RL-claude-1"])
+    _confirm(gov_project, "RL-claude-2")
+    from dspx.engine.impact import flag_after_change
+    layout = Layout(gov_project)
+    assert len(flag_after_change(layout, "RL-claude-2")) == 1          # D-claude-1 被標可疑
+    decision_cmd.run(["add", "--title", "首頁", "--statement", "合併。", "--based-on", "RL-claude-2",
+                      "--supersedes", "D-claude-1"])
+    decision_cmd.run(["activate", "D-claude-2"])
+    s = gv.load_governance(layout).suspects[0]
+    assert (s["status"], s["cleared-reason"]) == ("cleared", "superseded by D-claude-2")

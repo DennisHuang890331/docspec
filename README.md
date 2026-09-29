@@ -102,7 +102,7 @@ Staleness travels along four axes, and `docspec status` names them per section: 
 
 ## ✍️ Authoring workflow
 
-You describe what you want in your agent's chat, and it invokes five skills while the engine gatekeeps behind them:
+You describe what you want in your agent's chat, and it invokes six skills while the engine gatekeeps behind them:
 
 | Skill | What it does |
 |---|---|
@@ -111,6 +111,7 @@ You describe what you want in your agent's chat, and it invokes five skills whil
 | **factcheck** | adversarial check of each claim against a source; flags only, never blocks a release |
 | **publish** | irreversible release: gates green → freeze a read-only snapshot → bump version → changelog |
 | **release** | interactive PDF layout: export → review page images → tune knobs → re-export |
+| **govern** | project governance: questions for the owner, verbatim rulings the owner confirms with `docspec approve`, project decisions, the single roadmap, impact review, one-page `docspec brief` |
 
 This is a loop, not a pipeline: when factcheck finds a problem, the work returns to develop or apply before it comes back through publish. Revisions run as **changes**: a batch of edits — including a document's very first build — stages inside a change while the official face stays frozen, previews render from the merged view, and archiving the change is what lands it. The full contract the agent follows (fields, workflow, rules) is projected live by `docspec guide`, not kept in documentation that can go stale.
 

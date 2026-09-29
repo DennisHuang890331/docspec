@@ -27,7 +27,7 @@ _T = {
         "more": "還有 {n} 項，用 `{cmd}` 查看", "unconfirmed": "未經本人確認",
         "pending_conf": "待你確認", "provisional": "暫定",
         "doc_line": "{article}：{total} 節，已同步 {synced}，需更新 {stale}，未寫 {unwritten}",
-        "n_approve": "有 {n} 項待你批准：請在終端機執行 `docspec approve`。",
+        "n_approve": "有 {n} 項待你批准：請在終端機執行 `docspec approve`（agent 用 `docspec approve --list` 查看內容，不可代為批准）。",
         "n_q": "有 {n} 個問題等你裁定。",
         "n_review": "有 {n} 項受上游變更影響，需要重看（`docspec impact`）。",
         "n_stale": "有 {n} 個文件章節需要更新內容。",
@@ -47,7 +47,7 @@ _T = {
         "pending_conf": "awaiting your confirmation", "provisional": "provisional",
         "doc_line": "{article}: {total} sections, {synced} synced, {stale} need updating, "
                     "{unwritten} unwritten",
-        "n_approve": "{n} item(s) await your approval: run `docspec approve` in a terminal.",
+        "n_approve": "{n} item(s) await your approval: run `docspec approve` in a terminal (agents: read them with `docspec approve --list`; never approve on the owner's behalf).",
         "n_q": "{n} question(s) await your ruling.",
         "n_review": "{n} item(s) were affected by upstream changes and need review (`docspec impact`).",
         "n_stale": "{n} document section(s) need their prose updated.",
@@ -143,7 +143,8 @@ def _brief(layout: Layout, leaves: list, config: dict | None, cap: int) -> str:
         lines.append(f"## {t['todo']}")
         if pend:
             lines.append(f"{t['approve']}：")
-            lines += _capped([f"- {_label(r)}" for r in pend], "docspec approve --list", t, cap)
+            lines += _capped([f"- {_label(r)}" + (f"——{r['interpretation']}" if r.get("interpretation") else "")
+                              for r in pend], "docspec approve --list", t, cap)
         if qs:
             lines.append(f"{t['questions']}：")
             lines += _capped([f"- {_label(q)}" for q in qs], "docspec question list", t, cap)
@@ -186,7 +187,7 @@ def _brief(layout: Layout, leaves: list, config: dict | None, cap: int) -> str:
         prog = []
     if prog:
         lines.append(f"## {t['roadmap']}")
-        lines += _capped(prog, "docspec roadmap", t, cap)
+        lines += _capped(prog, "docspec roadmap", t, cap * 2)   # 里程碑行＋未完成項目，給兩倍額度
         lines.append("")
 
     if docs:

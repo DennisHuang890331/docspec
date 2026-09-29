@@ -103,6 +103,14 @@ def flag_after_change(layout: Layout, changed_id: str, tool: str | None = None,
     else:
         triggers = [changed_id]
     graph = build_graph(layout, leaves, gov)
+    if kind == "decision" and changed.get("status") == "active":
+        # 取代者已生效＝被取代的舊決策上的可疑標記已由取代本身處理，自動清除並寫明理由。
+        for s in gov.suspects:
+            if s.get("status") == "open" and str(s.get("target")) in triggers:
+                rec = {k: v for k, v in s.items() if not k.startswith("_")}
+                rec.update({"status": "cleared", "cleared-by": "docspec", "cleared-at": gv.today(),
+                            "cleared-reason": f"superseded by {changed_id}"})
+                gv.write_record(layout, "suspect", rec)
     existing = _open_suspect_keys(gov)
     try:
         tool = tool or gv.detect_tool()

@@ -46,8 +46,16 @@ def is_sync_junk(name: str) -> bool:
 
 
 def is_frozen_path(path: str | Path) -> bool:
-    """路徑落在某個 `archive/` 資料夾內＝凍結（資料夾級規則）。"""
-    return "archive" in Path(path).parts
+    """路徑落在 docspec 交付區 `docs/` 底下的某個 `archive/` 資料夾內＝凍結（資料夾級規則）。
+
+    只認 `docs/…/archive/`（docspec 自己的發布快照：`docs/archive/`、`docs/<文章>/archive/`）。
+    以前「任何一層叫 archive 都算」會把別的工具的封存目錄（例如 OpenSpec 的
+    `openspec/changes/archive/`）也當成 docspec 的凍結區，連讀取都被誤擋。"""
+    parts = Path(path).parts
+    if "archive" not in parts:
+        return False
+    last = max(i for i, part in enumerate(parts) if part == "archive")
+    return "docs" in parts[:last]
 
 
 def _hash(path: Path) -> str:

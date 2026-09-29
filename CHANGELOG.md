@@ -10,6 +10,41 @@ a minor bump.
 
 ## [Unreleased]
 
+### Added — project governance layer (phase 1 of the docs + software redesign; branch only)
+
+The outermost layer of a project now holds the records that carry authority, instead of prose files that only grow (design record: `docs/dev/system-design.md`, phase 1: `docs/dev/phase1-design.md`).
+
+- **Records, one file each** under `docspec/governance/`, sealed and written only through commands. Ids are `<kind>-<tool>-<n>` (`D-claude-13`) so different agents never collide. The record types are:
+  - questions awaiting the owner
+  - the owner's rulings, quoted verbatim and transcribed by an agent
+  - project-level decisions
+  - roadmap milestones and work items
+  - suspect flags
+  - approval requests
+- **The owner is the only authority, and the tool enforces it.**
+  - A major ruling stays pending until the owner confirms it with `docspec approve` in their own terminal. A decision can only become active on confirmed rulings.
+  - Agents cannot run `docspec approve`: the hook, an agent-environment check and a TTY check all refuse it.
+  - In governance-enabled projects an agent's `docspec publish` becomes a publish request the owner approves.
+- **Superseding writes the whole thing.** A new decision replaces an old one with the full merged text. `docspec brief --design` shows only the current decisions, and `decision show` gives the full history.
+- **Traceability and impact.** Document sections may `realizes: [gov:<id>]`, and superseding such a decision makes them `stale-upstream`.
+  - `docspec impact` lists suspect flags, raised when a ruling is rejected or superseded, or when a decision a work item refers to changes. Clearing a flag needs a reason.
+  - `docspec trace <id>` shows a record's links upstream and downstream.
+- **One project roadmap.**
+  - Milestones are either a plan checkpoint or a deliverable.
+  - A work item points at `change:`, `doc:` or `gov:` records and its status is derived: done, done with waivers, in progress, blocked with the reason, or not started. Finished items stay in the file.
+  - `docspec roadmap migrate` converts the previous per-document and forest roadmaps.
+- **`docspec brief`** is a one-page status for handover: at most 2000 characters, plain language, ids in brackets, blocked reasons and due-date warnings. `--write` regenerates `docs/project/{status,design,pending}.md`.
+- **New `dspx-govern` skill** for the main agent. `docspec init` enables the governance layer for new projects.
+
+### Fixed — hook guard false blocks and missing agent formats
+
+- The guard blocks only writes and deletes. Read-only commands are no longer blocked because of an unbalanced quote (`it's`) or `find … -exec … \;`.
+- The frozen area is only `docs/…/archive/`, so OpenSpec's `openspec/changes/archive/` is no longer treated as frozen. Relative paths resolve against the agent's `cwd` from the hook input.
+- Codex `apply_patch` paths and Antigravity `toolCall` payloads are handled natively (Antigravity gets a JSON allow/deny decision), so a project-written adapter is no longer needed.
+- `find … -delete` and `find … -exec rm` on a frozen path are now blocked.
+- Governance records and the generated `docs/project/` views are protected from hand edits.
+- Rejecting or deferring a factcheck finding (`audit resolve --status rejected|waived`) now requires `--note` with the reason.
+
 ### Changed — agent integration follows the shared `.agents/` layout; Gemini CLI joins; optional AGENTS.md block
 
 Codex, Antigravity and Gemini CLI now all read skills from the vendor-neutral `.agents/skills/`, and OpenSpec moved its Codex/Antigravity installs there too. docspec was still writing to the old `.codex/skills/` and `.agent/` locations. `docspec init` now matches the current layout:

@@ -66,9 +66,18 @@ def test_hook_guard_allows_latest_write(monkeypatch):
     assert rc == 0                                                  # 放行
 
 
+def test_relative_archive_path_resolves_against_agent_cwd(monkeypatch, tmp_path):
+    """相對路徑依 hook 輸入的 cwd 解析：docs/g 裡的 archive/ 是凍結區，openspec/changes 裡的不是。"""
+    blocked = _run_guard(monkeypatch, {"cwd": str(tmp_path / "docs" / "g"),
+                                       "tool_input": {"command": "echo x >> archive/v1.md"}})
+    assert blocked == 2
+    allowed = _run_guard(monkeypatch, {"cwd": str(tmp_path / "openspec" / "changes"),
+                                       "tool_input": {"command": "echo x >> archive/v1.md"}})
+    assert allowed == 0
+
+
 @pytest.mark.parametrize("command", [
     "echo x > docs/g/archive/v1.md",            # 重導寫入
-    "echo x >> archive/v1.md",                  # append
     "sed -i 's/a/b/' docs/g/archive/v1.md",     # in-place 改
     "rm docs/g/archive/v1.md",                  # 刪
     "cp _latest.md docs/g/archive/v2.md",       # cp 目的地是 archive
