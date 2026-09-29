@@ -1,0 +1,424 @@
+"""治理層紀錄（專案最外層）：待裁定問題、裁定、決策、可疑標記、待批准申請。
+
+設計依據：docs/dev/system-design.md（架構第二版）、docs/dev/phase1-design.md。
+
+- **一筆一檔**：`docspec/governance/<夾>/<id>.yaml`。兩個分支各自新增紀錄＝只多出不同檔案，
+  git 合併不衝突；每檔各自封條（沿用 sealed.integrity_of），手改 fail-loud 指路 fsck。
+- **編號**：`<類別>-<工具前綴>-<流水號>`（例 `D-claude-13`）。前綴＝claude/gpt/gemini/user；
+  各前綴各自流水號，不同工具並行不撞號。同一工具在兩分支同時編號的撞號由 check 抓出。
+- **引用命名空間**：文件側以 `gov:<id>` 引用治理決策，避免與文件內自由命名的決策 id 撞名。
+- **狀態盡量推導、不改舊檔**：裁定「被取代」、決策「被取代」、問題「已裁定」都由其他紀錄推導，
+  舊紀錄檔一個 byte 不動（合併友善，且符合「歷史只追加」）。
+- 這層只做「忠實載入＋結構驗證＋推導」；語義對錯不判。
+"""
+
+from __future__ import annotations
+
+import datetime
+import os
+import re
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+import yaml
+
+from dspx.engine.layout import Layout
+from dspx.engine.model import ModelError
+from dspx.engine.sealed import integrity_of
+from dspx.engine.store import _yaml_dump, atomic_write_store
+
+GOV_DIR_NAME = "governance"
+GOV_NAMESPACE = "gov:"
+RECORD_FORMAT_VERSION = 1
+
+# 紀錄型別 → (編號類別字首, 子資料夾)
+KINDS: dict[str, tuple[str, str]] = {
+    "question": ("Q", "questions"),
+    "ruling": ("RL", "rulings"),
+    "decision": ("D", "decisions"),
+    "suspect": ("S", "suspects"),
+    "request": ("AP", "requests"),
+}
+PREFIX_TO_KIND = {v[0]: k for k, v in KINDS.items()}
+
+TOOLS = ("claude", "gpt", "gemini", "user")
+_ID_RE = re.compile(r"^(?P<cls>[A-Z]+)-(?P<tool>[a-z]+)-(?P<n>[1-9][0-9]*)$")
+
+# ── 各型別的欄位（封閉集合：未知欄位＝check ERROR）與可存狀態 ─────────────────
+FIELDS: dict[str, dict[str, bool]] = {   # 欄位 → 是否必填
+    "question": {"id": True, "title": True, "body": False, "status": True,
+                 "raised-by": True, "raised-at": True, "affects": False},
+    "ruling": {"id": True, "quote": True, "date": True, "recorded-by": True,
+               "interpretation": False, "tier": True, "status": True, "answers": False,
+               "supersedes": False, "provisional": False, "confirmed-at": False,
+               "confirmed-by": False, "rejected-reason": False},
+    "decision": {"id": True, "title": True, "statement": True, "rationale": False,
+                 "status": True, "based-on": False, "supersedes": False,
+                 "created-by": True, "created-at": True},
+    "suspect": {"id": True, "trigger": True, "target": True, "path": False,
+                "status": True, "created-at": True, "cleared-reason": False,
+                "cleared-by": False, "cleared-at": False},
+    "request": {"id": True, "action": True, "payload": True, "summary": True,
+                "status": True, "requested-by": True, "requested-at": True,
+                "decided-by": False, "decided-at": False, "reason": False},
+}
+STORED_STATUS: dict[str, tuple[str, ...]] = {
+    "question": ("open", "needs-explanation", "withdrawn"),
+    "ruling": ("pending", "confirmed", "rejected", "recorded"),
+    "decision": ("draft", "active", "withdrawn"),
+    "suspect": ("open", "cleared"),
+    "request": ("pending", "approved", "rejected", "done"),
+}
+RULING_TIERS = ("major", "minor")   # major＝會改變決策、需本人確認；minor＝只記原話、標未確認
+
+
+class GovernanceError(ModelError):
+    """治理層操作失敗（ModelError 子類＝沿用既有 fail-loud/CLI 友善錯誤路徑）。"""
+
+
+# ── 路徑 ─────────────────────────────────────────────────────────────────
+
+def gov_dir(layout: Layout) -> Path:
+    return layout.planning_home / GOV_DIR_NAME
+
+
+def kind_dir(layout: Layout, kind: str) -> Path:
+    return gov_dir(layout) / KINDS[kind][1]
+
+
+def record_path(layout: Layout, kind: str, rid: str) -> Path:
+    return kind_dir(layout, kind) / f"{rid}.yaml"
+
+
+def kind_of_id(rid: str) -> str | None:
+    m = _ID_RE.match(str(rid))
+    return PREFIX_TO_KIND.get(m.group("cls")) if m else None
+
+
+def strip_ns(ref: str) -> str:
+    ref = str(ref)
+    return ref[len(GOV_NAMESPACE):] if ref.startswith(GOV_NAMESPACE) else ref
+
+
+# ── 工具前綴判斷 ──────────────────────────────────────────────────────────
+
+def detect_tool(explicit: str | None = None) -> str:
+    """回傳工具前綴。優先序：--by 明示 → DOCSPEC_AGENT → 各家 agent 環境變數 → 真人終端＝user。
+    判斷不出來（非互動、無任何 agent 記號）→ GovernanceError 要求 --by。"""
+    for cand in (explicit, os.environ.get("DOCSPEC_AGENT")):
+        if cand:
+            cand = cand.strip().lower()
+            if cand not in TOOLS:
+                raise GovernanceError(f"unknown tool prefix \"{cand}\"; choose one of {', '.join(TOOLS)}")
+            return cand
+    env = os.environ
+    if env.get("CLAUDECODE") or env.get("CLAUDE_CODE_ENTRYPOINT"):
+        return "claude"
+    if env.get("GEMINI_CLI") or env.get("ANTIGRAVITY_AGENT"):
+        return "gemini"
+    if _codex_marker(env):
+        return "gpt"
+    if sys.stdin.isatty() and sys.stdout.isatty():
+        return "user"
+    raise GovernanceError("cannot tell which agent is running this command; pass --by claude|gpt|gemini")
+
+
+def _codex_marker(env) -> bool:
+    # CODEX_HOME 是使用者自己也可能設定的設定目錄，不算「正在 Codex 裡執行」的記號。
+    return any(k.startswith("CODEX_") and k != "CODEX_HOME" for k in env)
+
+
+AGENT_ENV_MARKERS = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "GEMINI_CLI", "ANTIGRAVITY_AGENT",
+                     "DOCSPEC_AGENT")
+
+
+def is_agent_environment() -> bool:
+    """是否為 agent 的執行環境（任一家 agent 記號在場）。供「使用者專用」動作的第二層防護。"""
+    env = os.environ
+    return bool(any(env.get(k) for k in AGENT_ENV_MARKERS) or _codex_marker(env))
+
+
+def owner_approval_enabled(layout: Layout) -> bool:
+    """專案啟用治理層（有 governance/）＝發布等不可逆動作改走「agent 申請、使用者批准」。
+    未啟用的舊專案維持原行為（向後相容）；`docspec init` 會建立 governance/。"""
+    return has_governance(layout)
+
+
+def git_user(cwd: Path) -> str:
+    try:
+        out = subprocess.run(["git", "config", "user.name"], cwd=cwd, capture_output=True,
+                             text=True, timeout=5)
+        name = out.stdout.strip()
+        return name or "unknown"
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def today() -> str:
+    return datetime.date.today().strftime("%Y-%m-%d")
+
+
+# ── 單筆紀錄的封條讀寫 ─────────────────────────────────────────────────────
+
+def _seal(kind: str, record: dict) -> str:
+    return integrity_of(f"governance-{kind}", "project", RECORD_FORMAT_VERSION, "record", record)
+
+
+def dump_record(kind: str, record: dict) -> str:
+    header = (f"# docspec governance {kind} — engine-owned; never edit by hand.\n"
+              f"# Change it through docspec commands; a hand-edit breaks the integrity seal.\n")
+    doc = {"format": RECORD_FORMAT_VERSION, "kind": f"governance-{kind}",
+           "integrity": _seal(kind, record), "record": record}
+    return header + _yaml_dump(doc)
+
+
+def write_record(layout: Layout, kind: str, record: dict) -> Path:
+    path = record_path(layout, kind, record["id"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write_store(path, dump_record(kind, record))
+    return path
+
+
+def load_record(path: Path, kind: str) -> dict:
+    try:
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        raise GovernanceError(f"YAML parse failed: {path}") from exc
+    if not isinstance(raw, dict) or not isinstance(raw.get("record"), dict):
+        raise GovernanceError(f"malformed governance record (missing `record` mapping): {path}")
+    record = raw["record"]
+    if raw.get("integrity") != _seal(kind, record):
+        raise GovernanceError(
+            f"integrity seal mismatch: {path} — a hand-edit corrupted this governance record; "
+            f"change it through docspec commands (or run `docspec store fsck --accept` to adopt it).")
+    return record
+
+
+def load_all(layout: Layout, kind: str) -> list[dict]:
+    d = kind_dir(layout, kind)
+    if not d.is_dir():
+        return []
+    out = []
+    for p in sorted(d.glob("*.yaml")):
+        rec = load_record(p, kind)
+        out.append({**rec, "_file": p.stem})
+    return out
+
+
+@dataclass
+class Governance:
+    """整個治理層的一次快照（每次執行重新載入，不另存索引）。"""
+
+    questions: list[dict]
+    rulings: list[dict]
+    decisions: list[dict]
+    suspects: list[dict]
+    requests: list[dict]
+
+    def by_id(self) -> dict[str, dict]:
+        out: dict[str, dict] = {}
+        for recs in (self.questions, self.rulings, self.decisions, self.suspects, self.requests):
+            for r in recs:
+                out[str(r.get("id"))] = r
+        return out
+
+
+def load_governance(layout: Layout) -> Governance:
+    return Governance(*(load_all(layout, k) for k in ("question", "ruling", "decision",
+                                                        "suspect", "request")))
+
+
+def has_governance(layout: Layout) -> bool:
+    return gov_dir(layout).is_dir()
+
+
+# ── 編號配發 ──────────────────────────────────────────────────────────────
+
+def next_id(layout: Layout, kind: str, tool: str) -> str:
+    cls = KINDS[kind][0]
+    top = 0
+    d = kind_dir(layout, kind)
+    if d.is_dir():
+        for p in d.glob("*.yaml"):
+            m = _ID_RE.match(p.stem)
+            if m and m.group("cls") == cls and m.group("tool") == tool:
+                top = max(top, int(m.group("n")))
+    return f"{cls}-{tool}-{top + 1}"
+
+
+# ── 推導狀態 ──────────────────────────────────────────────────────────────
+
+def _as_list(v) -> list:
+    if v is None:
+        return []
+    return [str(x) for x in (v if isinstance(v, list) else [v])]
+
+
+def ruling_effective_status(r: dict, gov: Governance) -> str:
+    """confirmed 且被某條 confirmed 裁定取代 → superseded；其餘照存值。"""
+    status = r.get("status")
+    if status == "confirmed":
+        rid = str(r.get("id"))
+        for other in gov.rulings:
+            if other.get("status") == "confirmed" and rid in _as_list(other.get("supersedes")):
+                return "superseded"
+    return status
+
+
+def decision_effective_status(d: dict, gov: Governance) -> str:
+    """active 且被某條 active 決策取代 → superseded；其餘照存值。"""
+    status = d.get("status")
+    if status == "active":
+        did = str(d.get("id"))
+        for other in gov.decisions:
+            if other.get("status") == "active" and did in _as_list(other.get("supersedes")):
+                return "superseded"
+    return status
+
+
+def question_effective_status(q: dict, gov: Governance) -> str:
+    """有未被駁回的裁定回答它 → answered（withdrawn 優先）。"""
+    if q.get("status") == "withdrawn":
+        return "withdrawn"
+    qid = str(q.get("id"))
+    for r in gov.rulings:
+        if r.get("status") in ("confirmed", "recorded", "pending") and qid in _as_list(r.get("answers")):
+            return "answered"
+    return q.get("status")
+
+
+def superseded_by(d: dict, gov: Governance) -> str | None:
+    did = str(d.get("id"))
+    for other in gov.decisions:
+        if other.get("status") == "active" and did in _as_list(other.get("supersedes")):
+            return str(other["id"])
+    return None
+
+
+def unconfirmed_basis(d: dict, gov: Governance) -> list[str]:
+    """決策依據中「不能作為生效依據」的裁定：非 confirmed，或是 minor（只記錄、未經本人確認）。"""
+    rulings = {str(r.get("id")): r for r in gov.rulings}
+    bad = []
+    for rid in _as_list(d.get("based-on")):
+        r = rulings.get(rid)
+        if r is None or r.get("status") != "confirmed" or r.get("tier") != "major":
+            bad.append(rid)
+    return bad
+
+
+# ── 給文件引擎用的決策索引（gov: 命名空間） ────────────────────────────────
+
+# 治理決策狀態 → 文件引擎的決策狀態語彙（ACTIVE_DECISION_STATUSES / _DEAD_DECISION_STATUSES）
+_STATUS_MAP = {"active": "accepted", "superseded": "superseded", "withdrawn": "deprecated",
+               "draft": "draft"}
+
+
+def decision_index_entries(layout: Layout) -> dict:
+    """治理決策 → 文件引擎 decision_index 的外部條目（鍵帶 `gov:`）。無治理層＝{}。"""
+    if not has_governance(layout):
+        return {}
+    gov = load_governance(layout)
+    out: dict = {}
+    for d in gov.decisions:
+        status = decision_effective_status(d, gov)
+        succ = superseded_by(d, gov)
+        out[GOV_NAMESPACE + str(d["id"])] = {
+            "section": None, "statement": d.get("statement"), "kind": "decision",
+            "status": _STATUS_MAP.get(status, status),
+            "superseded_by": (GOV_NAMESPACE + succ) if succ else None,
+        }
+    return out
+
+
+# ── 結構驗證（check ⑬） ───────────────────────────────────────────────────
+
+def validate(layout: Layout) -> list[str]:
+    if not has_governance(layout):
+        return []
+    errs: list[str] = []
+    try:
+        gov = load_governance(layout)
+    except GovernanceError as exc:
+        return [str(exc)]
+    ids: dict[str, str] = {}
+    for kind, recs in (("question", gov.questions), ("ruling", gov.rulings),
+                       ("decision", gov.decisions), ("suspect", gov.suspects),
+                       ("request", gov.requests)):
+        fields = FIELDS[kind]
+        for r in recs:
+            rid = str(r.get("id") or "")
+            where = f"governance {kind} {rid or r.get('_file')}"
+            if not rid:
+                errs.append(f"{where}: missing id")
+                continue
+            if rid != r.get("_file"):
+                errs.append(f"{where}: id does not match its file name ({r.get('_file')}.yaml)")
+            if kind_of_id(rid) != kind:
+                errs.append(f"{where}: id \"{rid}\" is not a valid {kind} id "
+                            f"({KINDS[kind][0]}-<tool>-<n>)")
+            if rid in ids:
+                errs.append(f"duplicate governance id \"{rid}\" (two branches numbered the same "
+                            f"record; run `docspec gov renumber {rid}` on the newer one)")
+            ids[rid] = kind
+            for key in r:
+                if key != "_file" and key not in fields:
+                    errs.append(f"{where}: unknown field \"{key}\"")
+            for key, required in fields.items():
+                if required and r.get(key) in (None, ""):
+                    errs.append(f"{where}: missing required field \"{key}\"")
+            if r.get("status") not in STORED_STATUS[kind]:
+                errs.append(f"{where}: status \"{r.get('status')}\" not in {STORED_STATUS[kind]}")
+
+    def expect(where: str, refs, kind: str, field: str) -> None:
+        for ref in _as_list(refs):
+            if ids.get(strip_ns(ref)) != kind:
+                errs.append(f"{where}: {field} points to nonexistent {kind} \"{ref}\"")
+
+    for r in gov.rulings:
+        where = f"governance ruling {r.get('id')}"
+        if r.get("tier") not in RULING_TIERS:
+            errs.append(f"{where}: tier \"{r.get('tier')}\" not in {RULING_TIERS}")
+        if r.get("tier") == "minor" and r.get("status") in ("pending", "confirmed"):
+            errs.append(f"{where}: a minor ruling is only recorded (status must be \"recorded\")")
+        if r.get("tier") == "major" and r.get("status") == "recorded":
+            errs.append(f"{where}: a major ruling must be pending, confirmed or rejected")
+        expect(where, r.get("answers"), "question", "answers")
+        expect(where, r.get("supersedes"), "ruling", "supersedes")
+    for d in gov.decisions:
+        where = f"governance decision {d.get('id')}"
+        expect(where, d.get("based-on"), "ruling", "based-on")
+        expect(where, d.get("supersedes"), "decision", "supersedes")
+        if d.get("status") == "active":
+            bad = unconfirmed_basis(d, gov)
+            if bad:
+                errs.append(f"{where}: active but based on rulings not confirmed by the owner: "
+                            f"{', '.join(bad)}")
+        if str(d.get("id")) in _as_list(d.get("supersedes")):
+            errs.append(f"{where}: supersedes itself")
+    # question.affects 可指向任何紀錄（含文件章節），不在此驗死引用。
+    errs.extend(_supersede_cycles(gov.decisions, "decision"))
+    errs.extend(_supersede_cycles(gov.rulings, "ruling"))
+    return errs
+
+
+def _supersede_cycles(recs: list[dict], kind: str) -> list[str]:
+    graph = {str(r.get("id")): _as_list(r.get("supersedes")) for r in recs}
+    errs: list[str] = []
+    state: dict[str, int] = {}
+
+    def visit(n: str, stack: list[str]) -> None:
+        state[n] = 1
+        for m in graph.get(n, []):
+            if state.get(m) == 1:
+                cyc = stack[stack.index(m):] + [m] if m in stack else [n, m]
+                errs.append(f"governance {kind} supersede cycle: {' -> '.join(cyc)}")
+            elif state.get(m) is None and m in graph:
+                visit(m, stack + [m])
+        state[n] = 2
+
+    for n in graph:
+        if state.get(n) is None:
+            visit(n, [n])
+    return errs

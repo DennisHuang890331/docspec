@@ -53,7 +53,15 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
                                                                                # something
                                                                                # check_dead_references
                                                                                # can hand back
-    errors.extend(_ids_and_refs.check_dead_references(leaves, seen))          # ②
+    gov_decisions = None
+    if layout is not None:
+        from dspx.engine.governance import (GovernanceError, decision_index_entries,
+                                             validate as _validate_gov)
+        try:
+            gov_decisions = decision_index_entries(layout)
+        except GovernanceError:         # 壞封條等：由 ⑬ 回報，這裡不重複炸
+            gov_decisions = {}
+    errors.extend(_ids_and_refs.check_dead_references(leaves, seen, gov_decisions))  # ②
 
     errors.extend(_cycles._detect_supersede_cycle(leaves))                    # ③
     errors.extend(_cycles._detect_governs_cycle(leaves))
@@ -69,6 +77,7 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
         errors.extend(_groups._validate_groups(layout, leaves))             # ⑩ — group.yaml 輕量驗證
         errors.extend(_prose_anchors.check_prose_anchor_refs(layout, leaves, seen))  # ⑪ — 散文錨死引用（P1b）
         errors.extend(_changes._validate_changes(layout, leaves, id_set, concept_ids))  # ⑫ — changes/ 容器（change-event-layer 1.4）
+        errors.extend(_validate_gov(layout))                                 # ⑬ — 治理層紀錄（governance/）
 
     ref_errors, warnings = _cross_section._cross_section_decision_refs(leaves)  # trailing F1 check
     errors.extend(ref_errors)

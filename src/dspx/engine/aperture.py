@@ -22,6 +22,7 @@ from dspx.engine.model import (
     Leaf,
     ancestor_leaves,
     decision_index,
+    project_decision_index,
     docs_asset_files,
     docs_drawio_files,
     realized_statements,
@@ -168,7 +169,7 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
     # ── realizes 撈共享真相（跨文件；draft 要渲染、factcheck 要核對）──
     # 只投 statement（與自己的決策同紀律）；是「該實現的真相」非「偷看鄰節散文」。
     if skill in _REALIZED_SKILLS:
-        proj.realized = realized_statements(leaf, decision_index(leaves))
+        proj.realized = realized_statements(leaf, project_decision_index(layout, leaves))
 
     # ── 本節圖片資產（draft 放圖只能用這些、edit 核引用；ref 形如 assets/<file>，backend-neutral）──
     if skill in _ASSET_SKILLS:

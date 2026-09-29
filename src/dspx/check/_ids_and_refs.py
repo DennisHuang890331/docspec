@@ -49,7 +49,8 @@ def collect_ids(leaves: list[Leaf]) -> tuple[dict[str, IdRecord], list[str]]:
     return seen, errors
 
 
-def check_dead_references(leaves: list[Leaf], seen: dict[str, IdRecord]) -> list[str]:
+def check_dead_references(leaves: list[Leaf], seen: dict[str, IdRecord],
+                          gov_decisions: dict | None = None) -> list[str]:
     """② 死引用（realizes/governed-by 的 liveness 守門 ＋ 泛用 check_ref）。"""
     errors: list[str] = []
     id_set = set(seen)
@@ -80,6 +81,20 @@ def check_dead_references(leaves: list[Leaf], seen: dict[str, IdRecord]) -> list
         if rz is not None:
             for t in (rz if isinstance(rz, list) else [rz]):
                 t = str(t)
+                if t.startswith("gov:"):
+                    # 治理層決策（專案最外層）：必須存在且已生效；草稿＝未經使用者確認的依據，
+                    # 撤回＝已退場。被取代刻意放行（同 corpus：staleness 負責轉 stale）。
+                    grec = (gov_decisions or {}).get(t)
+                    if grec is None:
+                        errors.append(f"{sec}: concept.realizes points to nonexistent governance "
+                                      f"decision \"{t}\"")
+                    elif grec.get("status") == "draft":
+                        errors.append(f"{sec}: concept.realizes points to a draft governance decision "
+                                      f"\"{t}\" (activate it first — a draft has no owner-confirmed basis)")
+                    elif grec.get("status") == "deprecated":
+                        errors.append(f"{sec}: concept.realizes points to a withdrawn governance "
+                                      f"decision \"{t}\" (repoint or drop the edge)")
+                    continue
                 rec = seen.get(t)
                 if rec is None:
                     errors.append(f"{sec}: concept.realizes points to nonexistent id \"{t}\"")

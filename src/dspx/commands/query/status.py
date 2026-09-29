@@ -15,6 +15,7 @@ from dspx.engine.model import (
     ancestor_brief_fingerprint,
     ancestor_normative_fingerprint,
     decision_index,
+    project_decision_index,
     deps_fingerprint,
     style_fingerprint,
 )
@@ -341,7 +342,7 @@ def run(argv: list[str]) -> int:
 
     check_ok = run_check(leaves, schema, layout).ok
     by_section = {lf.section: lf for lf in leaves}   # 全專案，供祖先 brief 查找
-    dindex = decision_index(leaves)                  # 全專案決策索引，供 deps 指紋
+    dindex = project_decision_index(layout, leaves)                  # 全專案決策索引，供 deps 指紋
     shown = [lf for lf in leaves if lf.article == args.article] if args.article else leaves
     if args.section:
         shown = [lf for lf in shown if lf.section == args.section]

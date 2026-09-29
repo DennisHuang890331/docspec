@@ -165,10 +165,10 @@ def _silently_absorbed_downstream(layout, schema, articles: set, target_sections
     """★2.2：收案落地上游後、rebaseline 前，哪些**非本單 target** 的下游節現在 stale？
     這些節接著會被 rebaseline 靜默重戳 synced（未經本次顯式復驗）。回 [(section, sync)]。"""
     from dspx.commands.query.status import _docs_hashes, _leaf_row
-    from dspx.engine.model import decision_index, load_project
+    from dspx.engine.model import load_project, project_decision_index
     leaves = load_project(layout)
     by = {lf.section: lf for lf in leaves}
-    dindex = decision_index(leaves)
+    dindex = project_decision_index(layout, leaves)
     out: list = []
     for art in sorted(articles):
         dh = _docs_hashes(layout, art)

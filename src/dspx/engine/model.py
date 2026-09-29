@@ -111,12 +111,14 @@ def _normalize_newlines(data: bytes) -> bytes:
 ACTIVE_DECISION_STATUSES = ("proposed", "accepted")
 
 
-def decision_index(leaves: list) -> dict:
+def decision_index(leaves: list, external: dict | None = None) -> dict:
     """全專案決策索引：決策/history id → {section, statement, kind, status}。
 
-    供 realizes 解析（跨文件撈共享真相）與 deps 指紋使用。
+    供 realizes 解析（跨文件撈共享真相）與 deps 指紋使用。`external`＝corpus 以外的決策
+    條目（治理層決策，鍵帶 `gov:` 命名空間、section=None），先放入、corpus 條目後蓋——
+    命名空間保證不撞；只 realizes corpus 決策的章節指紋位元不變。
     """
-    index: dict = {}
+    index: dict = dict(external or {})
     for leaf in leaves:
         for e in leaf.decisions:
             if e.get("id"):
@@ -561,3 +563,11 @@ def load_project(layout: Layout, schema: Schema | None = None) -> list[Leaf]:
         leaves.extend(_store.load_store_leaves(layout, art))
     leaves.sort(key=lambda lf: lf.section)
     return leaves
+
+
+def project_decision_index(layout, leaves: list) -> dict:
+    """decision_index ＋ 治理層決策（`gov:` 命名空間）。所有需要解析 realizes 的地方（render／
+    status／change／publish／instructions／show／archive／aperture）一律走這裡，確保「投什麼就
+    hash 什麼」在各呼叫點一致——任一處漏接治理決策＝status 與 render 對同一章節判定不同。"""
+    from dspx.engine.governance import decision_index_entries
+    return decision_index(leaves, decision_index_entries(layout))

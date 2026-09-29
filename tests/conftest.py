@@ -19,6 +19,17 @@ def _isolate_codex_home(tmp_path, monkeypatch):
     monkeypatch.setenv("CODEX_HOME", str(tmp_path / "_codex_home"))
 
 
+@pytest.fixture(autouse=True)
+def _clear_agent_markers(monkeypatch):
+    """測試不應因「在哪個 agent 裡跑 pytest」而改變行為（Claude Code 會設 CLAUDECODE 等）。
+    需要模擬 agent 的測試自行 setenv。"""
+    import os
+    from dspx.engine.governance import AGENT_ENV_MARKERS
+    for k in list(os.environ):
+        if k in AGENT_ENV_MARKERS or (k.startswith("CODEX_") and k != "CODEX_HOME"):
+            monkeypatch.delenv(k, raising=False)
+
+
 @pytest.fixture
 def make_project(tmp_path):
     """建立含中文路徑的最小 docspec 專案，回傳 planning home。"""

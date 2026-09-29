@@ -389,14 +389,14 @@ def _print_impact(payload: dict) -> None:
           "listed per-section; it restyles every section.)")
 
 
-def _realized_by_payload(leaves, decision_id: str) -> dict:
-    """`show <decision-id> --realized-by`：跨全部文章、誰 realize 這條決策。"""
+def _realized_by_payload(leaves, decision_id: str, layout=None) -> dict:
+    """`show <decision-id> --realized-by`：跨全部文章、誰 realize 這條決策（含 `gov:` 治理決策）。"""
     from dspx.engine.crossref import build_reverse_indices
-    from dspx.engine.model import decision_index
+    from dspx.engine.model import decision_index, project_decision_index
 
     ri = build_reverse_indices(leaves)
     realizers = sorted(lf.section for lf in ri.reverse_realizes.get(decision_id, []))
-    dindex = decision_index(leaves)
+    dindex = project_decision_index(layout, leaves) if layout is not None else decision_index(leaves)
     rec = dindex.get(decision_id)
     defined_at = rec["section"] if rec else None
     # 定址統一：decision id miss 時，看是不是 concept id（concept 也可被 realize）
@@ -575,9 +575,9 @@ def run(argv: list[str]) -> int:
         # B4（engine-record-integrity）：節形輸入（路徑 or concept id）＝聚合該節 concept＋全部
         # 自有決策的下游（按 id 分組）；decision id 輸入＝單鍵直查（行為不變）。
         query = args.id.strip("/")
-        from dspx.engine.model import decision_index
+        from dspx.engine.model import project_decision_index
         section = None
-        if query not in decision_index(leaves):   # decision id 優先直查（行為不變）
+        if query not in project_decision_index(layout, leaves):   # decision id 優先直查（行為不變）
             if any(lf.section == query for lf in leaves):
                 section = query                    # 節路徑（含根節＝單段）
             else:
@@ -598,7 +598,7 @@ def run(argv: list[str]) -> int:
             else:
                 _print_realized_by_section(payload)
             return 0
-        payload = _realized_by_payload(leaves, query)
+        payload = _realized_by_payload(leaves, query, layout)
         if args.as_json:
             print(json.dumps({"id": args.id, **payload}, ensure_ascii=False, indent=2))
         else:

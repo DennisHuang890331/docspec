@@ -114,6 +114,23 @@ def _command_modifies_archive(command: str) -> bool:
     return False
 
 
+_APPROVE_BLOCK_MSG = (
+    "[docspec] Blocked: `docspec approve` is reserved for the project owner in their own terminal "
+    "(it confirms rulings and approves publishing). Tell the owner what is pending with "
+    "`docspec approve --list` instead.")
+
+_APPROVE_RE = re.compile(r"""(?:^|[\s;&|("'/\\])(?:docspec|dspx)(?:\.exe)?["']?\s+approve\b"""
+                         r"|-m\s+dspx\s+approve\b")
+
+
+def _invokes_owner_only(command: str) -> bool:
+    """指令是否呼叫使用者專用的 `docspec approve`（`--list` 只讀，放行）。"""
+    for sub in _SUBCMD_SPLIT.split(command):
+        if _APPROVE_RE.search(sub) and "--list" not in sub:
+            return True
+    return False
+
+
 def _guard(data: object) -> int:
     """PreToolUse：擋改 archive/ 凍結區（exit 2 = 擋）。fail-closed。"""
     if data is None:
@@ -128,6 +145,9 @@ def _guard(data: object) -> int:
         sys.stderr.write(_STORE_BLOCK_MSG + "\n")
         return 2
     command = tool_input.get("command") or ""
+    if command and _invokes_owner_only(command):
+        sys.stderr.write(_APPROVE_BLOCK_MSG + "\n")
+        return 2
     if command and _command_modifies_archive(command):
         sys.stderr.write(_BLOCK_MSG + "\n")
         return 2

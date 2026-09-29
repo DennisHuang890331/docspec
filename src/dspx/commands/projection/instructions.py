@@ -129,13 +129,13 @@ def _apply_mode(layout, schema, leaves, section: str) -> dict | None:
     # change 外：staleness 型別定模式
     if leaf is None:
         return None
-    from dspx.engine.model import decision_index
+    from dspx.engine.model import project_decision_index
     from dspx.engine.render import ledger_needs_migration, read_ledger
     ledger = read_ledger(layout, leaf.article)
     recorded = ledger.get(section)
     deliverable_missing = bool(ledger) and not layout.docs_latest(leaf.article).is_file()
     needs_migration = ledger_needs_migration(layout, leaf.article)
-    dindex = decision_index(leaves)
+    dindex = project_decision_index(layout, leaves)
     sync, _ = compute_sync(layout, leaf, recorded, by_section, dindex,
                            deliverable_missing=deliverable_missing,
                            needs_migration=needs_migration)
@@ -446,7 +446,8 @@ def run(argv: list[str]) -> int:
     if proj.realized:
         print("── Shared truth this section realizes (cross-document; must be realized / must not be violated) ──")
         for r in proj.realized:
-            print(f"  • [{r['id']} ← {r['from_section']}] {r['statement']}{_realized_mark(r)}")
+            origin = r['from_section'] or "project governance"
+            print(f"  • [{r['id']} ← {origin}] {r['statement']}{_realized_mark(r)}")
         print()
 
     if proj.writes:

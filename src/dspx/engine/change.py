@@ -890,11 +890,11 @@ def derive_change_status(layout: Layout, change: Change, schema) -> list[TargetS
     只讀本單 staging（preview 帳本＋preview 產物），別的單/零開單改的是正式面，互不污染（MOE R1
     由構造解掉）。"""
     from dspx.commands.query.status import _leaf_row
-    from dspx.engine.model import decision_index
+    from dspx.engine.model import project_decision_index
 
     leaves = load_union(layout, change)
     by_section = {lf.section: lf for lf in leaves}
-    dindex = decision_index(leaves)
+    dindex = project_decision_index(layout, leaves)
     overlay = OverlayLayout(layout, change)
 
     # 各 article 的 preview 帳本 ＋ 正式 baseline 帳本（偵測「散文真改過」）。

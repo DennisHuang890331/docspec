@@ -22,6 +22,7 @@ from dspx.engine.model import (
     ancestor_brief_fingerprint,
     ancestor_normative_fingerprint,
     decision_index,
+    project_decision_index,
     deps_fingerprint,
     style_fingerprint,
 )
@@ -646,7 +647,7 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
     ack_sections = ack_sections or set()
     ack_own_sections = ack_own_sections or set()
     by_section = {lf.section: lf for lf in leaves}   # 全專案，供祖先 brief 查找
-    dindex = decision_index(leaves)                  # 全專案決策索引，供 deps 指紋
+    dindex = project_decision_index(layout, leaves)                  # 全專案決策索引，供 deps 指紋
     art_leaves = [lf for lf in leaves if lf.article == article]
     order_by_section = outline_order_by_section(layout, art_leaves)
     art_leaves.sort(key=lambda lf: outline_sort_key(lf.section, order_by_section))
