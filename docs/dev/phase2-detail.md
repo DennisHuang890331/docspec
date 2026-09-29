@@ -328,3 +328,61 @@ governance: {active-decisions: [D-claude-1, D-claude-15]}
 4. 命名：指令 `docspec code …`、skill `dspx-propose`／`dspx-implement`／`dspx-verify`？
 5. （新）匯入時，已勾選但沒有證據的任務標為「匯入時已完成（無證據）」，而不是直接算有證據的完成，這樣可以嗎？
 6. （新）測試證據由引擎代跑指令並自動擷取結果（`evidence run`），不接受 agent 手填測試數字，這樣可以嗎？
+
+---
+
+## 附錄：新流程與 OpenSpec 流程的逐段比較（2026/09/30）
+
+對 OpenSpec 行為的描述，依據原始碼（v1.13.2）與台中港專案的實際檔案。
+
+1. **開工讀資料**
+   - OpenSpec：agent 讀 AGENTS.md、交接檔、總進度檔（234 KB）、change 的 proposal／design／tasks，常常還要讀 discussion.md（260 KB），只能靠搜尋。
+   - 新流程：先讀 `docspec brief`（上限 2000 字），需要細節時用過濾查詢，例如 `code spec show task-entry-page --req R1`、`code change status dataset-library --json`。
+2. **討論與裁定**
+   - OpenSpec：寫進 discussion.md；設計檔追加「D15 取代 D7 衝突處」。
+   - 新流程：待裁定問題 → agent 覆述、你確認 → 裁定紀錄 → 寫出完整新版的決策（治理層）。
+3. **提案**
+   - OpenSpec：propose skill 寫四個 Markdown 檔；validate 只查格式。
+   - 新流程：dspx-propose 透過指令建立 change。check 除了格式，也查引用，例如：
+     - 差異指向的需求是否存在
+     - 依據的決策是否有效
+     - 任務實作的需求是否在這個 change 裡
+     - 被修改的需求是否有任務負責
+4. **修改一條需求**
+   - OpenSpec：MODIFIED 要貼上整段需求，含全部情境，而且標題要一字不差；漏抄一個情境就被擋（dataset-library 就漏過）。
+   - 新流程：只寫改到的情境，其他原樣保留；基準指紋由引擎自動填入。
+5. **中途改設計**
+   - OpenSpec：追加 D15，再靠人或子 agent 找出規格與任務中所有受影響的地方（例如 /tasks 那個矛盾）。
+   - 新流程：新裁定 → 決策完整新版 → 影響分析自動列出受影響的需求、任務（需重看）、測試、文件章節。
+6. **實作**
+   - OpenSpec：apply skill 逐項做 tasks.md、自己打勾；檔案歸誰改、用哪個測試埠，靠 AGENTS.md 的口頭規則。
+   - 新流程：任務事先宣告要改的檔案；證據由引擎代跑測試並擷取結果；沒有證據不能勾完成；略過的測試算失敗；記錄環境指紋。
+7. **驗證**
+   - OpenSpec：verify skill 由 agent 讀文件和程式碼寫報告（建議性質）。
+   - 新流程：一樣是建議性質，但「哪條需求沒有任務、哪個情境沒有測試、哪個任務沒有證據」這類機械檢查由引擎算好，agent 只做語意判斷。
+8. **封存**
+   - OpenSpec：任務沒做完只警告，可以選擇繼續；以需求標題比對來合併差異；design.md 跟著 change 被封存；並行的 change 可能互相覆蓋（OpenSpec 自己的合併計畫文件有記載）。
+   - 新流程：證據不齊就不能封存（豁免除外）；基準指紋不符就停下；決策留在治理層；自動記錄專案基線。
+9. **文件同步**
+   - OpenSpec：沒有這個功能，只能靠交接檔提醒人回去改。
+   - 新流程：文件章節 realizes 需求，程式規格一改，章節就轉為過時。
+10. **進度與交接**
+    - OpenSpec：roadmap 角色讀檔案，手寫進 ROADMAP.md；交接檔一直往上加。
+    - 新流程：roadmap 自動推導；一頁現況每次重新產生。
+
+**沒有改變的部分**
+
+- 流程形狀：探索 → 提案 → 實作 → 驗證 → 封存。
+- 內容組成：提案／規格差異／設計／任務。
+- skill 帶著 agent 做事、verify 只提建議、程式碼放在 git 分支、你在關鍵點做裁定。
+
+**新流程的代價與因應**
+
+- agent 不能直接改檔案，一律走指令，呼叫次數變多。
+  - 因應：大量差異可以先寫成 YAML 片段，一次交給 `code change delta --from <檔案>`，由引擎驗證並填入基準指紋。
+- 小任務也要留證據。
+  - 因應：機械性的小修改可以只附一筆檢查紀錄（一句話說明看了什麼），或用裁定豁免。
+- YAML 比 Markdown 難讀。
+  - 因應：`--md` 輸出給人讀、給 PR 審查。
+- 需要一次性匯入。
+  - 因應：匯入報告會列出需要人工處理的項目。
