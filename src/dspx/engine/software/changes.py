@@ -321,6 +321,16 @@ def validate_change(layout: Layout, ch: dict, *, strict: bool = False) -> tuple[
 
     from dspx.engine.software import tasks as tk
     e2, w2 = tk.validate_tasks_and_tests(layout, ch)
+    if p.get("imported-from") and not strict:
+        # 從 OpenSpec 匯入的 change 本來就沒有「任務→需求」「測試→情境」連結：平常只合併成一則提醒，
+        # 不讓整個專案的 check 變紅；封存（strict）時照樣逐條擋下。
+        gaps = [e for e in e2 if "no task implements it" in e or "no planned test covers it" in e]
+        if gaps:
+            e2 = [e for e in e2 if e not in gaps]
+            n_req = sum(1 for e in gaps if "no task implements it" in e)
+            w2 = w2 + [f"{where}: imported from OpenSpec — {n_req} requirement(s) have no implementing "
+                       f"task and {len(gaps) - n_req} scenario(s) have no planned test; link them with "
+                       f"`docspec code task set` / `docspec code testplan add` before archiving"]
     return errs + e2, warns + w2
 
 

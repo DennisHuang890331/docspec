@@ -7,6 +7,7 @@
     docspec code evidence run|add|accept|waive|list <change> <task> …
     docspec code archive <change> [--dry-run]      收尾：差異併回正式規格、資料夾收進 _archive/、寫基線
     docspec code test [--capability X] [--list]    依正式規格的 verified-by 跑回歸測試
+    docspec code import-openspec [--path openspec] [--dry-run]   從 OpenSpec 搬過來
 
 任務的完成欄位沒有「打勾」指令：`evidence` 產生證據後，引擎依證據推導並寫回 tasks.yaml。
 
@@ -131,6 +132,16 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("--allow-skips", action="store_true",
                    help="skipped tests are expected (e.g. no GPU) and do not block completion")
     x.add_argument("--depends-on", default="", help="task ids in this change")
+    x = ts.add_parser("set", help="fill in or change a task's links (e.g. after an OpenSpec import)")
+    x.add_argument("change")
+    x.add_argument("task")
+    x.add_argument("--title", default=None)
+    x.add_argument("--implements", default=None, help="replace: cap/R1,…")
+    x.add_argument("--files", default=None, help="replace: repo:path,…")
+    x.add_argument("--verify", default=None, help="replace: test,inspection,…")
+    x.add_argument("--tests", default=None, help="replace: T1,T2")
+    x.add_argument("--allow-skips", default=None, choices=["yes", "no"])
+    x.add_argument("--depends-on", default=None, help="replace: task ids")
     x = ts.add_parser("remove", help="remove a task that has no evidence yet")
     x.add_argument("change")
     x.add_argument("task")
@@ -196,6 +207,11 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("change")
     x.add_argument("--dry-run", action="store_true", help="check and preview only")
     x.add_argument("--json", dest="as_json", action="store_true")
+    x.add_argument("--by", default=None)
+    x = top.add_parser("import-openspec", help="import an OpenSpec folder (specs, active and archived "
+                       "changes) into docspec/software; writes an import report")
+    x.add_argument("--path", default="openspec")
+    x.add_argument("--dry-run", action="store_true")
     x.add_argument("--by", default=None)
     x = top.add_parser("test", help="regression: run the tests the specs name in verified-by")
     x.add_argument("--capability", default=None)
@@ -380,9 +396,14 @@ def _change(layout, args) -> int:
     print(f"change {args.id}: {len(tasks)} task(s)"
           + (" — " + ", ".join(f"{tk.STATUS_LABEL.get(k, k)} {v}" for k, v in counts.items())
              if counts else ""))
-    print(f"touches: {', '.join(tk.touched_summary(ch)) or '—'}")
+    touched: dict[str, int] = {}
+    for ref in tk.touched_summary(ch):
+        cap, rid, sid = sp.split_ref(ref)
+        if not sid:
+            touched[cap] = touched.get(cap, 0) + 1
+    print("touches: " + (", ".join(f"{cap} ({n} requirement(s))" for cap, n in touched.items()) or "—"))
     for row in ev.explain(layout, args.id):
-        if row["status"] not in ("done", "done-waived"):
+        if row["status"] not in ("done", "done-waived", "imported-done"):
             print(f"  task {row['task']} {tk.STATUS_LABEL.get(row['status'], row['status'])}: {row['why']}")
     if not errs and not warns:
         print("  ✓ references and deltas are consistent")
@@ -400,6 +421,40 @@ def _task(layout, args) -> int:
                           allow_skips=args.allow_skips, depends_on=_csv(args.depends_on))
         chg.write_part(layout, args.change, "tasks", ch["tasks"])
         print(f"code task add: {args.change} task {rec['id']} — {rec['title']}")
+        return 0
+    if args.op == "set":
+        t = next((x for x in ch["tasks"].get("tasks") or [] if str(x.get("id")) == args.task), None)
+        if t is None:
+            return fail(f"change {args.change} has no task \"{args.task}\"")
+        v = t.setdefault("verify", {})
+        if args.title:
+            t["title"] = args.title.strip()
+        for key, raw in (("implements", args.implements), ("files", args.files),
+                         ("depends-on", args.depends_on)):
+            if raw is not None:
+                if _csv(raw):
+                    t[key] = _csv(raw)
+                else:
+                    t.pop(key, None)
+        if args.verify is not None:
+            bad = [m for m in _csv(args.verify) if m not in sp.VERIFICATION_METHODS]
+            if bad:
+                return fail(f"--verify: unknown method(s) {', '.join(bad)}")
+            v["methods"] = _csv(args.verify)
+        if args.tests is not None:
+            v["tests"] = _csv(args.tests)
+            if not v["tests"]:
+                v.pop("tests")
+        if args.allow_skips is not None:
+            if args.allow_skips == "yes":
+                v["allow-skips"] = True
+            else:
+                v.pop("allow-skips", None)
+        if "test" in io.as_list(v.get("methods")) and not v.get("tests"):
+            return fail("a task verified by test needs --tests (planned test ids)")
+        chg.write_part(layout, args.change, "tasks", ch["tasks"])
+        print(f"code task set: {args.change} task {args.task} updated")
+        _report_refresh(ev.refresh(layout, args.change), args.change)
         return 0
     if args.op == "remove":
         if ev.for_task(ev.load_all(layout), args.change, args.task):
@@ -559,6 +614,24 @@ def _archive(layout, args) -> int:
     return 0
 
 
+def _import(layout, args) -> int:
+    from dspx.engine.software import openspec_import as osi
+    source = Path(args.path)
+    if not source.is_absolute():
+        source = (Path.cwd() / source).resolve()
+    report = osi.run_import(layout, source, tool=gv.detect_tool(args.by), dry_run=args.dry_run)
+    text = osi.render_report(report, args.path)
+    if args.dry_run:
+        print(text, end="")
+        return 0
+    out = io.root(layout) / "import-openspec-report.md"
+    out.write_text(text, encoding="utf-8")
+    print(f"imported {len(report['specs'])} spec(s), {len(report['active'])} active and "
+          f"{len(report['archived'])} archived change(s); {len(report['notes'])} note(s)")
+    print(f"report: {out.relative_to(layout.project_root)}")
+    return 0
+
+
 def _test(layout, args) -> int:
     if args.list:
         rows = arc.regression_list(layout, args.capability)
@@ -600,7 +673,8 @@ def run(argv: list[str]) -> int:
         argv, command = argv[:i], argv[i + 1:] or None
     p = _parser()
     args = p.parse_args(argv)
-    if not args.area or (args.area not in ("archive", "test") and not getattr(args, "op", None)):
+    if not args.area or (args.area not in ("archive", "test", "import-openspec")
+                         and not getattr(args, "op", None)):
         p.print_help()
         return 0
     layout = open_layout()
@@ -613,6 +687,8 @@ def run(argv: list[str]) -> int:
             return _archive(layout, args)
         if args.area == "test":
             return _test(layout, args)
+        if args.area == "import-openspec":
+            return _import(layout, args)
         return {"spec": _spec, "change": _change, "task": _task, "testplan": _testplan}[args.area](
             layout, args)
     except io.SoftwareError as exc:

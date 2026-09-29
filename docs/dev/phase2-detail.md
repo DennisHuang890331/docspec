@@ -563,3 +563,12 @@ docspec/software/changes/<change>/
 - 情境被修改（WHEN／THEN 變了）時，舊的 `verified-by` 不再算數，改由這次規劃的測試接手；被拿掉的舊測試在封存輸出與基線中列出，交給測試角色更新或刪除（取代 P2-4 的「保留舊的」）。
 - `docspec brief` 新增「軟體開發」段：每個進行中 change 的任務進度、可封存、需重跑證據、受上游影響。
 - 補上修正用的指令：`code change design --remove-decision`、`code change undelta`、`code task remove`（已有證據者不可刪，改用豁免）、`code testplan remove`（有任務引用者不可刪）。
+
+**P2-6（OpenSpec 匯入）**：完成。`docspec code import-openspec [--path openspec] [--dry-run]`。
+
+- 現行規格：需求依出現順序編 R1…、情境編 S1…；GIVEN／AND／BUT 併入 WHEN 或 THEN；code fence 內的標題不算。驗證方法 OpenSpec 沒有，先一律設 test，報告提醒把要人看的需求改成 inspection／demonstration。
+- 進行中的 change：ADDED／MODIFIED／REMOVED／RENAMED 轉成引擎的差異，一律經 `delta.prepare`，自動補基準指紋。MODIFIED 是整段取代，拆成 modify-requirement 與逐情境的 add／modify／remove-scenario；名稱對不上的列在報告裡，不猜。tasks.md 已打勾＝「匯入時已完成（無證據）」。
+- 已封存的 change：保留提案、設計、任務作為歷史，差異不重放（現行規格已含其結果）。
+- 匯入的 change 本來就沒有「任務→需求」「測試→情境」連結：平常 check 只合併成一則提醒，不讓專案 check 變紅；封存時照樣逐條擋下。補連結用新增的 `docspec code task set`。
+- 只能匯入到空的軟體領域（防重複匯入）；`openspec/` 原檔不動；報告寫在 `docspec/software/import-openspec-report.md`。
+- 台中港資料（本機副本，未進 repo）實測：8 份規格（105 條需求、210 個情境）與原檔數目一致；進行中的 dataset-library 轉出 88 筆差異、51 個任務（39 個匯入時已完成）；28 個已封存 change 轉為歷史；沒有名稱對不上的差異；匯入後專案 check 維持通過（2 則提醒）。
