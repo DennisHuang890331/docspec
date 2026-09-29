@@ -18,6 +18,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
+import sys
 from pathlib import Path
 
 import yaml
@@ -50,6 +52,21 @@ def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="docspec code", description=HELP)
     top = p.add_subparsers(dest="area")
 
+    repo = top.add_parser("repo", help="register the code repos whose tests the engine runs "
+                          "(docspec/software/config.yaml)")
+    rs = repo.add_subparsers(dest="op")
+    x = rs.add_parser("add", help="register a repo (or update its settings)")
+    x.add_argument("name", help="short name used in test locations, e.g. seating:tests/test_x.py::test_y")
+    x.add_argument("path", help="repo folder, relative to the project root")
+    x.add_argument("--test-command", default=None,
+                   help="runner only, e.g. \"python -m pytest -q\" or \"PYTHONPATH=src python -m pytest\"; "
+                        "the engine appends --rootdir, --junitxml and the planned test locations")
+    x.add_argument("--junit-arg", default=None, help="non-pytest runners: how to ask for a JUnit report, "
+                   "e.g. \"--reporter-out={junit}\"")
+    x.add_argument("--rootdir-arg", default=None, help="non-pytest runners: root-dir option, \"\" for none")
+    x = rs.add_parser("list", help="list registered repos and the command the engine will run")
+    x.add_argument("--json", dest="as_json", action="store_true")
+
     spec = top.add_parser("spec", help="current capability specs (read-only)")
     ss = spec.add_subparsers(dest="op")
     x = ss.add_parser("list", help="list capabilities")
@@ -79,12 +96,14 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("--modified", default="", help="add modified capabilities")
     x.add_argument("--code-areas", default="", help="add code areas")
     x.add_argument("--depends-on", default="", help="add prerequisite changes")
-    x = cs.add_parser("design", help="edit design.yaml (list fields append)")
+    x = cs.add_parser("design", help="edit design.yaml (list fields append; --remove-<field> drops an item)")
     x.add_argument("id")
     x.add_argument("--context", default=None)
     x.add_argument("--migration", default=None)
     for flag in ("goal", "non-goal", "risk", "open-question"):
         x.add_argument(f"--{flag}", action="append", default=[])
+        x.add_argument(f"--remove-{flag}", action="append", default=[],
+                       help=f"drop a {flag} (exact text, or its 1-based number as shown by change show)")
     x.add_argument("--decision", default="", help="governance decision ids (gov:D-…)")
     x.add_argument("--remove-decision", default="", help="drop cited decisions (e.g. superseded ones)")
     x = cs.add_parser("delta", help="add one spec delta (the engine fills base fingerprints and ids)")
@@ -238,6 +257,53 @@ def _parser() -> argparse.ArgumentParser:
     return p
 
 
+# ── repo ─────────────────────────────────────────────────────────────────
+
+def _repo(layout, args) -> int:
+    if args.op == "add":
+        p = io.config_path(layout)
+        data = chg.load_config(layout)
+        repos = data.get("repos") or {}
+        entry = repos.get(args.name)
+        entry = dict(entry) if isinstance(entry, dict) else {}
+        entry["path"] = args.path
+        for key, val in (("test-command", args.test_command), ("junit-arg", args.junit_arg),
+                         ("rootdir-arg", args.rootdir_arg)):
+            if val is not None:
+                entry[key] = val
+        if not (layout.project_root / args.path).is_dir():
+            print(f"warning: {args.path} is not a folder yet (relative to {layout.project_root})",
+                  file=sys.stderr)
+        repos[args.name] = entry
+        data["repos"] = repos
+        if "test-command" in entry:
+            ev._split_command(args.name, entry)          # 格式不對就在登記時擋下
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        print(f"repo \"{args.name}\" → {args.path} registered in {p.relative_to(layout.project_root)}")
+        print("  tests run as: " + shlex.join(
+            ev.build_command(layout, args.name, [f"{args.name}:<planned test>"], Path("<junit.xml>"))))
+        return 0
+    rows = []
+    for name, cfg in chg.repo_settings(layout).items():
+        try:
+            env, _a = ev._split_command(name, cfg)
+            cmd = shlex.join(ev.build_command(layout, name, [f"{name}:<planned test>"], Path("<junit.xml>")))
+            if env:
+                cmd = " ".join(f"{k}={v}" for k, v in env.items()) + " " + cmd
+        except io.SoftwareError as exc:
+            cmd = f"(invalid: {exc})"
+        rows.append({"name": name, "path": cfg.get("path"), "command": cmd})
+    if args.as_json:
+        print(json.dumps(rows, ensure_ascii=False, indent=2))
+    elif not rows:
+        print("(no repos registered — `docspec code repo add <name> <path>`)")
+    else:
+        for r in rows:
+            print(f"{r['name']}: {r['path']}\n  tests run as: {r['command']}")
+    return 0
+
+
 # ── spec ─────────────────────────────────────────────────────────────────
 
 def _spec(layout, args) -> int:
@@ -383,6 +449,21 @@ def _change(layout, args) -> int:
         for key, val in (("context", args.context), ("migration", args.migration)):
             if val:
                 d[key] = val.strip()
+        for key, drops in (("goals", args.remove_goal), ("non-goals", args.remove_non_goal),
+                           ("risks", args.remove_risk), ("open-questions", args.remove_open_question)):
+            items = list(d.get(key) or [])
+            for drop in drops:
+                target = drop.strip()
+                if target.isdigit() and 1 <= int(target) <= len(items):
+                    target = items[int(target) - 1]
+                if target not in items:
+                    raise io.SoftwareError(f"design {key} has no item {drop!r}")
+                items.remove(target)
+            if drops:
+                if items:
+                    d[key] = items
+                else:
+                    d.pop(key, None)
         for key, vals in (("goals", args.goal), ("non-goals", args.non_goal), ("risks", args.risk),
                           ("open-questions", args.open_question)):
             if vals:
@@ -765,7 +846,7 @@ def run(argv: list[str]) -> int:
             return _test(layout, args)
         if args.area == "import-openspec":
             return _import(layout, args)
-        return {"spec": _spec, "change": _change, "task": _task, "testplan": _testplan}[args.area](
+        return {"repo": _repo, "spec": _spec, "change": _change, "task": _task, "testplan": _testplan}[args.area](
             layout, args)
     except io.SoftwareError as exc:
         return fail(str(exc))

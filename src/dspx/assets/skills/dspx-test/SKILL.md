@@ -20,6 +20,7 @@ You are the examiner, not the implementer. Your tests say what the spec promises
 
 1. **Read the promise, not the code** — `docspec code change show <id>` and `docspec code spec show <cap> --req R<n>` for each touched requirement. Do not open the implementation files the tasks declare.
 
+   Tests live in a registered program repo. If `docspec code repo list` does not show it, ask the main agent to register it: `docspec code repo add <name> <path> --test-command "python -m pytest -q"` (runner only; it may start with `NAME=value` environment settings; the engine appends the test locations).
 2. **Plan one test per behaviour** — for every added or modified scenario verified by `test`: `docspec code testplan add <id> --location <repo>:<tests/path.py>::<test_name> --covers <cap>/R<n>/S<m>[,…] --level unit|integration|browser|real-model|e2e [--note "…"]`. The engine records you as the author.
 
 3. **Write the tests, then sign them off** — in the program repo at the planned locations. Each test drives the WHEN and asserts the THEN, from the outside (API, UI, files), with real fixtures where the spec talks about real data. A test that cannot fail when the THEN is false is not a test. When they are written: `docspec code testplan sign <id> [T…]`. Evidence refuses tests that are unsigned or changed after sign-off, so whenever you change a test, sign it again. Many scenarios at once (e.g. after an OpenSpec import): fill the `tests:` part of `docspec code change gaps <id> --template` and load it with `docspec code testplan add <id> --from <file>`.

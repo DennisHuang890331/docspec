@@ -113,7 +113,11 @@ def sign_tests(layout: Layout, ch: dict, test_ids: list[str], *, tool: str, now:
             raise io.SoftwareError(f"{tool} created implementation tasks in this change; the test role "
                                    f"must be a different agent")
         fp = fingerprint(t["location"])
-        if fp in ("missing", "unknown-repo"):
+        if fp == "unknown-repo":
+            raise io.SoftwareError(
+                f"test {t['id']}: repo \"{location_file(t['location'])[0]}\" is not registered — add it with "
+                f"`docspec code repo add <name> <path>` (writes docspec/software/config.yaml)")
+        if fp == "missing":
             raise io.SoftwareError(f"test {t['id']}: {t['location']} does not exist yet — write it first")
         t["signed"] = {"by": tool, "at": now, "fingerprint": fp}
     return chosen
@@ -305,7 +309,7 @@ def validate_tasks_and_tests(layout: Layout, ch: dict) -> tuple[list[str], list[
         if not path:
             errs.append(f"{tw}: missing location")
         elif not repo_known(layout, repo):
-            errs.append(f"{tw}: repo \"{repo}\" is not registered in software/config.yaml")
+            errs.append(f"{tw}: repo \"{repo}\" is not registered — add it with `docspec code repo add <name> <path>`")
         else:
             test_files.add((repo, path))
         for c in io.as_list(t.get("covers")):

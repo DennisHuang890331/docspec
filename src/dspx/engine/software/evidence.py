@@ -293,15 +293,45 @@ def signoff_problems(layout: Layout, planned: list[dict]) -> list[str]:
     return out
 
 
+_ENV_TOKEN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+
+
+def _split_command(repo: str, cfg: dict) -> tuple[dict, list[str]]:
+    """把 `test-command` 拆成開頭的環境變數與真正的指令。"""
+    raw = str(cfg.get("test-command") or "python -m pytest")
+    if re.search(r"\{[a-z_]*\}", raw):
+        raise io.SoftwareError(
+            f"repo \"{repo}\": test-command {raw!r} contains a placeholder; write only the runner "
+            f"(e.g. \"python -m pytest -q\") — the engine appends the planned test locations itself")
+    tokens = shlex.split(raw)
+    env = {}
+    while tokens and _ENV_TOKEN.match(tokens[0]):
+        name, value = tokens.pop(0).split("=", 1)
+        env[name] = value
+    if not tokens:
+        raise io.SoftwareError(f"repo \"{repo}\": test-command {raw!r} has no command to run")
+    return env, tokens
+
+
+def command_env(layout: Layout, repo: str) -> dict | None:
+    """`test-command` 開頭的環境變數（沒有就回傳 None，沿用目前環境）。"""
+    env, _argv = _split_command(repo, chg.repo_settings(layout).get(repo) or {})
+    if not env:
+        return None
+    return {**os.environ, **env}
+
+
 def build_command(layout: Layout, repo: str, locations: list[str], junit: Path) -> list[str]:
     """要跑的指令一律由引擎組：repo 設定的執行器 ＋ 固定根目錄 ＋ JUnit 報告 ＋ 規劃測試的位置。
 
     software/config.yaml 的 repo 可設 `test-command`（預設 `python -m pytest`）；非 pytest 的執行器
     另設 `junit-arg`（例 `--reporter-out={junit}`）與 `rootdir-arg`（不需要就設成空字串）。
-    執行器必須產出 JUnit 報告，否則測試證據一律不通過。"""
+    執行器必須產出 JUnit 報告，否則測試證據一律不通過。
+    `test-command` 開頭可放環境變數（例 `PYTHONPATH=src python -m pytest -q`），由 `command_env` 帶入；
+    測試位置一律由引擎接在最後，不接受 `{tests}` 這類佔位符。"""
     cfg = chg.repo_settings(layout).get(repo) or {}
     root = tk.repo_root(layout, repo)
-    argv = shlex.split(str(cfg.get("test-command") or "python -m pytest"))
+    _env, argv = _split_command(repo, cfg)
     rootdir_arg = cfg.get("rootdir-arg", "--rootdir={root}")
     junit_arg = cfg.get("junit-arg", "--junitxml={junit}")
     if rootdir_arg:
@@ -352,7 +382,7 @@ def run_tests(layout: Layout, cid: str, task_id: str, *, tool: str, timeout: int
                                f"split the task per repo")
     repo = repos_used.pop()
     if not tk.repo_known(layout, repo):
-        raise io.SoftwareError(f"repo \"{repo}\" is not registered in software/config.yaml")
+        raise io.SoftwareError(f"repo \"{repo}\" is not registered — add it with `docspec code repo add <name> <path>`")
     cwd = tk.repo_root(layout, repo)
     keys = watched_files(ch, task)
     files_before = snapshot(layout, keys)
@@ -361,7 +391,8 @@ def run_tests(layout: Layout, cid: str, task_id: str, *, tool: str, timeout: int
         argv = build_command(layout, repo, [t["location"] for t in planned], junit)
         command = [a for a in argv if str(junit) not in a]
         try:
-            proc = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+            proc = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout,
+                                  env=command_env(layout, repo))
             exit_code, output = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
         except FileNotFoundError as exc:
             raise io.SoftwareError(f"cannot run {command[0]!r}: {exc}") from exc

@@ -10,7 +10,7 @@
 - 底下兩個平級的領域：文件樹（原本的 docspec）與軟體領域（本期）。
 - 兩個領域各自管理自己的 change，共用治理層、追溯與影響分析、一頁現況。
 
-軟體領域的檔案全部放在 `docspec/software/`，是引擎擁有、各自封條的 YAML，只能透過 `docspec code …` 寫入。唯一例外是 `config.yaml`，由人手寫。
+軟體領域的檔案全部放在 `docspec/software/`，是引擎擁有、各自封條的 YAML，只能透過 `docspec code …` 寫入。唯一例外是 `config.yaml`，由人手寫，或用 `docspec code repo add <名稱> <路徑> [--test-command …]` 登記程式 repo（`code repo list` 顯示引擎實際會執行的指令）。`test-command` 只寫執行器，開頭可以帶環境變數（例如 `PYTHONPATH=src python -m pytest -q`）；測試位置由引擎接在最後，不接受 `{tests}` 這類佔位符。
 
 ## 2. 目錄
 
@@ -40,6 +40,8 @@ docspec/software/
 ## 4. 一次修改的流程與角色
 
 1. **提案（dspx-propose）**：`code change new` → `code change design` → `code change delta`（一次一筆，例如只改 R1/S2 的 THEN）→ `code task add`（每條改到的需求都要有任務實作）。
+   - 改這個 change 自己新增的需求或情境：直接對它的編號用 modify-requirement／modify-scenario，原地修改、編號不變，測試連結不斷。
+   - design 的清單欄位寫錯：`code change design --remove-goal <文字或序號>`（其他清單欄位同）。
 2. **測試角色（dspx-test，必須和實作者不同的 agent）**：
    - 依 WHEN／THEN 從外部行為規劃測試（`code testplan add`），接著寫測試。
    - 寫好後簽收（`code testplan sign`）。

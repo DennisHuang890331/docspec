@@ -10,6 +10,14 @@ a minor bump.
 
 ## [Unreleased]
 
+### Fixed — gaps found by the exam-seating validation run (branch only)
+
+- **`docspec code repo add <name> <path> [--test-command …]` and `repo list`** register the program repos whose tests the engine runs, and show the exact command it will build. Before this there was no documented way; agents edited `config.yaml` by guesswork.
+- **`test-command` may start with environment variables** (`PYTHONPATH=src python -m pytest -q`). A `{tests}`-style placeholder is refused with a clear message; the engine always appends the test locations itself.
+- **Signing off a test in an unregistered repo** now says the repo is not registered and how to register it, instead of "does not exist yet — write it first".
+- **A change can reword what it adds.** `modify-requirement`, `rename-requirement` and `modify-scenario` on a requirement or scenario the same change adds edit it in place and keep its id, so planned tests stay linked. Before this the only way was `undelta`, which also dropped the scenarios.
+- **Design list items can be removed:** `docspec code change design <id> --remove-goal "<text or number>"` (also `--remove-non-goal`, `--remove-risk`, `--remove-open-question`).
+
 ### Changed — freeze, one archive, project baselines, collaboration rules (branch only)
 
 - **`docspec publish` is now `docspec freeze`**; `publish` stays as an alias.

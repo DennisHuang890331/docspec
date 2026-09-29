@@ -199,14 +199,14 @@ def run_regression(layout: Layout, capability: str | None = None, timeout: int =
     results = []
     for repo, items in regression_list(layout, capability).items():
         if not tk.repo_known(layout, repo):
-            results.append({"repo": repo, "error": "repo not registered in software/config.yaml"})
+            results.append({"repo": repo, "error": "repo not registered — add it with `docspec code repo add <name> <path>`"})
             continue
         with tempfile.TemporaryDirectory() as tmp:
             junit = Path(tmp) / "junit.xml"
             argv = ev.build_command(layout, repo, [i["location"] for i in items], junit)
             command = [a for a in argv if str(junit) not in a]
             try:
-                proc = subprocess.run(argv, cwd=tk.repo_root(layout, repo),
+                proc = subprocess.run(argv, cwd=tk.repo_root(layout, repo), env=ev.command_env(layout, repo),
                                       capture_output=True, text=True, timeout=timeout)
                 code = proc.returncode
             except (OSError, subprocess.TimeoutExpired) as exc:

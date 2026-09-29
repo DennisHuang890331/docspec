@@ -195,11 +195,46 @@ def add_delta(layout: Layout, cid: str, capability: str, raw: dict, purpose: str
             cap_delta["purpose"] = purpose
         if not cap_delta.get("purpose"):
             raise io.SoftwareError(f"new capability \"{capability}\" needs --purpose")
+    edited = _edit_own_addition(cap_delta, raw)
+    if edited is not None:
+        write_part(layout, cid, "delta", cap_delta, capability)
+        return edited
     spec = None if is_new else sp.load_spec(layout, capability)
     d = dl.prepare(spec, cap_delta, raw, reserved_requirement_ids(layout, capability, cid))
     cap_delta.setdefault("deltas", []).append(d)
     write_part(layout, cid, "delta", cap_delta, capability)
     return d
+
+
+def _edit_own_addition(cap_delta: dict, raw: dict) -> dict | None:
+    """modify／rename 指向這個 change 自己新增的需求或情境時，直接改那筆新增（編號不變）。
+
+    不是這種情況就回傳 None，照一般差異處理。"""
+    op = raw.get("op")
+    if op not in ("modify-requirement", "rename-requirement", "modify-scenario"):
+        return None
+    ref = str(raw.get("ref") or "").strip("/")
+    fields = {k: v for k, v in raw.items() if k not in ("op", "ref", "base") and v not in (None, "", [])}
+    if op == "rename-requirement":
+        fields = {k: v for k, v in fields.items() if k == "title"}
+    if not fields:
+        return None
+    rid, _, sid = ref.partition("/")
+    for d in cap_delta.get("deltas") or []:
+        if op != "modify-scenario" and not sid:
+            if d.get("op") == "add-requirement" and str(d.get("id")) == rid:
+                d.update(fields)
+                return {"op": "edited its own new requirement", "id": rid, "edited": sorted(fields)}
+        elif op == "modify-scenario" and sid:
+            if d.get("op") == "add-requirement" and str(d.get("id")) == rid:
+                for scn in d.get("scenarios") or []:
+                    if str(scn.get("id")) == sid:
+                        scn.update(fields)
+                        return {"op": "edited its own new scenario", "id": ref, "edited": sorted(fields)}
+            if d.get("op") == "add-scenario" and str(d.get("ref")) == rid and str(d.get("id")) == sid:
+                d.update(fields)
+                return {"op": "edited its own new scenario", "id": ref, "edited": sorted(fields)}
+    return None
 
 
 def remove_deltas(layout: Layout, cid: str, capability: str, ref: str) -> int:
