@@ -210,3 +210,15 @@ def test_init_agents_md_dispatch_rules_follow_project_language(tmp_path, monkeyp
     monkeypatch.chdir(zh)
     assert init_cmd.run(["--tool", "codex", "--agents-md"]) == 0
     assert "## docspec 協作規範" in (zh / "AGENTS.md").read_text(encoding="utf-8")
+
+
+def test_agents_md_names_the_language_and_the_restate_rule():
+    """實測：子 agent 用簡體或英文回報、確認時加條件沒再覆述 → 規範寫明語言與再覆述。"""
+    from dspx.commands.maintenance.init import agents_md_block
+    zh = agents_md_block("zh-TW")
+    assert "繁體中文（zh-TW）" in zh and "{lang_name}" not in zh
+    assert "再覆述一次" in zh and "衝突" in zh
+    assert "不算機械式工作" in zh and "不回報「全部完成」" in zh
+    assert "简体中文" in agents_md_block("zh-CN")
+    en = agents_md_block("en")
+    assert "English" in en and "restate the changed version" in en and "never report" in en
