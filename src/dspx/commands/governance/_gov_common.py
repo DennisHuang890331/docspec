@@ -1,4 +1,4 @@
-"""治理層指令（question / ruling / decision / approve / impact / brief）的共用小工具。"""
+"""治理層指令（question / ruling / decision / roadmap / impact / trace / brief）的共用小工具。"""
 
 from __future__ import annotations
 

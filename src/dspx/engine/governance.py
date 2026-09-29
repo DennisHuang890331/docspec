@@ -1,4 +1,4 @@
-"""治理層紀錄（專案最外層）：待裁定問題、裁定、決策、可疑標記、待批准申請。
+"""治理層紀錄（專案最外層）：待裁定問題、裁定、決策、可疑標記、roadmap。
 
 設計依據：docs/dev/system-design.md（架構第二版）、docs/dev/phase1-design.md。
 
@@ -17,7 +17,6 @@ from __future__ import annotations
 import datetime
 import os
 import re
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -39,7 +38,6 @@ KINDS: dict[str, tuple[str, str]] = {
     "ruling": ("RL", "rulings"),
     "decision": ("D", "decisions"),
     "suspect": ("S", "suspects"),
-    "request": ("AP", "requests"),
     "milestone": ("M", "roadmap"),      # 唯一一份專案 roadmap：里程碑與工作項目同住 roadmap/
     "work": ("W", "roadmap"),
 }
@@ -52,19 +50,18 @@ _ID_RE = re.compile(r"^(?P<cls>[A-Z]+)-(?P<tool>[a-z]+)-(?P<n>[1-9][0-9]*)$")
 FIELDS: dict[str, dict[str, bool]] = {   # 欄位 → 是否必填
     "question": {"id": True, "title": True, "body": False, "status": True,
                  "raised-by": True, "raised-at": True, "affects": False},
+    # 裁定（2026/09/30 裁定）：agent 先在對話中覆述（read-back），使用者回覆確認（confirmed-reply）
+    # 後才寫入，寫入即生效。原話、覆述、確認回覆、轉記者一起留下（可見性取代事前把關）。
     "ruling": {"id": True, "quote": True, "date": True, "recorded-by": True,
-               "interpretation": False, "tier": True, "status": True, "answers": False,
-               "supersedes": False, "provisional": False, "confirmed-at": False,
-               "confirmed-by": False, "rejected-reason": False},
+               "read-back": True, "confirmed-reply": True, "status": True, "answers": False,
+               "supersedes": False, "provisional": False, "rejected-reason": False,
+               "rejected-at": False},
     "decision": {"id": True, "title": True, "statement": True, "rationale": False,
                  "status": True, "based-on": False, "supersedes": False,
                  "created-by": True, "created-at": True},
     "suspect": {"id": True, "trigger": True, "target": True, "path": False,
                 "status": True, "created-at": True, "cleared-reason": False,
                 "cleared-by": False, "cleared-at": False},
-    "request": {"id": True, "action": True, "payload": True, "summary": True,
-                "status": True, "requested-by": True, "requested-at": True,
-                "decided-by": False, "decided-at": False, "reason": False},
     # roadmap：狀態一律推導（不存 status 欄）；做完的項目保留，不再移出檔案。
     "milestone": {"id": True, "title": True, "type": True, "due": False, "note": False,
                   "created-by": True, "created-at": True},
@@ -76,12 +73,10 @@ FIELDS: dict[str, dict[str, bool]] = {   # 欄位 → 是否必填
 MILESTONE_TYPES = ("checkpoint", "deliverable")   # 計畫查核點 vs 交付物（分開，SR15）
 STORED_STATUS: dict[str, tuple[str, ...]] = {
     "question": ("open", "needs-explanation", "withdrawn"),
-    "ruling": ("pending", "confirmed", "rejected", "recorded"),
+    "ruling": ("effective", "rejected"),
     "decision": ("draft", "active", "withdrawn"),
     "suspect": ("open", "cleared"),
-    "request": ("pending", "approved", "rejected", "done"),
 }
-RULING_TIERS = ("major", "minor")   # major＝會改變決策、需本人確認；minor＝只記原話、標未確認
 
 
 class GovernanceError(ModelError):
@@ -142,28 +137,6 @@ def _codex_marker(env) -> bool:
 
 AGENT_ENV_MARKERS = ("CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "GEMINI_CLI", "ANTIGRAVITY_AGENT",
                      "DOCSPEC_AGENT")
-
-
-def is_agent_environment() -> bool:
-    """是否為 agent 的執行環境（任一家 agent 記號在場）。供「使用者專用」動作的第二層防護。"""
-    env = os.environ
-    return bool(any(env.get(k) for k in AGENT_ENV_MARKERS) or _codex_marker(env))
-
-
-def owner_approval_enabled(layout: Layout) -> bool:
-    """專案啟用治理層（有 governance/）＝發布等不可逆動作改走「agent 申請、使用者批准」。
-    未啟用的舊專案維持原行為（向後相容）；`docspec init` 會建立 governance/。"""
-    return has_governance(layout)
-
-
-def git_user(cwd: Path) -> str:
-    try:
-        out = subprocess.run(["git", "config", "user.name"], cwd=cwd, capture_output=True,
-                             text=True, timeout=5)
-        name = out.stdout.strip()
-        return name or "unknown"
-    except (OSError, subprocess.SubprocessError):
-        return "unknown"
 
 
 def today() -> str:
@@ -228,13 +201,12 @@ class Governance:
     rulings: list[dict]
     decisions: list[dict]
     suspects: list[dict]
-    requests: list[dict]
     milestones: list[dict] = field(default_factory=list)
     work: list[dict] = field(default_factory=list)
 
     def by_id(self) -> dict[str, dict]:
         out: dict[str, dict] = {}
-        for recs in (self.questions, self.rulings, self.decisions, self.suspects, self.requests,
+        for recs in (self.questions, self.rulings, self.decisions, self.suspects,
                      self.milestones, self.work):
             for r in recs:
                 out[str(r.get("id"))] = r
@@ -243,7 +215,7 @@ class Governance:
 
 def load_governance(layout: Layout) -> Governance:
     return Governance(*(load_all(layout, k) for k in ("question", "ruling", "decision",
-                                                        "suspect", "request", "milestone",
+                                                        "suspect", "milestone",
                                                         "work")))
 
 
@@ -274,12 +246,12 @@ def _as_list(v) -> list:
 
 
 def ruling_effective_status(r: dict, gov: Governance) -> str:
-    """confirmed 且被某條 confirmed 裁定取代 → superseded；其餘照存值。"""
+    """effective 且被某條 effective 裁定取代 → superseded；其餘照存值。"""
     status = r.get("status")
-    if status == "confirmed":
+    if status == "effective":
         rid = str(r.get("id"))
         for other in gov.rulings:
-            if other.get("status") == "confirmed" and rid in _as_list(other.get("supersedes")):
+            if other.get("status") == "effective" and rid in _as_list(other.get("supersedes")):
                 return "superseded"
     return status
 
@@ -301,7 +273,7 @@ def question_effective_status(q: dict, gov: Governance) -> str:
         return "withdrawn"
     qid = str(q.get("id"))
     for r in gov.rulings:
-        if r.get("status") in ("confirmed", "recorded", "pending") and qid in _as_list(r.get("answers")):
+        if r.get("status") == "effective" and qid in _as_list(r.get("answers")):
             return "answered"
     return q.get("status")
 
@@ -314,13 +286,13 @@ def superseded_by(d: dict, gov: Governance) -> str | None:
     return None
 
 
-def unconfirmed_basis(d: dict, gov: Governance) -> list[str]:
-    """決策依據中「不能作為生效依據」的裁定：非 confirmed，或是 minor（只記錄、未經本人確認）。"""
+def invalid_basis(d: dict, gov: Governance) -> list[str]:
+    """決策依據中「不能作為生效依據」的裁定：不存在，或已被使用者駁回。"""
     rulings = {str(r.get("id")): r for r in gov.rulings}
     bad = []
     for rid in _as_list(d.get("based-on")):
         r = rulings.get(rid)
-        if r is None or r.get("status") != "confirmed" or r.get("tier") != "major":
+        if r is None or r.get("status") != "effective":
             bad.append(rid)
     return bad
 
@@ -362,7 +334,7 @@ def validate(layout: Layout) -> list[str]:
     ids: dict[str, str] = {}
     for kind, recs in (("question", gov.questions), ("ruling", gov.rulings),
                        ("decision", gov.decisions), ("suspect", gov.suspects),
-                       ("request", gov.requests), ("milestone", gov.milestones),
+                       ("milestone", gov.milestones),
                        ("work", gov.work)):
         fields = FIELDS[kind]
         for r in recs:
@@ -396,12 +368,6 @@ def validate(layout: Layout) -> list[str]:
 
     for r in gov.rulings:
         where = f"governance ruling {r.get('id')}"
-        if r.get("tier") not in RULING_TIERS:
-            errs.append(f"{where}: tier \"{r.get('tier')}\" not in {RULING_TIERS}")
-        if r.get("tier") == "minor" and r.get("status") in ("pending", "confirmed"):
-            errs.append(f"{where}: a minor ruling is only recorded (status must be \"recorded\")")
-        if r.get("tier") == "major" and r.get("status") == "recorded":
-            errs.append(f"{where}: a major ruling must be pending, confirmed or rejected")
         expect(where, r.get("answers"), "question", "answers")
         expect(where, r.get("supersedes"), "ruling", "supersedes")
     for d in gov.decisions:
@@ -409,9 +375,9 @@ def validate(layout: Layout) -> list[str]:
         expect(where, d.get("based-on"), "ruling", "based-on")
         expect(where, d.get("supersedes"), "decision", "supersedes")
         if d.get("status") == "active":
-            bad = unconfirmed_basis(d, gov)
+            bad = invalid_basis(d, gov)
             if bad:
-                errs.append(f"{where}: active but based on rulings not confirmed by the owner: "
+                errs.append(f"{where}: active but based on missing or rejected rulings: "
                             f"{', '.join(bad)}")
         if str(d.get("id")) in _as_list(d.get("supersedes")):
             errs.append(f"{where}: supersedes itself")

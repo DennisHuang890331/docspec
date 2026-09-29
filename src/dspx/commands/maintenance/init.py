@@ -233,7 +233,8 @@ This project keeps its long-form documents in docspec.
 - Author documents through the docspec skills (`dspx-develop`, `dspx-apply`, `dspx-factcheck`,
   `dspx-publish`, `dspx-release`); run `docspec guide` for the live contract.
 - Project governance (questions, the owner's rulings, project decisions, the single roadmap) goes
-  through `dspx-govern`; start a session with `docspec brief`. Only the owner runs `docspec approve`.
+  through `dspx-govern`; start a session with `docspec brief`. Read every ruling back to the owner
+  and record it only after they confirm.
 - `docspec/corpus/` is engine-owned and integrity-sealed: change it only through
   `docspec get` / `docspec put`, never by hand.
 - `archive/` folders hold frozen published versions: never modify them; publish a new version.

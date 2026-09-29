@@ -54,45 +54,6 @@ def _next_version(layout: Layout, article: str, level: str) -> str:
     return next_version(prev, level)
 
 
-def _submit_publish_request(layout, schema, leaves, args) -> int:
-    """agent 端的發布：先跑 dry-run 全部閘（紅＝不送申請），綠＝寫一筆待批准申請。"""
-    from dspx.engine import governance as gv
-    rc = _dry_run(layout, schema, leaves, args)
-    if rc != 0:
-        sys.stderr.write("docspec: publish request not submitted -- fix the gates above first.\n")
-        return rc
-    gov = gv.load_governance(layout)
-    for req in gov.requests:
-        pl = req.get("payload") or {}
-        if req.get("status") == "pending" and req.get("action") == "publish" \
-                and pl.get("article") == args.article:
-            print(f"publish request already pending: {req['id']} — the owner approves it with "
-                  f"`docspec approve`")
-            return 0
-    try:
-        tool = gv.detect_tool()
-    except gv.GovernanceError as exc:
-        sys.stderr.write(f"docspec: {exc}\n")
-        return 1
-    rid = gv.next_id(layout, "request", tool)
-    payload = {"article": args.article, "level": args.level}
-    if args.note:
-        payload["note"] = args.note
-    if args.set_version:
-        payload["set_version"] = args.set_version
-    if args.allow_noop:
-        payload["allow_noop"] = True
-    summary = f"發布「{args.article}」新版本（{args.level}）"
-    if args.note:
-        summary += f"：{args.note}"
-    gv.write_record(layout, "request", {
-        "id": rid, "action": "publish", "payload": payload, "summary": summary,
-        "status": "pending", "requested-by": tool, "requested-at": gv.today()})
-    print(f"publish request submitted ({rid}): nothing was published yet. The owner reviews and "
-          f"approves it in a terminal with `docspec approve`.")
-    return 0
-
-
 def run(argv: list[str]) -> int:
     # register-legacy 子動詞（併自舊 `freeze` 指令）：seed pre-docspec 歷版進凍結區。
     # 早期委派——它自解析/自 bootstrap，與正常 publish（發行一篇）不同路。
@@ -143,12 +104,6 @@ def run(argv: list[str]) -> int:
     #    彙總報告永遠印不出來）；dry-run 自己跑全部閘、印彙總、零寫入。──
     if args.dry_run:
         return _dry_run(layout, schema, leaves, args)
-
-    # ── 使用者批准閘（2026/09/29 裁定「agent 準備、使用者批准」）：啟用治理層的專案裡，agent
-    #    不能直接發布——跑完 dry-run 全部閘後送出發布申請，由使用者 `docspec approve` 批准才執行。
-    from dspx.engine import governance as gv
-    if gv.owner_approval_enabled(layout) and gv.is_agent_environment():
-        return _submit_publish_request(layout, schema, leaves, args)
 
     # ── --set-version 閘：限首次發行。版本鏈已存在＝改史，結構性拒絕；擺在任何寫入
     #    （render 的骨架/帳本）之前＝abort 即零寫入。偽造 is_first 需先刪既有快照 →

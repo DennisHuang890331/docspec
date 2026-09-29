@@ -98,7 +98,7 @@ def flag_after_change(layout: Layout, changed_id: str, tool: str | None = None,
     # 觸發源：新紀錄 supersedes 的舊紀錄；撤回／駁回時就是自己
     if kind == "decision" and changed.get("status") == "active":
         triggers = gv._as_list(changed.get("supersedes"))
-    elif kind == "ruling" and changed.get("status") == "confirmed":
+    elif kind == "ruling" and changed.get("status") == "effective":
         triggers = gv._as_list(changed.get("supersedes"))
     else:
         triggers = [changed_id]

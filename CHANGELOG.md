@@ -20,11 +20,9 @@ The outermost layer of a project now holds the records that carry authority, ins
   - project-level decisions
   - roadmap milestones and work items
   - suspect flags
-  - approval requests
-- **The owner is the only authority, and the tool enforces it.**
-  - A major ruling stays pending until the owner confirms it with `docspec approve` in their own terminal. A decision can only become active on confirmed rulings.
-  - Agents cannot run `docspec approve`: the hook, an agent-environment check and a TTY check all refuse it.
-  - In governance-enabled projects an agent's `docspec publish` becomes a publish request the owner approves.
+- **Rulings are read back before they are recorded.** The agent restates the owner's ruling in plain words in the conversation. Only after the owner confirms does it record the ruling with `docspec ruling add --quote … --read-back … --confirmed "<the owner's reply>"`; without both, nothing is recorded. A recorded ruling takes effect at once.
+  - A decision can only become active when it rests on at least one ruling that has not been rejected.
+  - When the owner says a ruling was recorded wrong, `docspec ruling reject` marks it rejected and flags the decisions based on it.
 - **Superseding writes the whole thing.** A new decision replaces an old one with the full merged text. `docspec brief --design` shows only the current decisions, and `decision show` gives the full history.
 - **Traceability and impact.** Document sections may `realizes: [gov:<id>]`, and superseding such a decision makes them `stale-upstream`.
   - `docspec impact` lists suspect flags, raised when a ruling is rejected or superseded, or when a decision a work item refers to changes. Clearing a flag needs a reason.

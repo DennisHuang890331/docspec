@@ -1,10 +1,11 @@
-"""docspec ruling — 使用者裁定（agent 轉記；major 需使用者以 `docspec approve` 確認）。
+"""docspec ruling — 使用者裁定（agent 在對話中覆述、使用者確認後轉記；寫入即生效）。
 
-- `--tier major`：會改變決策的裁定。存為 pending，只有使用者在終端機 `docspec approve` 才轉
-  confirmed；未確認前不能作為決策生效的依據。
-- `--tier minor`：一般性的小裁定。只記原話（status＝recorded），清單上標「未經本人確認」，
-  也不能作為決策生效的依據。
-- 「被取代」不手寫：由之後確認的裁定 `--supersedes` 推導。
+2026/09/30 裁定「對話中覆述確認」：
+1. agent 在對話中用白話覆述自己的理解（`--read-back`）。
+2. 使用者回覆確認或更正；確認的回覆原文放進 `--confirmed`。沒有確認回覆就不能寫入。
+3. 寫入後即生效，可作為決策的依據。
+使用者事後說「記錯了」→ `ruling reject <id> --reason "<使用者原話>"`，觸發影響分析。
+「被取代」不手寫：由之後的裁定 `--supersedes` 推導。
 """
 
 from __future__ import annotations
@@ -16,27 +17,30 @@ from dspx.commands.governance._gov_common import (emit_json, fail, label, open_l
 from dspx.engine import governance as gv
 
 NAME = "ruling"
-HELP = ("governance: the owner's rulings, transcribed by an agent (add / list / show); "
-        "major rulings take effect only after the owner runs `docspec approve`")
+HELP = ("governance: the owner's rulings — read back in the conversation, confirmed by the owner, "
+        "then recorded (add / reject / list / show)")
 
-_TIER_NOTE = {"pending": "awaiting owner confirmation", "confirmed": "confirmed by owner",
-              "rejected": "rejected by owner", "recorded": "recorded, not confirmed by owner",
-              "superseded": "superseded"}
+_STATUS_NOTE = {"effective": "effective", "rejected": "rejected by the owner",
+                "superseded": "superseded"}
 
 
 def run(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="docspec ruling", description=HELP)
     sub = p.add_subparsers(dest="op")
-    a = sub.add_parser("add", help="transcribe a ruling (verbatim quote)")
+    a = sub.add_parser("add", help="record a ruling the owner confirmed in the conversation")
     a.add_argument("--quote", required=True, help="the owner's exact words")
-    a.add_argument("--interpretation", default="", help="how the agent understands it")
-    a.add_argument("--tier", required=True, choices=gv.RULING_TIERS,
-                   help="major = changes a decision (owner must confirm); minor = record only")
+    a.add_argument("--read-back", required=True,
+                   help="how you restated it to the owner, in plain words, before recording")
+    a.add_argument("--confirmed", required=True,
+                   help="the owner's reply confirming your read-back (verbatim)")
     a.add_argument("--answers", default="", help="comma-separated question ids it answers")
     a.add_argument("--supersedes", default="", help="comma-separated earlier ruling ids it replaces")
     a.add_argument("--provisional", action="store_true", help="the owner said this is tentative")
     a.add_argument("--date", default=None, help="date the owner said it (default today)")
     a.add_argument("--by", default=None, help="tool prefix: claude|gpt|gemini (auto-detected)")
+    rj = sub.add_parser("reject", help="the owner says a recorded ruling is wrong")
+    rj.add_argument("id")
+    rj.add_argument("--reason", required=True, help="the owner's words")
     ls = sub.add_parser("list", help="list rulings")
     ls.add_argument("--status", default=None, help="filter by effective status")
     ls.add_argument("--json", dest="as_json", action="store_true")
@@ -52,25 +56,41 @@ def run(argv: list[str]) -> int:
         return 1
     try:
         if args.op == "add":
+            if not args.read_back.strip() or not args.confirmed.strip():
+                return fail("read the ruling back to the owner and record their confirming reply "
+                            "(--read-back and --confirmed must not be empty)")
             tool = gv.detect_tool(args.by)
-            if tool == "user":
-                return fail("rulings are transcribed by an agent; the owner confirms them with "
-                            "`docspec approve`")
             rid = gv.next_id(layout, "ruling", tool)
             rec = {"id": rid, "quote": args.quote.strip(), "date": args.date or gv.today(),
-                   "recorded-by": tool, "tier": args.tier,
-                   "status": "pending" if args.tier == "major" else "recorded"}
+                   "recorded-by": tool, "read-back": args.read_back.strip(),
+                   "confirmed-reply": args.confirmed.strip(), "status": "effective"}
             for key, raw in (("answers", args.answers), ("supersedes", args.supersedes)):
                 if split_csv(raw):
                     rec[key] = split_csv(raw)
-            if args.interpretation.strip():
-                rec["interpretation"] = args.interpretation.strip()
             if args.provisional:
                 rec["provisional"] = True
             gv.write_record(layout, "ruling", rec)
-            note = (" — the owner must confirm it with `docspec approve` before it can support a decision"
-                    if args.tier == "major" else " — recorded only (not confirmed by the owner)")
-            print(f"ruling add: {label(rec)}{note}")
+            print(f"ruling add: {label(rec)}")
+            if rec.get("supersedes"):
+                from dspx.engine.impact import flag_after_change
+                flagged = flag_after_change(layout, rid)
+                if flagged:
+                    print(f"impact: {len(flagged)} downstream item(s) marked suspect — "
+                          f"run `docspec impact` to review")
+            return 0
+        if args.op == "reject":
+            rid = gv.strip_ns(args.id)
+            path = gv.record_path(layout, "ruling", rid)
+            if not path.is_file():
+                return fail(f"no such ruling \"{rid}\"")
+            rec = gv.load_record(path, "ruling")
+            rec.update({"status": "rejected", "rejected-reason": args.reason.strip(),
+                        "rejected-at": gv.today()})
+            gv.write_record(layout, "ruling", rec)
+            from dspx.engine.impact import flag_after_change
+            flagged = flag_after_change(layout, rid)
+            print(f"ruling {rid} -> rejected"
+                  + (f"; {len(flagged)} downstream item(s) marked suspect" if flagged else ""))
             return 0
         gov = gv.load_governance(layout)
         if args.op == "show":
@@ -95,8 +115,8 @@ def run(argv: list[str]) -> int:
         if not rows:
             print("(no rulings)")
         for r in rows:
-            prov = "，暫定" if r.get("provisional") else ""
-            print(f"- [{_TIER_NOTE.get(r['effective-status'], r['effective-status'])}{prov}] "
+            prov = ", provisional" if r.get("provisional") else ""
+            print(f"- [{_STATUS_NOTE.get(r['effective-status'], r['effective-status'])}{prov}] "
                   f"{label(r)}")
         return 0
     except gv.GovernanceError as exc:

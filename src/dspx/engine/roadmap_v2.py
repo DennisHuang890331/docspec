@@ -8,7 +8,7 @@
     blocked（卡住：前置未完成，或有未處理的可疑標記）／not-started（未開始）。
 - 工作項目用 `refs` 指向實際執行的東西：
     `change:<id>`（文件 change；封存＝滿足）、`doc:<章節路徑>`（該節已同步＝滿足）、
-    `doc:<文章>`（已發布且全部章節已同步＝滿足）、`gov:Q-…`／`gov:RL-…`（問題已裁定／裁定已確認）。
+    `doc:<文章>`（已發布且全部章節已同步＝滿足）、`gov:Q-…`／`gov:RL-…`（問題已裁定／裁定已記錄生效）。
     `gov:D-…`（決策）是**約束**不是完成條件：它讓決策被取代時這個項目被標為可疑（影響分析），
     但決策生效不代表工作做完。
 - 沒有 refs 的項目：有子項目就看子項目；否則只能以 `roadmap done --note` 手動結案。
@@ -109,7 +109,7 @@ def ref_state(ref: str, ctx: Context) -> str:
         if kind == "question":
             return DONE if gv.question_effective_status(rec, gov) in ("answered", "withdrawn") else NOT_STARTED
         if kind == "ruling":
-            return DONE if gv.ruling_effective_status(rec, gov) in ("confirmed", "superseded") else IN_PROGRESS
+            return DONE if gv.ruling_effective_status(rec, gov) in ("effective", "superseded") else NOT_STARTED
         return NOT_STARTED
     return "missing"
 

@@ -46,8 +46,7 @@ _STORE_BLOCK_MSG = (
 _GOV_BLOCK_MSG = (
     "[docspec] Blocked: docspec/governance/ holds engine-owned, sealed governance records "
     "(questions, rulings, decisions, roadmap, suspect flags). Change them only through docspec "
-    "commands (`docspec question|ruling|decision|roadmap|impact ...`); the owner confirms rulings "
-    "with `docspec approve`.")
+    "commands (`docspec question|ruling|decision|roadmap|impact ...`).")
 
 _VIEW_BLOCK_MSG = (
     "[docspec] Blocked: docs/project/*.md are generated views (status, design, pending). "
@@ -226,23 +225,6 @@ def _command_modifies_archive(command: str) -> bool:
     return False
 
 
-_APPROVE_BLOCK_MSG = (
-    "[docspec] Blocked: `docspec approve` is reserved for the project owner in their own terminal "
-    "(it confirms rulings and approves publishing). Tell the owner what is pending with "
-    "`docspec approve --list` instead.")
-
-_APPROVE_RE = re.compile(r"""(?:^|[\s;&|("'/\\])(?:docspec|dspx)(?:\.exe)?["']?\s+approve\b"""
-                         r"|-m\s+dspx\s+approve\b")
-
-
-def _invokes_owner_only(command: str) -> bool:
-    """指令是否呼叫使用者專用的 `docspec approve`（`--list` 只讀，放行）。"""
-    for sub in _SUBCMD_SPLIT.split(command):
-        if _APPROVE_RE.search(sub) and "--list" not in sub:
-            return True
-    return False
-
-
 _PATCH_PATH = re.compile(r"^\*\*\* (?:Add|Update|Delete) File: (.+)$", re.MULTILINE)
 _MOVE_PATH = re.compile(r"^\*\*\* Move to: (.+)$", re.MULTILINE)
 _AG_FILE_TOOLS = ("write_to_file", "replace_file_content", "multi_replace_file_content")
@@ -299,8 +281,6 @@ def _guard_one(tool_input: dict) -> str | None:
     command = tool_input.get("command") or ""
     if not isinstance(command, str) or not command:
         return None
-    if _invokes_owner_only(command):
-        return _APPROVE_BLOCK_MSG
     if _command_modifies_archive(command):
         return _BLOCK_MSG
     for sub in _SUBCMD_SPLIT.split(command):

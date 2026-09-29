@@ -75,9 +75,6 @@ def test_antigravity_payloads_answer_with_json_decision(monkeypatch, capsys):
     allow = {"toolCall": {"name": "run_command", "args": {"CommandLine": "ls docs/archive"}}}
     assert _guard(monkeypatch, allow) == 0
     assert json.loads(capsys.readouterr().out) == {"decision": "allow"}
-    approve = {"toolCall": {"name": "run_command", "args": {"CommandLine": "docspec approve"}}}
-    _guard(monkeypatch, approve)
-    assert json.loads(capsys.readouterr().out)["decision"] == "deny"
 
 
 @pytest.mark.parametrize("payload,blocked", [

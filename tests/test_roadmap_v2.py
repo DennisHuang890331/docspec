@@ -68,7 +68,7 @@ def test_milestone_types_and_progress(project, capsys):
 
 def test_done_items_stay_and_waivers_are_visible(project, capsys, monkeypatch):
     """驗收情境 S5 的 roadmap 半：change 封存但有經裁定豁免的項目 → 完成（含豁免）。"""
-    ruling_cmd.run(["add", "--quote", "車輛 bag 還沒有，先不驗", "--tier", "minor"])
+    ruling_cmd.run(["add", "--quote", "車輛 bag 還沒有，先不驗", "--read-back", "車輛 bag 相容性先不驗", "--confirmed", "對"])
     roadmap_cmd.run(["add", "--title", "資料庫功能", "--ref", "change:dataset-library"])
     monkeypatch.setattr(chg, "all_change_states", lambda layout: {"dataset-library": "active"})
     assert _status(_view(capsys), "W-claude-1") == "in-progress"

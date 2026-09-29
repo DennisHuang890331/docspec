@@ -2,7 +2,7 @@
 
 - `add` 建草稿。取代舊決策時用 `--supersedes`，而且 `--statement` 必須是**合併後的完整新版**
   （2026/09/29 裁定：不再允許「以後者為準」式的局部取代）。
-- `activate` 轉為有效：前提是 `--based-on` 的裁定全部是 major 且已經使用者確認。新決策生效後，
+- `activate` 轉為有效：前提是 `--based-on` 至少一條裁定，且都存在、未被駁回。新決策生效後，
   它 supersedes 的舊決策推導為 superseded（舊檔不改），並觸發影響分析。
 - `withdraw` 撤回；`list` 預設只列有效；`show` 含完整取代歷史。
 文件章節以 `gov:<id>` realizes 這裡的決策。
@@ -99,13 +99,13 @@ def run(argv: list[str]) -> int:
             if args.op == "activate":
                 if rec.get("status") != "draft":
                     return fail(f"decision {did} is {rec.get('status')}, not a draft")
-                bad = gv.unconfirmed_basis(rec, gov)
+                bad = gv.invalid_basis(rec, gov)
                 if bad:
-                    return fail(f"cannot activate {did}: based on rulings not confirmed by the owner "
-                                f"({', '.join(bad)}). Ask the owner to run `docspec approve`.")
+                    return fail(f"cannot activate {did}: based on missing or rejected rulings "
+                                f"({', '.join(bad)}).")
                 if not gv._as_list(rec.get("based-on")):
-                    return fail(f"cannot activate {did}: it cites no owner-confirmed ruling "
-                                f"(--based-on). Record the owner's ruling first.")
+                    return fail(f"cannot activate {did}: it cites no ruling (--based-on). Read the "
+                                f"decision back to the owner and record their ruling first.")
                 rec["status"] = "active"
             else:
                 rec["status"] = "withdrawn"

@@ -26,12 +26,7 @@ def gov_project(make_project, monkeypatch):
     return home
 
 
-def _confirm(home, rid):
-    """測試用：模擬使用者確認（真正路徑是 `docspec approve`，見 test_approve）。"""
-    layout = Layout(home)
-    rec = gv.load_record(gv.record_path(layout, "ruling", rid), "ruling")
-    rec["status"] = "confirmed"
-    gv.write_record(layout, "ruling", rec)
+RB = ["--read-back", "覆述內容", "--confirmed", "對，就是這樣"]   # 對話中覆述並經使用者確認
 
 
 # ── 儲存與編號 ─────────────────────────────────────────────────────────────
@@ -78,50 +73,53 @@ def test_duplicate_id_across_branches_is_a_check_error(gov_project):
 
 def test_question_answered_is_derived(gov_project):
     question_cmd.run(["add", "--title", "刪除要不要兩步"])
-    ruling_cmd.run(["add", "--quote", "刪除就是刪除", "--tier", "major", "--answers", "Q-claude-1"])
+    ruling_cmd.run(["add", "--quote", "刪除就是刪除", *RB, "--answers", "Q-claude-1"])
     layout = Layout(gov_project)
     gov = gv.load_governance(layout)
     assert gv.question_effective_status(gov.questions[0], gov) == "answered"
-    assert gov.rulings[0]["status"] == "pending"
+    assert gov.rulings[0]["status"] == "effective"
 
 
-def test_minor_ruling_is_recorded_only_and_cannot_activate_a_decision(gov_project, capsys):
-    ruling_cmd.run(["add", "--quote", "名稱可以", "--tier", "minor"])
-    decision_cmd.run(["add", "--title", "名稱", "--statement", "用這個名稱", "--based-on", "RL-claude-1"])
-    assert decision_cmd.run(["activate", "D-claude-1"]) == 1
-    assert "not confirmed by the owner" in capsys.readouterr().err
+def test_ruling_needs_read_back_and_owner_reply(gov_project):
+    """2026/09/30：沒有覆述與使用者的確認回覆就不能寫入裁定。"""
+    with pytest.raises(SystemExit):
+        ruling_cmd.run(["add", "--quote", "刪除就是刪除"])
+    assert ruling_cmd.run(["add", "--quote", "刪除就是刪除", "--read-back", " ", "--confirmed", "對"]) == 1
+    assert ruling_cmd.run(["add", "--quote", "刪除就是刪除", *RB]) == 0
+    rec = gv.load_governance(Layout(gov_project)).rulings[0]
+    assert (rec["status"], rec["read-back"], rec["confirmed-reply"]) == ("effective", "覆述內容", "對，就是這樣")
 
 
-def test_decision_cannot_activate_before_owner_confirms_ruling(gov_project, capsys):
-    """驗收情境 S3（引擎半）：未確認的裁定不能讓依據它的決策生效。"""
-    ruling_cmd.run(["add", "--quote", "刪除就是刪除", "--tier", "major"])
-    decision_cmd.run(["add", "--title", "刪除一步完成", "--statement", "刪除錄製資料一步完成。",
-                      "--based-on", "RL-claude-1"])
-    assert decision_cmd.run(["activate", "D-claude-1"]) == 1
-    assert "docspec approve" in capsys.readouterr().err
-    _confirm(gov_project, "RL-claude-1")
-    assert decision_cmd.run(["activate", "D-claude-1"]) == 0
-    assert gv.validate(Layout(gov_project)) == []
+def test_decision_needs_a_ruling_and_rejected_ruling_blocks_it(gov_project, capsys):
+    decision_cmd.run(["add", "--title", "刪除一步完成", "--statement", "一步完成。"])
+    assert decision_cmd.run(["activate", "D-claude-1"]) == 1          # 沒有依據的裁定
+    ruling_cmd.run(["add", "--quote", "可以插隊", *RB])
+    decision_cmd.run(["add", "--title", "插隊", "--statement", "互動請求優先。", "--based-on", "RL-claude-1"])
+    assert ruling_cmd.run(["reject", "RL-claude-1", "--reason", "我說的是別的意思"]) == 0
+    capsys.readouterr()
+    assert decision_cmd.run(["activate", "D-claude-2"]) == 1
+    assert "rejected" in capsys.readouterr().err
 
 
-def test_active_decision_on_unconfirmed_ruling_is_a_check_error(gov_project):
-    ruling_cmd.run(["add", "--quote", "x", "--tier", "major"])
+def test_rejecting_a_ruling_flags_decisions_based_on_it(gov_project):
+    ruling_cmd.run(["add", "--quote", "可以插隊", *RB])
+    decision_cmd.run(["add", "--title", "插隊", "--statement", "互動請求優先。", "--based-on", "RL-claude-1"])
+    decision_cmd.run(["activate", "D-claude-1"])
+    assert ruling_cmd.run(["reject", "RL-claude-1", "--reason", "記錯了"]) == 0
     layout = Layout(gov_project)
-    gv.write_record(layout, "decision", {
-        "id": "D-claude-1", "title": "t", "statement": "s", "status": "active",
-        "based-on": ["RL-claude-1"], "created-by": "claude", "created-at": "2026-09-29"})
-    assert any("not confirmed by the owner" in e for e in gv.validate(layout))
+    gov = gv.load_governance(layout)
+    assert gov.rulings[0]["rejected-reason"] == "記錯了"
+    assert [(x["trigger"], x["target"]) for x in gov.suspects] == [("RL-claude-1", "D-claude-1")]
+    assert any("missing or rejected rulings" in e for e in gv.validate(layout))
 
 
 def _supersede_d7(home):
     """仿台中港 D7 → D15：D15 取代 D7 時寫出合併後的完整新版（驗收情境 S1）。"""
-    ruling_cmd.run(["add", "--quote", "首頁維持原樣", "--tier", "major"])
-    _confirm(home, "RL-claude-1")
+    ruling_cmd.run(["add", "--quote", "首頁維持原樣", *RB])
     decision_cmd.run(["add", "--title", "首頁與導覽", "--statement", "/tasks 頁面維持不變；首頁為總覽。",
                       "--based-on", "RL-claude-1"])
     decision_cmd.run(["activate", "D-claude-1"])
-    ruling_cmd.run(["add", "--quote", "三頁合併成首頁", "--tier", "major"])
-    _confirm(home, "RL-claude-2")
+    ruling_cmd.run(["add", "--quote", "三頁合併成首頁", *RB])
     decision_cmd.run(["add", "--title", "首頁與導覽", "--supersedes", "D-claude-1",
                       "--statement", "錄製資料、標註任務、資料集版本三頁合併到首頁；/tasks 只轉址。",
                       "--based-on", "RL-claude-2"])
@@ -212,16 +210,12 @@ from dspx.commands.governance import trace as trace_cmd    # noqa: E402
 
 
 def test_superseding_ruling_flags_decisions_based_on_it(gov_project, capsys):
-    ruling_cmd.run(["add", "--quote", "JPG PNG 都可以", "--tier", "major"])
-    _confirm(gov_project, "RL-claude-1")
+    ruling_cmd.run(["add", "--quote", "JPG PNG 都可以", *RB])
     decision_cmd.run(["add", "--title", "影像格式", "--statement", "依需要解成 JPG 或 PNG。",
                       "--based-on", "RL-claude-1"])
     decision_cmd.run(["activate", "D-claude-1"])
-    ruling_cmd.run(["add", "--quote", "一律 PNG", "--tier", "major", "--supersedes", "RL-claude-1"])
-    _confirm(gov_project, "RL-claude-2")
+    ruling_cmd.run(["add", "--quote", "一律 PNG", *RB, "--supersedes", "RL-claude-1"])
     from dspx.engine.impact import flag_after_change
-    created = flag_after_change(Layout(gov_project), "RL-claude-2")
-    assert len(created) == 1
     capsys.readouterr()
     assert impact_cmd.run(["--json"]) == 0
     items = json.loads(capsys.readouterr().out)
@@ -271,15 +265,14 @@ def test_brief_is_one_page_plain_and_points_to_next_steps(gov_project, write_lea
     _doc_section(gov_project, write_leaf, ["gov:D-claude-1"])
     for i in range(40):                                    # 大量待決問題也不能撐爆一頁
         question_cmd.run(["add", "--title", f"第 {i} 個待決問題，描述很長很長很長很長很長很長很長"])
-    ruling_cmd.run(["add", "--quote", "先這樣寫", "--tier", "minor"])
-    ruling_cmd.run(["add", "--quote", "可以插隊", "--tier", "major"])      # 待確認
+    ruling_cmd.run(["add", "--quote", "先這樣寫", *RB, "--provisional"])
     capsys.readouterr()
     assert brief_cmd.run([]) == 0
     text = capsys.readouterr().out
     assert len(text) <= views.BRIEF_LIMIT
-    assert "下一步" in text and "docspec approve" in text
+    assert "下一步" in text and "問題等你裁定" in text
     assert "還有" in text                                   # 長清單被截短並指路
-    assert "未經本人確認" in text                           # minor 裁定標示
+    assert "（暫定）" in text                               # 暫定裁定標示
     assert "（Q-claude-1）" in text                          # 編號在括號
 
 
@@ -300,15 +293,12 @@ def test_brief_write_regenerates_view_files(gov_project):
 
 
 def test_activating_replacement_clears_flags_on_replaced_decision(gov_project):
-    ruling_cmd.run(["add", "--quote", "維持原樣", "--tier", "major"])
-    _confirm(gov_project, "RL-claude-1")
+    ruling_cmd.run(["add", "--quote", "維持原樣", *RB])
     decision_cmd.run(["add", "--title", "首頁", "--statement", "維持。", "--based-on", "RL-claude-1"])
     decision_cmd.run(["activate", "D-claude-1"])
-    ruling_cmd.run(["add", "--quote", "合併", "--tier", "major", "--supersedes", "RL-claude-1"])
-    _confirm(gov_project, "RL-claude-2")
-    from dspx.engine.impact import flag_after_change
+    ruling_cmd.run(["add", "--quote", "合併", *RB, "--supersedes", "RL-claude-1"])
     layout = Layout(gov_project)
-    assert len(flag_after_change(layout, "RL-claude-2")) == 1          # D-claude-1 被標可疑
+    assert len(gv.load_governance(layout).suspects) == 1              # 新裁定寫入時 D-claude-1 即被標可疑
     decision_cmd.run(["add", "--title", "首頁", "--statement", "合併。", "--based-on", "RL-claude-2",
                       "--supersedes", "D-claude-1"])
     decision_cmd.run(["activate", "D-claude-2"])

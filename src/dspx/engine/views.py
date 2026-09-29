@@ -1,4 +1,4 @@
-"""治理層檢視（第一期第 6 步）：一頁現況、目前有效設計、待批准清單。
+"""治理層檢視（第一期第 6 步）：一頁現況、目前有效設計、待裁定清單。
 
 檢視是**產生物**：每次從紀錄重新產生、整份覆寫，不接受手改（SR1）。
 給使用者看的內容一律白話、條列，編號只放在括號裡（SR17）；一頁現況有長度上限（SR16，
@@ -20,41 +20,35 @@ _LIST_CAP = 5
 _T = {
     "zh": {
         "brief_title": "專案現況", "generated": "產生時間",
-        "todo": "需要你處理", "approve": "待批准（在終端機執行 `docspec approve`）",
+        "todo": "需要你處理",
         "questions": "待你裁定的問題", "review": "需要重看", "suspects": "可疑標記",
         "sections": "文件章節", "recent_rulings": "最近的裁定", "decisions": "目前有效的決策",
         "docs": "文件狀態", "roadmap": "工作進度", "next": "下一步", "none": "無",
-        "more": "還有 {n} 項，用 `{cmd}` 查看", "unconfirmed": "未經本人確認",
-        "pending_conf": "待你確認", "provisional": "暫定",
+        "more": "還有 {n} 項，用 `{cmd}` 查看", "provisional": "暫定",
         "doc_line": "{article}：{total} 節，已同步 {synced}，需更新 {stale}，未寫 {unwritten}",
-        "n_approve": "有 {n} 項待你批准：請在終端機執行 `docspec approve`（agent 用 `docspec approve --list` 查看內容，不可代為批准）。",
         "n_q": "有 {n} 個問題等你裁定。",
         "n_review": "有 {n} 項受上游變更影響，需要重看（`docspec impact`）。",
         "n_stale": "有 {n} 個文件章節需要更新內容。",
         "all_clear": "目前沒有卡住的事項。",
         "design_title": "目前有效的設計", "based_on": "依據", "history": "取代了",
-        "pending_title": "待批准事項", "ruling": "裁定", "request": "申請", "quote": "原話",
-        "interp": "agent 的解讀", "nothing": "（沒有）",
+        "pending_title": "待你裁定的問題", "nothing": "（沒有）",
     },
     "en": {
         "brief_title": "Project status", "generated": "Generated",
-        "todo": "Needs you", "approve": "Awaiting approval (run `docspec approve` in a terminal)",
+        "todo": "Needs you",
         "questions": "Questions awaiting your ruling", "review": "Needs review",
         "suspects": "Suspect flags", "sections": "Document sections",
         "recent_rulings": "Recent rulings", "decisions": "Active decisions",
         "docs": "Documents", "roadmap": "Progress", "next": "Next steps", "none": "none",
-        "more": "{n} more — see `{cmd}`", "unconfirmed": "not confirmed by the owner",
-        "pending_conf": "awaiting your confirmation", "provisional": "provisional",
+        "more": "{n} more — see `{cmd}`", "provisional": "provisional",
         "doc_line": "{article}: {total} sections, {synced} synced, {stale} need updating, "
                     "{unwritten} unwritten",
-        "n_approve": "{n} item(s) await your approval: run `docspec approve` in a terminal (agents: read them with `docspec approve --list`; never approve on the owner's behalf).",
         "n_q": "{n} question(s) await your ruling.",
         "n_review": "{n} item(s) were affected by upstream changes and need review (`docspec impact`).",
         "n_stale": "{n} document section(s) need their prose updated.",
         "all_clear": "Nothing is blocked right now.",
         "design_title": "Current effective design", "based_on": "Based on", "history": "Replaces",
-        "pending_title": "Pending approvals", "ruling": "Ruling", "request": "Request",
-        "quote": "Words", "interp": "Agent's reading", "nothing": "(none)",
+        "pending_title": "Questions awaiting your ruling", "nothing": "(none)",
     },
 }
 
@@ -118,8 +112,6 @@ def _brief(layout: Layout, leaves: list, config: dict | None, cap: int) -> str:
     lines = [f"# {t['brief_title']}", "",
              f"{t['generated']}：{datetime.date.today().strftime('%Y/%m/%d')}", ""]
 
-    pend = [r for r in gov.rulings if r.get("status") == "pending"] + \
-        [q for q in gov.requests if q.get("status") == "pending"]
     qs = [q for q in gov.questions if gv.question_effective_status(q, gov) in ("open", "needs-explanation")]
     suspects = [s for s in gov.suspects if s.get("status") == "open"]
     review_secs = doc_sections_needing_review(layout, leaves, gov)
@@ -128,8 +120,6 @@ def _brief(layout: Layout, leaves: list, config: dict | None, cap: int) -> str:
 
     lines.append(f"## {t['next']}")
     nxt = []
-    if pend:
-        nxt.append("- " + t["n_approve"].format(n=len(pend)))
     if qs:
         nxt.append("- " + t["n_q"].format(n=len(qs)))
     if suspects or review_secs:
@@ -139,15 +129,9 @@ def _brief(layout: Layout, leaves: list, config: dict | None, cap: int) -> str:
     lines += nxt or ["- " + t["all_clear"]]
     lines.append("")
 
-    if pend or qs:
-        lines.append(f"## {t['todo']}")
-        if pend:
-            lines.append(f"{t['approve']}：")
-            lines += _capped([f"- {_label(r)}" + (f"——{r['interpretation']}" if r.get("interpretation") else "")
-                              for r in pend], "docspec approve --list", t, cap)
-        if qs:
-            lines.append(f"{t['questions']}：")
-            lines += _capped([f"- {_label(q)}" for q in qs], "docspec question list", t, cap)
+    if qs:
+        lines.append(f"## {t['questions']}")
+        lines += _capped([f"- {_label(q)}" for q in qs], "docspec question list", t, cap)
         lines.append("")
 
     if suspects or review_secs:
@@ -167,9 +151,7 @@ def _brief(layout: Layout, leaves: list, config: dict | None, cap: int) -> str:
             st = gv.ruling_effective_status(r, gov)
             if st in ("rejected", "superseded"):
                 continue
-            tag = {"pending": t["pending_conf"], "recorded": t["unconfirmed"]}.get(st)
-            if r.get("provisional"):
-                tag = f"{tag}，{t['provisional']}" if tag else t["provisional"]
+            tag = t["provisional"] if r.get("provisional") else None
             items.append(f"- {r.get('date')}「{_label(r, 40)}」" + (f"（{tag}）" if tag else ""))
         lines += _capped(items, "docspec ruling list", t, cap)
         lines.append("")
@@ -219,24 +201,15 @@ def effective_design(layout: Layout, config: dict | None = None) -> str:
 
 
 def pending_list(layout: Layout, config: dict | None = None) -> str:
+    """待你裁定的問題（含「待解釋」）。"""
     t = _T[_lang(config)]
     gov = gv.load_governance(layout)
-    lines = [f"# {t['pending_title']}", "", t["approve"], ""]
-    items = 0
-    for r in gov.rulings:
-        if r.get("status") == "pending":
-            items += 1
-            lines += [f"- {t['ruling']}：{_label(r, 80)}", f"  - {t['quote']}：「{r.get('quote')}」"]
-            if r.get("interpretation"):
-                lines.append(f"  - {t['interp']}：{r['interpretation']}")
-    for q in gov.requests:
-        if q.get("status") == "pending":
-            items += 1
-            lines.append(f"- {t['request']}：{_label(q, 80)}")
+    lines = [f"# {t['pending_title']}", ""]
     qs = [q for q in gov.questions if gv.question_effective_status(q, gov) in ("open", "needs-explanation")]
-    if qs:
-        lines += ["", f"## {t['questions']}", ""]
-        lines += [f"- {_label(q, 80)}" for q in qs]
-    if not items and not qs:
+    for q in qs:
+        lines.append(f"- {_label(q, 80)}")
+        if q.get("body"):
+            lines.append(f"  - {q['body']}")
+    if not qs:
         lines.append(t["nothing"])
     return "\n".join(lines).rstrip() + "\n"
