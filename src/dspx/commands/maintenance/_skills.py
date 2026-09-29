@@ -493,3 +493,31 @@ def run(argv: list[str]) -> int:
         parser.print_help()
         return 0
     return args.func(args)
+
+
+def outdated_installs(root: Path) -> list[str]:
+    """專案裡已安裝、但和這個 docspec 內建版本不同的 skill 與 AGENTS.md 協作區塊。
+
+    docspec 更新後，專案裡的副本不會自己跟著變；重跑 `docspec init` 才會刷新。
+    只比對存在的檔案（沒裝的工具不算）。"""
+    out: list[str] = []
+    try:
+        skills = available_skills()
+    except Exception:  # noqa: BLE001 — 內建資料讀不到時不擋 brief
+        return out
+    for base in (".claude", _SHARED_ROOT):
+        for sk in skills:
+            f = _skill_dir(root, base, sk) / "SKILL.md"
+            if f.is_file() and not f.is_symlink() and f.read_text(encoding="utf-8") != sk.text:
+                out.append(f"{f.relative_to(root)}")
+    agents = root / "AGENTS.md"
+    if agents.is_file():
+        from dspx.commands.maintenance.init import _AGENTS_MD_BEGIN, _AGENTS_MD_END, agents_md_block, _project_lang
+        text = agents.read_text(encoding="utf-8")
+        b, e = text.find(_AGENTS_MD_BEGIN), text.find(_AGENTS_MD_END)
+        if b >= 0 and e > b:
+            current = text[b:e + len(_AGENTS_MD_END)] + "\n"
+            lang = _project_lang(root / "docspec" / "config.yaml", "en")
+            if current != agents_md_block(lang):
+                out.append("AGENTS.md (docspec block)")
+    return sorted(set(out))

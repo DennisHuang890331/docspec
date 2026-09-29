@@ -183,3 +183,22 @@ def test_signoff_survives_other_tests_added_to_the_same_file(proj, capsys, monke
     legacy = [{**planned[0], "signed": {"fingerprint": "sha256:old"}}]
     assert ev.signoff_problems(proj, legacy)                            # 舊簽收：照舊比對整檔
     assert tk.test_fingerprint(proj, "app:tests/test_x.py") is None
+
+
+def test_brief_notes_outdated_skills_and_rules(tmp_path, monkeypatch, capsys):
+    """實測 G8：docspec 更新後，專案裡已安裝的 skill 與 AGENTS.md 區塊仍是舊版，主 agent 照舊版做事。
+    brief 會提醒重跑 `docspec init --agents-md`。"""
+    from dspx.commands.maintenance import init as init_cmd
+    from dspx.commands.maintenance._skills import outdated_installs
+    monkeypatch.chdir(tmp_path)
+    assert init_cmd.run(["--tool", "claude", "--agents-md", "--lang", "zh-TW",
+                         "--no-tex-hint", "--no-update-check"]) == 0
+    assert outdated_installs(tmp_path) == []
+    skill = tmp_path / ".claude" / "skills" / "dspx-test" / "SKILL.md"
+    skill.write_text(skill.read_text(encoding="utf-8") + "\n舊版內容\n", encoding="utf-8")
+    agents = tmp_path / "AGENTS.md"
+    agents.write_text(agents.read_text(encoding="utf-8").replace("再覆述一次", "覆述"), encoding="utf-8")
+    stale = outdated_installs(tmp_path)
+    assert ".claude/skills/dspx-test/SKILL.md" in stale and "AGENTS.md (docspec block)" in stale
+    assert init_cmd.run(["--tool", "claude", "--agents-md", "--no-tex-hint", "--no-update-check"]) == 0
+    assert outdated_installs(tmp_path) == []

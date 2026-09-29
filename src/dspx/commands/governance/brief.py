@@ -52,6 +52,23 @@ def run(argv: list[str]) -> int:
             return 0
         key = "design" if args.design else "pending" if args.pending else "status"
         print(texts[key](), end="")
+        if key == "status":
+            _print_outdated(layout.project_root)
         return 0
     except gv.GovernanceError as exc:
         return fail(str(exc))
+
+
+def _print_outdated(project_root) -> None:
+    """專案裡的 skill 或 AGENTS.md 協作區塊比這個 docspec 舊時提醒（不擋）。"""
+    try:
+        from dspx.commands.maintenance._skills import outdated_installs
+        stale = outdated_installs(project_root)
+    except Exception:  # noqa: BLE001
+        return
+    if stale:
+        import sys
+        shown = ", ".join(stale[:4]) + (f" (+{len(stale) - 4} more)" if len(stale) > 4 else "")
+        sys.stderr.write(f"\nnote: this project's skills / rules are older than the installed docspec "
+                         f"({shown}). Run `docspec init --agents-md` to refresh them "
+                         f"(project settings and content are kept).\n")
