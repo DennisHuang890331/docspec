@@ -133,6 +133,24 @@ def _covers_tests(ev: dict, task: dict) -> bool:
     return wanted <= set(io.as_list(ev.get("tests")))
 
 
+_SIGNOFF_RE = re.compile(r"test (T\d+) \(([^)]+)\) changed after the test role signed it off"
+                         r"(?: — only the test role changes tests; it re-signs after reviewing the change)?")
+
+
+def _short_reason(reason: str) -> str:
+    """把一長串「T1 … changed after … signed it off — …」併成一句：哪個檔、哪些測試。"""
+    hits = _SIGNOFF_RE.findall(reason)
+    if len(hits) < 2:
+        return reason
+    by_file: dict[str, list[str]] = {}
+    for tid, loc in hits:
+        by_file.setdefault(loc, []).append(tid)
+    rest = [r.strip() for r in _SIGNOFF_RE.sub("", reason).split(";") if r.strip()]
+    grouped = "; ".join(f"{', '.join(ids)} ({loc}) changed after sign-off" for loc, ids in by_file.items())
+    grouped += " — only the test role changes tests; it re-signs after reviewing the change"
+    return "; ".join([grouped, *rest])
+
+
 def derive(layout: Layout, ch: dict, task: dict, evs: list[dict]) -> tuple[str, list[str], str]:
     """回 (狀態, 支持完成的證據 id, 說明)。evs＝這個任務的證據（舊到新）。"""
     waivers = [e for e in evs if e.get("type") == "waiver"]
@@ -152,7 +170,12 @@ def derive(layout: Layout, ch: dict, task: dict, evs: list[dict]) -> tuple[str, 
             continue
         latest = cands[-1]
         if latest.get("result") != "pass":
-            failing.append(f"{m} ({latest['id']}: {latest.get('reason') or 'failed'})")
+            failing.append(f"{m} ({latest['id']}: {_short_reason(latest.get('reason') or 'failed')})")
+            if m == "test" and _SIGNOFF_RE.search(latest.get("reason") or ""):
+                wanted = set(io.as_list((task.get("verify") or {}).get("tests")))
+                planned = [t for t in ch["tests"].get("tests") or [] if str(t.get("id")) in wanted]
+                if not signoff_problems(layout, planned):
+                    failing[-1] += " — the tests have been signed off again since; rerun the evidence"
             continue
         changed = stale_files(layout, latest, keys)
         if changed:

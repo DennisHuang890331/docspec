@@ -142,3 +142,15 @@ def test_sign_and_evidence_catch_a_misnamed_planned_test(proj, capsys, monkeypat
     from dspx.engine.software import tasks as tk
     assert tk.name_missing(proj, "app:tests/test_x.py::test_value") is None
     assert tk.name_missing(proj, "app:tests/test_x.py::test_value[1]") is None
+
+
+def test_status_groups_signoff_reasons_and_says_when_resigned(proj, capsys, monkeypatch):
+    """實測：證據失敗原因是一長串「T1 … changed after … signed it off」，重簽後狀態仍照舊列出，
+    讓人以為還沒簽。狀態現在併成一句，並在已重簽時說明「重跑證據即可」。"""
+    from dspx.engine.software import evidence as ev
+    long = "; ".join(f"test T{i} (app:tests/test_x.py) changed after the test role signed it off — only the "
+                     f"test role changes tests; it re-signs after reviewing the change" for i in (1, 2, 3))
+    short = ev._short_reason(long + "; exit code 1")
+    assert short.startswith("T1, T2, T3 (app:tests/test_x.py) changed after sign-off")
+    assert short.count("re-signs") == 1 and short.endswith("exit code 1")
+    assert ev._short_reason("exit code 4") == "exit code 4"

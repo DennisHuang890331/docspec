@@ -18,6 +18,7 @@ a minor bump.
 - **A change can reword what it adds.** `modify-requirement`, `rename-requirement` and `modify-scenario` on a requirement or scenario the same change adds edit it in place and keep its id, so planned tests stay linked. Before this the only way was `undelta`, which also dropped the scenarios.
 - **A planned test whose name is not in the test file is caught at sign-off**, and evidence names the missing test instead of reporting only the runner's exit code (Python test files; `def`/`class` names).
 - **The AGENTS.md collaboration block is stricter where the run went wrong:** it names the project language (e.g. 繁體中文) and asks for it in every assignment; a confirming reply that adds or changes something is restated again before recording; a conflict with an existing ruling goes to the owner; the test role is not mechanical work; a skipped step is reported as skipped, never "all done".
+- **`code change status` no longer repeats a stale sign-off failure verbatim:** the tests are grouped per file in one line, and when they have been signed off again since, it says to rerun the evidence.
 - **Design list items can be removed:** `docspec code change design <id> --remove-goal "<text or number>"` (also `--remove-non-goal`, `--remove-risk`, `--remove-open-question`).
 
 ### Changed — freeze, one archive, project baselines, collaboration rules (branch only)
