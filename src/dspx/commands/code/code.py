@@ -4,6 +4,9 @@
     docspec code change new|set|design|delta|show|status|list …
     docspec code task add|list <change> …
     docspec code testplan add|list|object|respond <change> …
+    docspec code evidence run|add|accept|waive|list <change> <task> …
+
+任務的完成欄位沒有「打勾」指令：`evidence` 產生證據後，引擎依證據推導並寫回 tasks.yaml。
 
 所有檔案都是引擎擁有、封條的 YAML，只能透過這些指令寫入；查詢支援 `--json` 讓 agent 只取需要的部分。
 """
@@ -19,6 +22,7 @@ import yaml
 from dspx.commands.governance._gov_common import emit_json, fail, open_layout
 from dspx.engine import governance as gv
 from dspx.engine.software import changes as chg
+from dspx.engine.software import evidence as ev
 from dspx.engine.software import io
 from dspx.engine.software import specs as sp
 from dspx.engine.software import tasks as tk
@@ -146,6 +150,37 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("--resolution", required=True, help="test-fixed | rejected")
     x.add_argument("--reason", required=True)
     x.add_argument("--by", default=None)
+    evd = top.add_parser("evidence", help="evidence; the engine derives task completion from it")
+    es = evd.add_subparsers(dest="op")
+    x = es.add_parser("run", help="engine runs the task's planned tests (or the command after --)")
+    x.add_argument("change")
+    x.add_argument("task")
+    x.add_argument("--timeout", type=int, default=1800)
+    x.add_argument("--by", default=None)
+    x = es.add_parser("add", help="record an inspection / demonstration / analysis")
+    x.add_argument("change")
+    x.add_argument("task")
+    x.add_argument("--type", required=True, help="inspection | demonstration | analysis")
+    x.add_argument("--subject", required=True, help="what was looked at (screenshot path, size, …)")
+    x.add_argument("--conclusion", required=True)
+    x.add_argument("--result", default="pass", help="pass | fail")
+    x.add_argument("--by", default=None)
+    x = es.add_parser("accept", help="the owner's acceptance, read back in the conversation")
+    x.add_argument("change")
+    x.add_argument("task")
+    x.add_argument("--read-back", required=True, help="what you showed and your plain-language summary")
+    x.add_argument("--confirmed", required=True, help="the owner's confirming reply (verbatim)")
+    x.add_argument("--by", default=None)
+    x = es.add_parser("waive", help="waive a task on the basis of an effective ruling")
+    x.add_argument("change")
+    x.add_argument("task")
+    x.add_argument("--ruling", required=True)
+    x.add_argument("--reopen-when", required=True)
+    x.add_argument("--by", default=None)
+    x = es.add_parser("list", help="evidence for a change")
+    x.add_argument("change")
+    x.add_argument("--task", default=None)
+    x.add_argument("--json", dest="as_json", action="store_true")
     return p
 
 
@@ -294,7 +329,9 @@ def _change(layout, args) -> int:
         else:
             print(chg.render_md(layout, ch), end="")
         return 0
-    # status
+    # status（先依證據刷新任務狀態）
+    _report_refresh(ev.refresh(layout, args.id), args.id, quiet=args.as_json)
+    ch = chg.load_change(layout, args.id)
     errs, warns = chg.validate_change(layout, ch)
     tasks = ch["tasks"].get("tasks") or []
     counts: dict[str, int] = {}
@@ -308,6 +345,9 @@ def _change(layout, args) -> int:
           + (" — " + ", ".join(f"{tk.STATUS_LABEL.get(k, k)} {v}" for k, v in counts.items())
              if counts else ""))
     print(f"touches: {', '.join(tk.touched_summary(ch)) or '—'}")
+    for row in ev.explain(layout, args.id):
+        if row["status"] not in ("done", "done-waived"):
+            print(f"  task {row['task']} {tk.STATUS_LABEL.get(row['status'], row['status'])}: {row['why']}")
     if not errs and not warns:
         print("  ✓ references and deltas are consistent")
     _print_findings(errs, warns)
@@ -325,6 +365,8 @@ def _task(layout, args) -> int:
         chg.write_part(layout, args.change, "tasks", ch["tasks"])
         print(f"code task add: {args.change} task {rec['id']} — {rec['title']}")
         return 0
+    _report_refresh(ev.refresh(layout, args.change), args.change, quiet=args.as_json)
+    ch = chg.load_change(layout, args.change)
     tasks = ch["tasks"].get("tasks") or []
     if args.as_json:
         emit_json(tasks)
@@ -359,7 +401,70 @@ def _testplan(layout, args) -> int:
     return 0
 
 
+def _report_refresh(changed, cid: str, quiet: bool = False) -> None:
+    if quiet:
+        return
+    for task_id, old, new in changed:
+        print(f"task {cid}#{task_id}: {tk.STATUS_LABEL.get(old, old)} → {tk.STATUS_LABEL.get(new, new)}")
+
+
+def _evidence(layout, args, command: list[str] | None) -> int:
+    if args.op == "list":
+        rows = [e for e in ev.load_all(layout) if e.get("change") == args.change
+                and (args.task is None or str(e.get("task")) == args.task)]
+        if args.as_json:
+            emit_json(rows)
+            return 0
+        for e in rows:
+            extra = ""
+            if e.get("type") == "test-run":
+                c = e.get("counts") or {}
+                extra = f" passed {c.get('passed')} failed {c.get('failed')} skipped {c.get('skipped')}"
+            print(f"{e['id']} task {e['task']} {e['type']} {e.get('result')}{extra} ({e.get('at')})"
+                  + (f" — {e['reason']}" if e.get("reason") else ""))
+        if not rows:
+            print("(no evidence)")
+        return 0
+    tool = gv.detect_tool(args.by)
+    if args.op == "run":
+        rec = ev.run_tests(layout, args.change, args.task, command, tool=tool, timeout=args.timeout)
+        c = rec["counts"]
+        print(f"evidence {rec['id']}: {rec['command']}")
+        print(f"  passed {c['passed']}, failed {c['failed']}, skipped {c['skipped']}, "
+              f"exit {rec['exit-code']} → {rec['result']}")
+        for pt in rec.get("per-test") or []:
+            print(f"  {pt['test']} {pt['location']}: {pt['outcome']}")
+        if rec.get("reason"):
+            print(f"  reason: {rec['reason']}")
+        for chk in (rec.get("environment") or {}).get("checks") or []:
+            if not chk["ok"]:
+                print(f"  ! environment check failed: {chk['name']}")
+    elif args.op == "add":
+        rec = ev.record(layout, args.change, args.task, args.type, tool=tool, subject=args.subject,
+                        conclusion=args.conclusion, result=args.result)
+        print(f"evidence {rec['id']}: {rec['type']} {rec['result']}")
+    elif args.op == "accept":
+        rec = ev.accept(layout, args.change, args.task, tool=tool, read_back=args.read_back,
+                        confirmed=args.confirmed)
+        print(f"evidence {rec['id']}: acceptance recorded")
+    else:
+        rec = ev.waive(layout, args.change, args.task, tool=tool, ruling=args.ruling,
+                       reopen_when=args.reopen_when)
+        print(f"evidence {rec['id']}: waived by {rec['ruling']}")
+    changed = ev.refresh(layout, args.change)
+    _report_refresh(changed, args.change)
+    if not changed:
+        row = next(r for r in ev.explain(layout, args.change) if str(r["task"]) == str(args.task))
+        print(f"task {args.change}#{args.task}: {tk.STATUS_LABEL.get(row['status'], row['status'])}"
+              f" — {row['why']}")
+    return 0 if rec.get("result") == "pass" else 1
+
+
 def run(argv: list[str]) -> int:
+    command = None
+    if "--" in argv:                      # `code evidence run <change> <task> -- <指令…>`
+        i = argv.index("--")
+        argv, command = argv[:i], argv[i + 1:] or None
     p = _parser()
     args = p.parse_args(argv)
     if not args.area or not getattr(args, "op", None):
@@ -369,6 +474,8 @@ def run(argv: list[str]) -> int:
     if layout is None:
         return 1
     try:
+        if args.area == "evidence":
+            return _evidence(layout, args, command)
         return {"spec": _spec, "change": _change, "task": _task, "testplan": _testplan}[args.area](
             layout, args)
     except io.SoftwareError as exc:

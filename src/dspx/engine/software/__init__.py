@@ -33,4 +33,6 @@ def validate_all(layout) -> tuple[list[str], list[str]]:
         e, w = chg.validate_change(layout, ch)
         errs += e
         warns += w
-    return errs, warns
+    from dspx.engine.software import evidence as ev
+    e, w = ev.validate(layout)
+    return errs + e, warns + w

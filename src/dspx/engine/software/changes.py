@@ -40,10 +40,18 @@ def load_config(layout: Layout) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def repo_settings(layout: Layout) -> dict[str, dict]:
+    """登記的程式 repo：名稱 → {path, test-command?}。config 可寫 `名稱: 路徑` 或 `名稱: {path, test-command}`。"""
+    out = {}
+    for k, v in (load_config(layout).get("repos") or {}).items():
+        out[str(k)] = dict(v) if isinstance(v, dict) else {"path": str(v)}
+    return out
+
+
 def repos(layout: Layout) -> dict[str, Path]:
     """登記的程式 repo：名稱 → 絕對路徑（相對專案根）。"""
-    return {str(k): (layout.project_root / str(v)).resolve()
-            for k, v in (load_config(layout).get("repos") or {}).items()}
+    return {k: (layout.project_root / str(v.get("path") or ".")).resolve()
+            for k, v in repo_settings(layout).items()}
 
 
 def size_warning(layout: Layout) -> dict:
