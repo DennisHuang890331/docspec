@@ -403,6 +403,11 @@ def run_tests(layout: Layout, cid: str, task_id: str, *, tool: str, timeout: int
     allow_skips = bool((task.get("verify") or {}).get("allow-skips"))
     per_test = []
     reasons = []
+    unnamed = [f"{t['id']} ({tk.name_missing(layout, t['location'])})" for t in planned
+               if tk.name_missing(layout, t["location"])]
+    if unnamed:
+        reasons.append(f"planned test name(s) not in the test file: {', '.join(unnamed)} — the test role "
+                       f"fixes the planned location or the test name")
     if cases is not None:
         counts = {k: sum(1 for c in cases if c["outcome"] == k) for k in ("passed", "failed", "skipped")}
         for t in planned:
@@ -420,6 +425,8 @@ def run_tests(layout: Layout, cid: str, task_id: str, *, tool: str, timeout: int
         not_run = [p["test"] for p in per_test if p["outcome"] == "not-run"]
         if not_run:
             reasons.append(f"planned test(s) not found in the run: {', '.join(not_run)}")
+    elif unnamed:
+        counts = _summary_counts(output)
     else:
         counts = _summary_counts(output)
         reasons.append("the test runner produced no JUnit report, so no test can be confirmed "

@@ -58,6 +58,26 @@ def location_file(loc: str) -> tuple[str, str]:
     return repo, path.split("::", 1)[0]
 
 
+def name_missing(layout: Layout, loc: str) -> str | None:
+    """Python 測試位置（`x.py::Class::test_y`）裡的名稱不在檔案中時，回傳缺少的名稱。
+
+    只看得出「沒有這個 def／class」；參數化的 `test_y[1]` 取中括號前的名稱。其他語言不檢查。"""
+    import re
+    repo, rest = split_location(loc)
+    path, _, names = rest.partition("::")
+    if not names or not path.endswith(".py") or not repo_known(layout, repo):
+        return None
+    f = repo_root(layout, repo) / path
+    if not f.is_file():
+        return None
+    text = f.read_text(encoding="utf-8", errors="replace")
+    for part in names.split("::"):
+        part = part.split("[", 1)[0]
+        if not re.search(rf"^\s*(?:async\s+)?(?:def|class)\s+{re.escape(part)}\b", text, re.M):
+            return part
+    return None
+
+
 def repo_known(layout: Layout, repo: str) -> bool:
     from dspx.engine.software import changes as chg
     return repo == PROJECT_REPO or repo in chg.repos(layout)
@@ -119,6 +139,11 @@ def sign_tests(layout: Layout, ch: dict, test_ids: list[str], *, tool: str, now:
                 f"`docspec code repo add <name> <path>` (writes docspec/software/config.yaml)")
         if fp == "missing":
             raise io.SoftwareError(f"test {t['id']}: {t['location']} does not exist yet — write it first")
+        missing = name_missing(layout, t["location"])
+        if missing:
+            raise io.SoftwareError(
+                f"test {t['id']}: {location_file(t['location'])[1]} has no test named \"{missing}\" — "
+                f"fix the planned location (`docspec code testplan remove` then `testplan add`) or the test name")
         t["signed"] = {"by": tool, "at": now, "fingerprint": fp}
     return chosen
 

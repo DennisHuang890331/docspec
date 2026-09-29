@@ -124,3 +124,21 @@ def test_change_can_reword_what_it_adds_keeping_ids(proj, capsys):
     assert deltas[1]["then"] == "列出原因"
     assert code("change", "delta", "fix", "--capability", "roster", "--op", "modify-requirement",
                 "--ref", "R9", "--statement", "x") == 1          # 不是自己新增的：照舊規則擋下
+
+
+def test_sign_and_evidence_catch_a_misnamed_planned_test(proj, capsys, monkeypatch):
+    """實測：規劃的名稱和檔案裡的不一樣，簽收時就擋下；證據說清楚是哪個名稱，不只給 exit 4。"""
+    code("repo", "add", "app", "app", "--test-command",
+         f"PYTHONPATH=src {sys.executable} -m pytest -q -p no:cacheprovider")
+    code("change", "new", "fix", "--why", "x", "--modified", "entry")
+    code("change", "delta", "fix", "--capability", "entry", "--op", "modify-scenario",
+         "--ref", "R1/S1", "--then", "改")
+    monkeypatch.setenv("DOCSPEC_AGENT", "gemini")
+    code("testplan", "add", "fix", "--location", "app:tests/test_x.py::test_valeu",
+         "--covers", "entry/R1/S1")
+    capsys.readouterr()
+    assert code("testplan", "sign", "fix") == 1
+    assert 'has no test named "test_valeu"' in capsys.readouterr().err
+    from dspx.engine.software import tasks as tk
+    assert tk.name_missing(proj, "app:tests/test_x.py::test_value") is None
+    assert tk.name_missing(proj, "app:tests/test_x.py::test_value[1]") is None

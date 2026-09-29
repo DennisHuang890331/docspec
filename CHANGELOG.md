@@ -16,6 +16,7 @@ a minor bump.
 - **`test-command` may start with environment variables** (`PYTHONPATH=src python -m pytest -q`). A `{tests}`-style placeholder is refused with a clear message; the engine always appends the test locations itself.
 - **Signing off a test in an unregistered repo** now says the repo is not registered and how to register it, instead of "does not exist yet — write it first".
 - **A change can reword what it adds.** `modify-requirement`, `rename-requirement` and `modify-scenario` on a requirement or scenario the same change adds edit it in place and keep its id, so planned tests stay linked. Before this the only way was `undelta`, which also dropped the scenarios.
+- **A planned test whose name is not in the test file is caught at sign-off**, and evidence names the missing test instead of reporting only the runner's exit code (Python test files; `def`/`class` names).
 - **Design list items can be removed:** `docspec code change design <id> --remove-goal "<text or number>"` (also `--remove-non-goal`, `--remove-risk`, `--remove-open-question`).
 
 ### Changed — freeze, one archive, project baselines, collaboration rules (branch only)
