@@ -35,4 +35,6 @@ def validate_all(layout) -> tuple[list[str], list[str]]:
         warns += w
     from dspx.engine.software import evidence as ev
     e, w = ev.validate(layout)
-    return errs + e, warns + w
+    from dspx.engine.software import archive as arc
+    e2, w2 = arc.validate_verified_by(layout)
+    return errs + e + e2, warns + w + w2

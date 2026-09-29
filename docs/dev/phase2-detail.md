@@ -543,3 +543,13 @@ docspec/software/changes/<change>/
 - 任務狀態在 `code evidence …`、`code change status`、`code task list` 時由引擎寫回 tasks.yaml；`docspec check` 只提醒「紀錄的狀態落後於證據」，不寫檔。
 - 測試撰寫者與執行者相同時提醒（引擎只能分辨工具前綴，屬輔助約束）。
 - repo 設定可寫 `名稱: {path, test-command}`，預設 `python -m pytest`；`environment: {vars, checks}` 記入環境指紋，檢查失敗只提醒不擋。
+
+**P2-4（封存與回歸測試）**：完成。
+
+- `docspec code archive <change> [--dry-run]`：依序刷新任務狀態 → 嚴格檢查 → 完整性（任務都完成或豁免；檢查／展示類需求要有使用者驗收或豁免）→ 在副本上套差異並併入 `verified-by` → 寫規格、寫基線、搬資料夾。寫到一半失敗會還原規格、刪掉基線、資料夾搬回原處。
+- 兩個 change 改同一個情境：先封存的成功，後者停下並列出衝突；先封存時會提醒哪些進行中的 change 改到同一個能力。
+- 基線 `software/baselines/<日期>-<change>.yaml`：各規格的指紋、專案與各 repo 的 commit、證據編號、任務完成數、編號重配。
+- 封存後 `code change show` 仍查得到；change id 不能重用。
+- `docspec code test [--capability] [--list]`：依正式規格的 `verified-by` 每個 repo 跑一次，失敗時回報影響哪些情境；`--list` 只列清單給 CI。
+- `docspec check` 會檢查 `verified-by` 指到的測試檔是否還在（刪除或改名＝引用斷了）。
+- 情境被修改時，舊的 `verified-by` 保留、新規劃的測試附加上去；「需重看」的標示留到 P2-5 影響分析一起做。

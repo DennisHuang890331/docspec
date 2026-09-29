@@ -5,6 +5,8 @@
     docspec code task add|list <change> …
     docspec code testplan add|list|object|respond <change> …
     docspec code evidence run|add|accept|waive|list <change> <task> …
+    docspec code archive <change> [--dry-run]      收尾：差異併回正式規格、資料夾收進 _archive/、寫基線
+    docspec code test [--capability X] [--list]    依正式規格的 verified-by 跑回歸測試
 
 任務的完成欄位沒有「打勾」指令：`evidence` 產生證據後，引擎依證據推導並寫回 tasks.yaml。
 
@@ -21,6 +23,7 @@ import yaml
 
 from dspx.commands.governance._gov_common import emit_json, fail, open_layout
 from dspx.engine import governance as gv
+from dspx.engine.software import archive as arc
 from dspx.engine.software import changes as chg
 from dspx.engine.software import evidence as ev
 from dspx.engine.software import io
@@ -177,6 +180,16 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("--ruling", required=True)
     x.add_argument("--reopen-when", required=True)
     x.add_argument("--by", default=None)
+    x = top.add_parser("archive", help="finish a change: merge its deltas into the specs, move the "
+                       "folder to changes/_archive/, write a baseline")
+    x.add_argument("change")
+    x.add_argument("--dry-run", action="store_true", help="check and preview only")
+    x.add_argument("--json", dest="as_json", action="store_true")
+    x.add_argument("--by", default=None)
+    x = top.add_parser("test", help="regression: run the tests the specs name in verified-by")
+    x.add_argument("--capability", default=None)
+    x.add_argument("--list", action="store_true", help="only print the list (e.g. for CI)")
+    x.add_argument("--json", dest="as_json", action="store_true")
     x = es.add_parser("list", help="evidence for a change")
     x.add_argument("change")
     x.add_argument("--task", default=None)
@@ -275,7 +288,10 @@ def _change(layout, args) -> int:
         print(f"code change new: {args.id} ({io.change_dir(layout, args.id).relative_to(layout.project_root)})")
         return 0
 
-    ch = chg.load_change(layout, args.id)
+    if args.op == "show" and chg.change_state(layout, args.id) == "archived":
+        ch = chg.load_archived(layout, args.id)
+    else:
+        ch = chg.load_change(layout, args.id)
     if args.op == "set":
         p = ch["proposal"]
         if args.why:
@@ -460,6 +476,72 @@ def _evidence(layout, args, command: list[str] | None) -> int:
     return 0 if rec.get("result") == "pass" else 1
 
 
+def _archive(layout, args) -> int:
+    p = arc.plan(layout, args.change)
+    if args.as_json:
+        emit_json({k: v for k, v in p.items() if k not in ("ch", "specs")}
+                  | {"capabilities": sorted(p["specs"])})
+        if not p["ok"] or args.dry_run:
+            return 0 if p["ok"] else 1
+    if not p["ok"]:
+        print(f"cannot archive {args.change} yet:")
+        for e in p["errors"]:
+            print(f"  ✗ {e}")
+        return 1
+    if not args.as_json:
+        print(f"{'would archive' if args.dry_run else 'archiving'} {args.change}:")
+        for cap in sorted(p["specs"]):
+            print(f"  spec {cap} updated")
+        for old, new in p["renames"].items():
+            print(f"  ! {old} was taken by another change; renumbered to {new}")
+        for w in p["warnings"]:
+            print(f"  ! {w}")
+    if args.dry_run:
+        return 0
+    res = arc.archive(layout, args.change, tool=gv.detect_tool(args.by))
+    if not args.as_json:
+        print(f"  moved to {res['dest'].relative_to(layout.project_root)}")
+        print(f"  baseline written ({len(res['baseline']['evidence'])} evidence record(s))")
+        for other in res["affected"]:
+            print(f"  ! active change {other} edits the same capability — run "
+                  f"`docspec code change status {other}` to check its deltas still apply")
+    return 0
+
+
+def _test(layout, args) -> int:
+    if args.list:
+        rows = arc.regression_list(layout, args.capability)
+        if args.as_json:
+            emit_json(rows)
+            return 0
+        for repo, items in rows.items():
+            print(f"[{repo}]")
+            for i in items:
+                print(f"  {i['location']}  ← {', '.join(i['scenarios'])}")
+        if not rows:
+            print("(no verified-by tests in the specs yet)")
+        return 0
+    results = arc.run_regression(layout, args.capability)
+    if args.as_json:
+        emit_json(results)
+    bad = False
+    for r in results:
+        if r.get("error"):
+            bad = True
+            if not args.as_json:
+                print(f"[{r['repo']}] error: {r['error']}")
+            continue
+        c = r["counts"]
+        bad = bad or bool(r["failing"]) or r["exit"] != 0
+        if not args.as_json:
+            print(f"[{r['repo']}] passed {c['passed']}, failed {c['failed']}, skipped {c['skipped']}")
+            for f in r["failing"]:
+                print(f"  ✗ {f['location']} {f['outcome']} → affects {', '.join(f['scenarios'])}")
+    if not results and not args.as_json:
+        print("(no verified-by tests in the specs yet)")
+    return 1 if bad else 0
+
+
 def run(argv: list[str]) -> int:
     command = None
     if "--" in argv:                      # `code evidence run <change> <task> -- <指令…>`
@@ -467,7 +549,7 @@ def run(argv: list[str]) -> int:
         argv, command = argv[:i], argv[i + 1:] or None
     p = _parser()
     args = p.parse_args(argv)
-    if not args.area or not getattr(args, "op", None):
+    if not args.area or (args.area not in ("archive", "test") and not getattr(args, "op", None)):
         p.print_help()
         return 0
     layout = open_layout()
@@ -476,6 +558,10 @@ def run(argv: list[str]) -> int:
     try:
         if args.area == "evidence":
             return _evidence(layout, args, command)
+        if args.area == "archive":
+            return _archive(layout, args)
+        if args.area == "test":
+            return _test(layout, args)
         return {"spec": _spec, "change": _change, "task": _task, "testplan": _testplan}[args.area](
             layout, args)
     except io.SoftwareError as exc:
