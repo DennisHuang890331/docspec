@@ -52,6 +52,12 @@ def _validate_audit(layout, leaves: list[Leaf], id_set: set[str],
     from dspx.reports import roadmap as _roadmap
     change_states = _chg.all_change_states(layout)
     roadmap_ids = {str(e["id"]) for e in _roadmap.all_entries(layout, leaves) if e.get("id")}
+    from dspx.engine import governance as _gv          # 唯一專案 roadmap 的工作項目（W-…）
+    if _gv.has_governance(layout):
+        try:
+            roadmap_ids |= {str(w.get("id")) for w in _gv.load_all(layout, "work")}
+        except _gv.GovernanceError:
+            pass
 
     errs: list[str] = []
     seen_ids: set[str] = set()

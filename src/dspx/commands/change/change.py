@@ -157,7 +157,23 @@ def _generic_reference_autos(layout, leaves, autos: list, seeds: list[str]) -> l
 
 def _promote_roadmap(layout, entry_id: str, change: "chg.Change") -> str | None:
     """晉升搬家：把 roadmap entry 的 what 搬進 change.notes、原 entry 收攏成 promoted-to。
-    回傳搬進 notes 的一段文字（None＝找不到 entry）。"""
+    回傳搬進 notes 的一段文字（None＝找不到 entry）。
+
+    唯一專案 roadmap 的工作項目（W-…）不收攏：項目保留，加上 `change:<id>` 指向，
+    change 封存後項目狀態推導為完成。"""
+    from dspx.engine import governance as gv
+    wid = gv.strip_ns(entry_id)
+    if gv.kind_of_id(wid) == "work":
+        path = gv.record_path(layout, "work", wid)
+        if not path.is_file():
+            return None
+        rec = gv.load_record(path, "work")
+        refs = gv._as_list(rec.get("refs"))
+        if f"change:{change.id}" not in refs:
+            rec["refs"] = refs + [f"change:{change.id}"]
+            gv.write_record(layout, "work", rec)
+        what = str(rec.get("what") or rec.get("title") or "")
+        return f"## promoted from roadmap {wid}\n\n{what}\n"
     from dspx.reports import roadmap as rm
     from dspx.engine.sealed import load_sealed
     # 找 entry 所在檔（forest + per-doc）；★store-native：讀寫皆走密封 API，不裸寫。

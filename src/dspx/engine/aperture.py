@@ -299,5 +299,18 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
         from dspx.commands.governance.roadmap import FOREST_GROUP, build_backlog_view
         groups = build_backlog_view(layout, leaves)["groups"]
         proj.roadmap = list(groups.get(leaf.article, [])) + list(groups.get(FOREST_GROUP, []))
+        from dspx.engine import governance as _gv
+        if _gv.has_governance(layout):
+            # 唯一專案 roadmap：投「指向本文件（doc:<本文>…）或未指向任何文件」且尚未完成的項目
+            from dspx.engine import roadmap_v2 as _rv
+            ctx = _rv.build_context(layout, leaves)
+            for w in ctx.gov.work:
+                docs = [r for r in _gv._as_list(w.get("refs")) if r.startswith("doc:")]
+                mine = any(r[4:].split("/", 1)[0] == leaf.article for r in docs)
+                st = _rv.item_status(w, ctx)
+                if (mine or not docs) and st not in ("done", "done-waived"):
+                    proj.roadmap.append({"id": w["id"], "kind": w.get("kind") or "task",
+                                         "title": w.get("title"), "status": st,
+                                         "blocked": st == "blocked", "unblocked": st != "blocked"})
 
     return proj

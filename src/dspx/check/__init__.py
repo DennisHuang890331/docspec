@@ -78,6 +78,13 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
         errors.extend(_prose_anchors.check_prose_anchor_refs(layout, leaves, seen))  # ⑪ — 散文錨死引用（P1b）
         errors.extend(_changes._validate_changes(layout, leaves, id_set, concept_ids))  # ⑫ — changes/ 容器（change-event-layer 1.4）
         errors.extend(_validate_gov(layout))                                 # ⑬ — 治理層紀錄（governance/）
+        from dspx.engine import governance as _gv
+        if _gv.has_governance(layout):
+            from dspx.engine.roadmap_v2 import validate_refs
+            try:
+                errors.extend(validate_refs(layout, leaves, _gv.load_governance(layout)))
+            except _gv.GovernanceError:
+                pass                                                         # 壞封條已由 ⑬ 回報
 
     ref_errors, warnings = _cross_section._cross_section_decision_refs(leaves)  # trailing F1 check
     errors.extend(ref_errors)

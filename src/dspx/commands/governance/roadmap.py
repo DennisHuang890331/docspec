@@ -105,7 +105,28 @@ def _print_group(title: str, items: list[dict]) -> None:
             _line(e)
 
 
+def _v2_layout(argv: list[str]):
+    """啟用治理層的專案（或要求 migrate）→ 回 layout，改走唯一一份專案 roadmap；否則 None。"""
+    from dspx.engine import governance as gv
+    from dspx.engine.layout import LayoutError, find_planning_home
+    try:
+        find_planning_home()
+    except LayoutError:
+        return None
+    try:
+        layout, _config = bootstrap()
+    except BootstrapError:
+        return None
+    if gv.has_governance(layout) or (argv[:1] == ["migrate"]):
+        return layout
+    return None
+
+
 def run(argv: list[str]) -> int:
+    layout_v2 = _v2_layout(argv)
+    if layout_v2 is not None:
+        from dspx.commands.governance import _roadmap_v2_cli
+        return _roadmap_v2_cli.run(argv, layout_v2)
     parser = argparse.ArgumentParser(prog="docspec roadmap", description=HELP)
     sub = parser.add_subparsers(dest="op")
 

@@ -31,7 +31,7 @@ class TraceGraph:
 
     def downstream(self, ref: str) -> list[tuple[str, str]]:
         """直接依賴 ref 的節點：(節點, 連結型別)。"""
-        return [(s, t) for (s, t, d) in self.edges if d == ref and t in ("based-on", "realizes")]
+        return [(s, t) for (s, t, d) in self.edges if d == ref and t in ("based-on", "realizes", "refs")]
 
     def upstream(self, ref: str) -> list[tuple[str, str]]:
         return [(d, t) for (s, t, d) in self.edges if s == ref]
@@ -54,6 +54,17 @@ def build_graph(layout: Layout, leaves: list | None = None,
             g.add(str(d["id"]), "based-on", r)
         for old in gv._as_list(d.get("supersedes")):
             g.add(str(d["id"]), "supersedes", old)
+    for w in gov.work:
+        for ref in gv._as_list(w.get("refs")):
+            if ref.startswith(gv.GOV_NAMESPACE):
+                g.add(str(w["id"]), "refs", gv.strip_ns(ref))
+            elif ref.startswith(DOC_NS):
+                g.add(str(w["id"]), "refs", ref)
+        for dep in gv._as_list(w.get("depends-on")):
+            g.add(str(w["id"]), "depends-on", dep)
+        for wv in (w.get("waivers") or []):
+            if isinstance(wv, dict) and wv.get("ruling"):
+                g.add(str(w["id"]), "based-on", str(wv["ruling"]))
     if leaves is None:
         from dspx.engine.model import load_project
         leaves = load_project(layout)
@@ -100,7 +111,7 @@ def flag_after_change(layout: Layout, changed_id: str, tool: str | None = None,
     created: list[str] = []
     for trig in triggers:
         for node, etype in graph.dependents(trig):
-            if node.startswith(DOC_NS) or etype not in ("based-on",):
+            if node.startswith(DOC_NS) or etype not in ("based-on", "refs"):
                 continue
             if node == changed_id or (trig, node) in existing:
                 continue

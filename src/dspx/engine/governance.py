@@ -19,7 +19,7 @@ import os
 import re
 import subprocess
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -40,6 +40,8 @@ KINDS: dict[str, tuple[str, str]] = {
     "decision": ("D", "decisions"),
     "suspect": ("S", "suspects"),
     "request": ("AP", "requests"),
+    "milestone": ("M", "roadmap"),      # 唯一一份專案 roadmap：里程碑與工作項目同住 roadmap/
+    "work": ("W", "roadmap"),
 }
 PREFIX_TO_KIND = {v[0]: k for k, v in KINDS.items()}
 
@@ -63,7 +65,15 @@ FIELDS: dict[str, dict[str, bool]] = {   # 欄位 → 是否必填
     "request": {"id": True, "action": True, "payload": True, "summary": True,
                 "status": True, "requested-by": True, "requested-at": True,
                 "decided-by": False, "decided-at": False, "reason": False},
+    # roadmap：狀態一律推導（不存 status 欄）；做完的項目保留，不再移出檔案。
+    "milestone": {"id": True, "title": True, "type": True, "due": False, "note": False,
+                  "created-by": True, "created-at": True},
+    "work": {"id": True, "title": True, "what": False, "milestone": False, "parent": False,
+             "depends-on": False, "refs": False, "kind": False, "priority": False,
+             "closed": False, "waivers": False, "from-audit": False, "legacy-id": False,
+             "created-by": True, "created-at": True},
 }
+MILESTONE_TYPES = ("checkpoint", "deliverable")   # 計畫查核點 vs 交付物（分開，SR15）
 STORED_STATUS: dict[str, tuple[str, ...]] = {
     "question": ("open", "needs-explanation", "withdrawn"),
     "ruling": ("pending", "confirmed", "rejected", "recorded"),
@@ -200,8 +210,11 @@ def load_all(layout: Layout, kind: str) -> list[dict]:
     d = kind_dir(layout, kind)
     if not d.is_dir():
         return []
+    cls = KINDS[kind][0]
     out = []
     for p in sorted(d.glob("*.yaml")):
+        if p.stem.split("-", 1)[0] != cls:       # roadmap/ 同夾住兩種紀錄
+            continue
         rec = load_record(p, kind)
         out.append({**rec, "_file": p.stem})
     return out
@@ -216,10 +229,13 @@ class Governance:
     decisions: list[dict]
     suspects: list[dict]
     requests: list[dict]
+    milestones: list[dict] = field(default_factory=list)
+    work: list[dict] = field(default_factory=list)
 
     def by_id(self) -> dict[str, dict]:
         out: dict[str, dict] = {}
-        for recs in (self.questions, self.rulings, self.decisions, self.suspects, self.requests):
+        for recs in (self.questions, self.rulings, self.decisions, self.suspects, self.requests,
+                     self.milestones, self.work):
             for r in recs:
                 out[str(r.get("id"))] = r
         return out
@@ -227,7 +243,8 @@ class Governance:
 
 def load_governance(layout: Layout) -> Governance:
     return Governance(*(load_all(layout, k) for k in ("question", "ruling", "decision",
-                                                        "suspect", "request")))
+                                                        "suspect", "request", "milestone",
+                                                        "work")))
 
 
 def has_governance(layout: Layout) -> bool:
@@ -345,7 +362,8 @@ def validate(layout: Layout) -> list[str]:
     ids: dict[str, str] = {}
     for kind, recs in (("question", gov.questions), ("ruling", gov.rulings),
                        ("decision", gov.decisions), ("suspect", gov.suspects),
-                       ("request", gov.requests)):
+                       ("request", gov.requests), ("milestone", gov.milestones),
+                       ("work", gov.work)):
         fields = FIELDS[kind]
         for r in recs:
             rid = str(r.get("id") or "")
@@ -368,7 +386,7 @@ def validate(layout: Layout) -> list[str]:
             for key, required in fields.items():
                 if required and r.get(key) in (None, ""):
                     errs.append(f"{where}: missing required field \"{key}\"")
-            if r.get("status") not in STORED_STATUS[kind]:
+            if kind in STORED_STATUS and r.get("status") not in STORED_STATUS[kind]:
                 errs.append(f"{where}: status \"{r.get('status')}\" not in {STORED_STATUS[kind]}")
 
     def expect(where: str, refs, kind: str, field: str) -> None:
@@ -398,13 +416,35 @@ def validate(layout: Layout) -> list[str]:
         if str(d.get("id")) in _as_list(d.get("supersedes")):
             errs.append(f"{where}: supersedes itself")
     # question.affects 可指向任何紀錄（含文件章節），不在此驗死引用。
+    for m in gov.milestones:
+        if m.get("type") not in MILESTONE_TYPES:
+            errs.append(f"governance milestone {m.get('id')}: type \"{m.get('type')}\" not in "
+                        f"{MILESTONE_TYPES}")
+    for w in gov.work:
+        where = f"governance work item {w.get('id')}"
+        expect(where, w.get("milestone"), "milestone", "milestone")
+        expect(where, w.get("parent"), "work", "parent")
+        expect(where, w.get("depends-on"), "work", "depends-on")
+        for wv in (w.get("waivers") or []):
+            if not isinstance(wv, dict) or not wv.get("ruling"):
+                errs.append(f"{where}: each waiver needs a ruling")
+            else:
+                expect(where, wv.get("ruling"), "ruling", "waiver ruling")
+        # refs（doc:/change:/gov:）的死引用需要 corpus 與 changes 脈絡 → check 層另驗
+    errs.extend(_dep_cycles(gov.work, "depends-on"))
+    errs.extend(_dep_cycles(gov.work, "parent"))
     errs.extend(_supersede_cycles(gov.decisions, "decision"))
     errs.extend(_supersede_cycles(gov.rulings, "ruling"))
     return errs
 
 
-def _supersede_cycles(recs: list[dict], kind: str) -> list[str]:
-    graph = {str(r.get("id")): _as_list(r.get("supersedes")) for r in recs}
+def _dep_cycles(recs: list[dict], field_name: str) -> list[str]:
+    return [e.replace("supersede cycle", f"{field_name} cycle")
+            for e in _supersede_cycles(recs, "work item", field_name)]
+
+
+def _supersede_cycles(recs: list[dict], kind: str, field_name: str = "supersedes") -> list[str]:
+    graph = {str(r.get("id")): _as_list(r.get(field_name)) for r in recs}
     errs: list[str] = []
     state: dict[str, int] = {}
 

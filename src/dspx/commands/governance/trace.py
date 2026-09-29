@@ -15,7 +15,8 @@ from dspx.engine.impact import DOC_NS, build_graph
 NAME = "trace"
 HELP = "governance: upstream and downstream links of a record (ruling, decision, question, doc:<section>)"
 
-_UP = {"answers": "回答", "based-on": "依據", "supersedes": "取代", "realizes": "實現"}
+_UP = {"answers": "回答", "based-on": "依據", "supersedes": "取代", "realizes": "實現",
+       "refs": "指向", "depends-on": "前置"}
 
 
 def run(argv: list[str]) -> int:

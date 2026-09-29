@@ -363,6 +363,10 @@ def run(argv: list[str]) -> int:
     home.mkdir(parents=True, exist_ok=True)
     (home / CORPUS_DIR_NAME).mkdir(exist_ok=True)
     (home / "explorations").mkdir(exist_ok=True)   # 思考級記錄的家（純 md、引擎零管理）
+    # 治理層（專案最外層）：裁定／決策／唯一一份 roadmap。新專案一律啟用；既有專案重 init 不自動
+    # 啟用（啟用會改變發布與 roadmap 的行為），改由 `docspec roadmap migrate` 明確轉換。
+    if not is_reinit:
+        (home / "governance").mkdir(exist_ok=True)
     # scaffold：既有檔不覆寫（保留使用者客製的 config/writing-guide/glossary），只補缺
     # config/glossary/writing-guide 骨架一律英文（語言中性 doctrine）；交付語言由 develop 填進
     # writing-guide 的 Project conventions 區，config.language 先放 --lang 預設提示。
@@ -395,7 +399,8 @@ def run(argv: list[str]) -> int:
     print(f"{'Settings updated' if is_reinit else 'docspec project initialized'}: {project_root}")
     if is_reinit:
         print("  (existing config/writing-guide/glossary kept, not overwritten)")
-    print(f"  docspec/: {CONFIG_FILE_NAME}  {CORPUS_DIR_NAME}/  writing-guide.md  glossary.yaml")
+    print(f"  docspec/: {CONFIG_FILE_NAME}  {CORPUS_DIR_NAME}/  writing-guide.md  glossary.yaml"
+          + ("  governance/" if (home / "governance").is_dir() else ""))
     print("  .gitattributes: pins eol=lf for the fingerprinted text files (keeps fingerprints "
           "byte-identical across OS/worktrees)")
     print("  skills installed to (per tool = skill auto-load + command explicit invocation):")
