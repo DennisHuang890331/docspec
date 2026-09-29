@@ -192,3 +192,21 @@ def test_archive_creates_a_new_capability(proj, tmp_path):
     assert spec["purpose"] == "管理資料集"
     assert spec["requirements"][0]["scenarios"][0]["verified-by"] == ["app:tests/test_entry.py::test_width"]
     assert sp.validate_spec(spec) == []
+
+
+def test_one_archive_command_for_both_domains(proj, capsys):
+    from dspx.commands.change import archive as archive_cmd
+    from dspx.commands.change import change as doc_change_cmd
+    _change("fix")
+    capsys.readouterr()
+    assert archive_cmd.run(["fix", "--dry-run"]) == 0             # 軟體 change：走 code archive
+    assert "would archive fix" in capsys.readouterr().out
+    assert archive_cmd.run(["fix"]) == 0
+    assert chg.change_state(proj, "fix") == "archived"
+    assert archive_cmd.run(["nope"]) == 1
+    # 名稱跨領域不可重複
+    assert doc_change_cmd.run(["new", "fix", "--publish", "advisory"]) == 2
+    assert "software change named \"fix\"" in capsys.readouterr().err
+    assert doc_change_cmd.run(["new", "doc-only", "--publish", "advisory"]) == 0
+    assert code("change", "new", "doc-only", "--why", "x") == 1
+    assert "document change named \"doc-only\"" in capsys.readouterr().err

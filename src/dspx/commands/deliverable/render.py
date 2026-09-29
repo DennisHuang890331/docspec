@@ -46,6 +46,27 @@ def _guard_ledger_health(layout, article: str, rebaseline: bool) -> int | None:
     return None
 
 
+def _mark_preview_draft(layout, path, change_id: str) -> None:
+    """預覽檔檔頭標示「草稿，尚未定版」與對應的 change（使用意見：預覽看不出是草稿）。"""
+    from pathlib import Path
+
+    from dspx.engine.config import lang_subtag, load_config
+    from dspx.env.frontmatter import parse_frontmatter, render_frontmatter
+    p = Path(path)
+    if not p.is_file():
+        return
+    try:
+        lang = lang_subtag(load_config(layout.planning_home).get("language"))
+    except Exception:          # noqa: BLE001 — 標示是輔助，設定讀不到就用英文
+        lang = "en"
+    meta, body = parse_frontmatter(p.read_text(encoding="utf-8"))
+    meta["draft"] = (f"草稿，尚未定版：這是 change「{change_id}」的預覽，正式文件尚未改動"
+                     if lang == "zh" else
+                     f"DRAFT, not frozen: preview of change \"{change_id}\"; the official document "
+                     f"is unchanged")
+    p.write_text(render_frontmatter(meta, body), encoding="utf-8", newline="\n")
+
+
 def _render_change(layout, args) -> int:
     """render --change：從 union view（staging 優先、正式補底）渲染到 change 的 preview 區。
     正式 docs/ 零寫入；預覽成品與帳本從正式版 seed（★G2）。"""
@@ -67,6 +88,7 @@ def _render_change(layout, args) -> int:
     result = render_article(overlay, union_leaves, args.article,
                             ack_sections=set(args.ack), ack_own_sections=set(args.ack_own),
                             reason=args.reason or "")
+    _mark_preview_draft(layout, result["written_path"], args.change)
     total = len(result["sections"])
     print(f"synced change \"{args.change}\" preview of \"{args.article}\" -> {result['written_path']}")
     print(f"  {total} section(s), of which {result['drafted']} have prose and "

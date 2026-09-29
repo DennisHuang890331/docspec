@@ -12,7 +12,8 @@ def validate_all(layout) -> tuple[list[str], list[str]]:
     from dspx.engine.software import specs as sp
 
     if not io.has_software(layout):
-        return [], []
+        from dspx.engine import project_baseline as pb
+        return pb.validate(layout), []
     errs: list[str] = []
     warns: list[str] = []
     for cap in sp.list_capabilities(layout):
@@ -37,4 +38,5 @@ def validate_all(layout) -> tuple[list[str], list[str]]:
     e, w = ev.validate(layout)
     from dspx.engine.software import archive as arc
     e2, w2 = arc.validate_verified_by(layout)
-    return errs + e + e2, warns + w + w2
+    from dspx.engine import project_baseline as pb
+    return errs + e + e2 + pb.validate(layout), warns + w + w2

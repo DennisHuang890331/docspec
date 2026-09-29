@@ -26,7 +26,7 @@ You are the examiner, not the implementer. Your tests say what the spec promises
 
 4. **Link them to tasks** — tell the proposer, or run `docspec code task set <id> <task> --tests T1,T2` for the task that implements that requirement.
 
-5. **Answer objections** — `docspec code testplan list <id>` shows open objections. Read the implementer's reason against the spec text. Then either fix the test, sign it again and `docspec code testplan respond <id> <O-id> --resolution test-fixed --reason "…"`, or keep it and `--resolution rejected --reason "<which WHEN/THEN it checks>"`. If you and the implementer still disagree, record a question for the owner (dspx-govern).
+5. **Answer objections** — `docspec code testplan list <id>` shows open objections. Read the implementer's reason against the spec text. Then either fix the test, sign it again and `docspec code testplan respond <id> <O-id> --resolution test-fixed --reason "…"`, or keep it and `--resolution rejected --reason "<which WHEN/THEN it checks>"`. If you and the implementer still disagree, record a question for the owner (a question; see AGENTS.md).
 
 6. **Check coverage** — `docspec code change status <id>` must show no scenario without a planned test.
 

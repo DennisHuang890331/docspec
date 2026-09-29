@@ -33,7 +33,7 @@ Make the planned tests pass by changing the program, one task at a time. There i
 7. **Report** — `docspec code change status <id>` until every task is done; then hand to dspx-verify.
 
 **Pause if:**
-- The spec is wrong or incomplete for what the owner wants → back to dspx-propose (and dspx-govern if the owner must decide).
+- The spec is wrong or incomplete for what the owner wants → back to dspx-propose (and a question for the owner if they must decide).
 - An environment check fails (missing GPU, library, path pollution) → report it; do not declare skips to get around it.
 
 **Output**

@@ -21,7 +21,7 @@ Shape one software change so the engine can check it. Every file under `docspec/
 
 1. **Orient** — `docspec brief`, then `docspec code spec list` and `docspec code spec show <capability> --req R<n> --json` for just the requirements involved. Check `docspec decision list --json` for project decisions that bind this work.
 
-2. **Decide with the owner first** — anything the owner must choose goes through dspx-govern (question → read-back → ruling → decision). Do not write deltas that assume an unconfirmed choice.
+2. **Decide with the owner first** — anything the owner must choose is recorded as a question and ruled by the owner (read back, then `docspec ruling add`; see AGENTS.md). Do not write deltas that assume an unconfirmed choice.
 
 3. **Create the change** — `docspec code change new <kebab-id> --why "…" --what "…" [--what …] --modified <cap>,… --new <cap>,… [--depends-on <change>]`. Keep it to one coherent piece of work; if status warns it is large, split it.
 
@@ -34,7 +34,7 @@ Shape one software change so the engine can check it. Every file under `docspec/
 7. **Check and hand off** — `docspec code change status <id>`; fix every ✗. Link the roadmap: `docspec roadmap link <W-id> --ref swc:<id>`. Hand the change to the test role (dspx-test) before implementation starts.
 
 **Pause if:**
-- A delta would change behaviour the owner has not ruled on → ask via dspx-govern.
+- A delta would change behaviour the owner has not ruled on → ask the owner (question → read-back → ruling).
 - `change status` reports a base conflict → another change moved the spec; re-read it and rewrite the delta.
 
 **Output**

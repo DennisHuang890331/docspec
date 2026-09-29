@@ -80,7 +80,7 @@ def test_all_skill_descriptions_carry_trigger_sentences():
     desc = {s.name: s.description for s in available_skills()}
     assert "Use whenever" in desc["dspx-apply"]
     assert "stale-" in desc["dspx-apply"]            # 引擎狀態字入 description（最大槓桿）
-    assert "Use before any publish" in desc["dspx-factcheck"]
+    assert "Use before freezing a version" in desc["dspx-factcheck"]
     assert "Use when starting" in desc["dspx-develop"]          # 既有合格句（防回退）
     assert "Use for architecture" in desc["dspx-diagram"]       # 既有合格句（防回退）
 
@@ -90,9 +90,9 @@ def test_human_gate_skills_use_conditional_triggers():
     禁積極自動觸發措辭（會招來自動觸發＝違反自己的人閘鐵律）。"""
     from dspx.env.skills import available_skills
     desc = {s.name: s.description for s in available_skills()}
-    assert "ONLY when the human" in desc["dspx-publish"]
-    assert "never self-initiated" in desc["dspx-publish"]
-    assert "human asks to typeset" in desc["dspx-release"]
-    assert "never self-initiated" in desc["dspx-release"]
-    for name in ("dspx-publish", "dspx-release"):
-        assert "make sure to use" not in desc[name].lower()     # 積極措辭禁入人閘 skill
+    # 2026/09/30：dspx-publish 拿掉（定版＝`docspec freeze`，人閘寫在 AGENTS.md 與指令本身）；
+    # dspx-release 只在使用者說排版不對時才用。
+    assert "dspx-publish" not in desc
+    assert "only when the human says" in desc["dspx-release"]
+    assert "never runs unprompted" in desc["dspx-release"]
+    assert "make sure to use" not in desc["dspx-release"].lower()   # 積極措辭禁入人閘 skill

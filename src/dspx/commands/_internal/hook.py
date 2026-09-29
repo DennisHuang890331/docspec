@@ -32,7 +32,7 @@ HELP = "agent-tool gatekeeper (internal; PreToolUse calls `docspec hook guard`)"
 
 _BLOCK_MSG = (
     "[docspec] Blocked: archive/ holds published frozen versions, never to be modified. "
-    "To update content, edit docs/<article>/_latest.md, then `docspec publish` a new version."
+    "To update content, edit docs/<article>/_latest.md, then `docspec freeze` a new version."
 )
 
 _STORE_BLOCK_MSG = (
@@ -72,12 +72,14 @@ def _is_governance_file(token: str) -> bool:
 
 
 def _is_software_file(token: str) -> bool:
-    """`docspec/software/**.yaml`（`software/config.yaml` 除外）：軟體領域密封紀錄。"""
+    """`docspec/software/**.yaml`（`software/config.yaml` 除外）與 `docspec/baselines/**.yaml`（專案基線）。"""
     p = _clean(token)
     parts = p.parts
     for i in range(len(parts) - 1):
         if parts[i] == "docspec" and parts[i + 1] == "software":
             return p.suffix == ".yaml" and parts[i + 2:] != ("config.yaml",)
+        if parts[i] == "docspec" and parts[i + 1] == "baselines":
+            return p.suffix == ".yaml"
     return False
 
 

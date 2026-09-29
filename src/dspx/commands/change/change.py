@@ -55,6 +55,12 @@ def _cmd_new(argv: list[str]) -> int:
     except BootstrapError as exc:
         return exc.exit_code
 
+    from dspx.commands.change.archive import name_taken_elsewhere
+    clash = name_taken_elsewhere(layout, args.id, "doc")
+    if clash:
+        sys.stderr.write(f"docspec: refusing to create change \"{args.id}\": {clash} — change names "
+                         f"are shared by documents and software (one `docspec archive`).\n")
+        return 2
     if chg.change_state(layout, args.id) is not None:
         sys.stderr.write(f"docspec: change \"{args.id}\" already exists "
                          f"({chg.change_state(layout, args.id)}); not overwritten.\n")

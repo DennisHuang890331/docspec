@@ -188,3 +188,25 @@ def test_init_scaffolds_gitattributes_lf_pin(tmp_path, monkeypatch):
     ga.write_text("*.md text eol=lf\n# custom\n", encoding="utf-8")
     assert init_cmd.run([]) == 0
     assert "# custom" in ga.read_text(encoding="utf-8")
+
+
+def test_init_agents_md_dispatch_rules_follow_project_language(tmp_path, monkeypatch):
+    """2026/09/30：管理區塊是派工規範，語言依專案 config 的主語言；dspx-govern 的固定行為併進來。"""
+    zh = tmp_path / "zh"
+    zh.mkdir()
+    monkeypatch.chdir(zh)
+    assert init_cmd.run(["--tool", "codex", "--agents-md", "--lang", "zh-TW"]) == 0
+    text = (zh / "AGENTS.md").read_text(encoding="utf-8")
+    assert "## docspec 協作規範" in text and "docspec brief" in text
+    assert "docspec ruling add" in text and "docspec freeze" in text
+    assert "testplan sign" in text and "不用表格" not in text     # 個人偏好不進預設
+    en = tmp_path / "en"
+    en.mkdir()
+    monkeypatch.chdir(en)
+    assert init_cmd.run(["--tool", "codex", "--agents-md", "--lang", "en"]) == 0
+    text = (en / "AGENTS.md").read_text(encoding="utf-8")
+    assert "## docspec collaboration rules" in text and "docspec ruling add" in text
+    # 既有專案：依 config.yaml 的語言，不看 --lang 預設值
+    monkeypatch.chdir(zh)
+    assert init_cmd.run(["--tool", "codex", "--agents-md"]) == 0
+    assert "## docspec 協作規範" in (zh / "AGENTS.md").read_text(encoding="utf-8")

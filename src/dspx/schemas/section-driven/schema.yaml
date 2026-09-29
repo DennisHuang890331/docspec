@@ -176,7 +176,7 @@ workflow:
   boundaries:
     - publish is the only irreversible boundary; the human always pulls the trigger.
     - release touches the format layer only (template-pack params), never content — content's one source is the frozen snapshot md (export byte-lock guards it); a layout problem fixable only by changing content → raise an audit finding upstream, the human re-edits → re-publishes → re-releases; the agent never self-fixes content.
-    - Completeness gates sit at advancement (docspec publish), not at write time — half-formed work is free inside the loop, it just stays "developing" (status surfaces it; put never blocks on it).
+    - Completeness gates sit at advancement (docspec freeze), not at write time — half-formed work is free inside the loop, it just stays "developing" (status surfaces it; put never blocks on it).
     - Semantic judgment → audit (factcheck), never an engine gate (audit itself can hallucinate).
     - Mechanical text edits are ENGINE transactions, never hand-typed occurrence-by-occurrence — a rename/move goes through `docspec mv` (atomic; rewrites the path-keyed prose markers + audit/roadmap targets, self-checks, rolls back on failure), punctuation width through `docspec edit --punct`, corpus hygiene / empty-shell + verbatim-brief + title-number cleanup through `docspec tidy`, a project-wide term substitution through `docspec edit --term` (prose-span only; identifiers/code/URLs byte-exact). Hand-editing these — or an ad-hoc find-replace script — is the drift/corruption class the real corpus died on (a 22-script replace run that poisoned `OCC_LIMIT_*` identifier codes); use the command or a script that calls it, never a blind sweep.
     - Pin line endings at the repo level — a .gitattributes with `*.md` / `*.yaml` / `*.yml` as `text eol=lf` (docspec init scaffolds it for new projects; EXISTING projects should add it themselves). The engine normalizes CRLF when fingerprinting and writes LF, but the repo pin is the third defense layer against git autocrlf rewriting checkouts.
@@ -184,18 +184,18 @@ workflow:
     - Work that touches a NORMATIVE ruling or spans sections runs inside a CHANGE (docspec change new … --publish advisory|release-bound) — a staging draft branch: edits land in changes/<id>/staging/, official corpus/docs stay byte-frozen, render --change previews the union view, and `docspec change status` DERIVES per-target acceptance. Open it mid-develop (the moment you realize you're superseding a decision / rippling across documents), not as an upfront ceremony; the enlistment line is "touches a ruling?", not section count. The human's one gate is `docspec change archive` (running it = acceptance; "reject" = keep editing until the derivation goes green; abandon a dead end with --abandon, official never moved). NEVER hand-check off a task and NEVER author a progress/status/checkbox file — completeness is always derived; "tasks" names the derived view only.
     - Engine commands (docspec put/render/check/status/stale/normalize/tidy/mv/rename-term/change …) are the agent's internal machinery — run them autonomously, never ask the human "should I run docspec X?", never narrate command invocations. The human interface is intent-in / deliverable-out (they read docs/, not corpus/ or the engine). This is a runtime-conversation discipline the engine cannot observe — it is doctrine and reviewer vigilance, NOT a mechanical gate; the projection must not claim enforcement it does not have.
     - Contradictory inherited writing requirements converging on ONE section (a tree-parent brief vs a cross-tree governor brief, or two sibling governors) → STOP and surface both sources verbatim to the human; never pick a winner yourself (no precedence order is defined — it is a semantic call). check/lint back you up with a WARN when the aperture ancestor set supplies one brief field from two sources with divergent values, but the stop-and-ask is yours.
-  # Migration onboarding: how an EXISTING project (pre-docspec published versions + an existing
+  # Migration onboarding: how an EXISTING project (pre-docspec freezeed versions + an existing
   # version history) enters docspec. The recipe lives here and is projected by `docspec guide` —
   # never restated in drifting prose (guide omits the block when a schema lacks this key).
   migration:
     summary: >-
       Migrating an existing project into docspec — three steps, in order, all before the first
       publish. The steps are independent (each can be retried on its own); none is optional when
-      the project carries pre-docspec published versions and an existing version lineage.
+      the project carries pre-docspec freezeed versions and an existing version lineage.
     steps:
       - >-
         Register the pre-docspec legacy versions into the freeze hash net:
-        docspec publish register-legacy <dir> [--into <name>]. The engine moves them under
+        docspec freeze register-legacy <dir> [--into <name>]. The engine moves them under
         docs/archive/legacy/<name>/ (a source already inside an archive/ folder is registered
         in place) and records their hashes in the `legacy:` table of .freeze.yaml — the same
         tamper/deletion protection as published snapshots. Already-registered paths are refused
@@ -207,7 +207,7 @@ workflow:
         pre-docspec lineage stays visible in one table — publish keeps the seeded rows and
         appends each new release below them.
       - >-
-        Seed the version chain on the FIRST publish: docspec publish <article> --set-version
+        Seed the version chain on the FIRST publish: docspec freeze <article> --set-version
         <one step after the highest pre-docspec version> (e.g. history ended at 2.5.1 →
         --set-version 2.5.2). First publish only — once any version exists the flag is refused
         (it cannot rewrite history); later releases bump normally with --level.

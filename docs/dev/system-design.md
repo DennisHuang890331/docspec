@@ -38,6 +38,7 @@
 - 2026/09/30：使用者裁定：拿掉 dspx-govern 這個 skill，改成 AGENTS.md 的固定行為（開工看 brief、決定先覆述再記錄、方向改變看 impact）加上指令說明；「白話、先講結論、代號放括號、不自創名詞」列為所有專案的預設溝通規則。publish 與 release 另行討論。
 - 2026/09/30：使用者裁定：文件的 `change archive` 與軟體的 `code archive` 合併成一個 `docspec archive <change>`（入口合一、兩邊檢查各自保留、change 名稱跨領域不可重複）；文件定版（原 publish）改名為 `docspec freeze`；release 簡化成一個指令直接產出 PDF，覺得不對時才進入調整，不預設來回。
 - 2026/09/30：使用者裁定：專案基線甲、乙都做（定版時自動記下軟體狀態；另有交付時一次釘住整個專案的指令）。派工規範草稿與待改清單寫在 `dispatch-rules-draft.md`，等使用者確認。
+- 2026/09/30：使用者確認派工規範草稿與待改清單，開始實作並完成：`docspec freeze`（原 publish，檢查併進指令）、一個 `docspec archive`、專案基線甲乙（`docspec baseline`）、export 一個指令、預覽標示草稿、`init --agents-md` 依語言寫入協作規範；dspx-publish、dspx-govern 兩個 skill 拿掉。細節見 `phase2-current.md` 第 10 節。**等待使用者確認第二期驗收關卡。**
 
 已完成、不在本分支範圍：2026/09/24 的安裝器調整（共用 `.agents/skills`、Claude 以連結共用、Gemini CLI、`--agents-md`）已併入 main。
 

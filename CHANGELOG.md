@@ -10,6 +10,34 @@ a minor bump.
 
 ## [Unreleased]
 
+### Changed — freeze, one archive, project baselines, collaboration rules (branch only)
+
+- **`docspec publish` is now `docspec freeze`**; `publish` stays as an alias.
+  - The command itself now checks what the dspx-publish skill used to ask the agent to check:
+    - every section is written and current (`--allow-incomplete` overrides);
+    - the snapshot carries no leftover markers.
+  - A missing review is a reminder, not a block.
+  - Without `--level`, the level is suggested: minor when sections were added or removed, otherwise patch.
+  - Date versions: `--date-version`, or `date_versions: [<article>]` in `config.yaml`, gives one version per day.
+  - The dspx-publish skill is removed.
+- **One `docspec archive <change>`** for document and software changes, detected by name.
+  - Change names are unique across both domains.
+  - `docspec change archive` and `docspec code archive` keep working.
+- **Project baselines.**
+  - Every `docspec freeze` records the software state of that moment: spec fingerprints, repo commits, open software changes and active decisions. Look it up with `docspec baseline doc <article> <version>`.
+  - `docspec baseline <name>` pins the whole project for a delivery: every document's frozen version (and whether edits are pending), the specs, the commits, the decisions and any open changes. Also `baseline list` and `baseline show`.
+  - Baseline files are sealed and hook-protected.
+- **Export is one command.** `docspec export` produces the PDF. The dspx-release skill now only fixes layout problems the human points out.
+- **Change previews are marked as drafts** in their header, naming the change.
+- **`docspec init --agents-md` writes collaboration rules**, in the project's language. They cover:
+  - starting work;
+  - talking to the owner;
+  - recording the owner's decisions;
+  - roles (implementer, separate test role, reviewer);
+  - what an assignment contains;
+  - subagent behaviour, parallel work and hard limits.
+- **The dspx-govern skill is removed**; its always-on behaviour lives in those rules.
+
 ### Added — software domain replacing OpenSpec (phase 2; branch only)
 
 Software work now lives in docspec next to the document tree, under the same governance layer (design: `docs/dev/phase2-design.md`, detail and implementation notes: `docs/dev/phase2-detail.md`). Everything under `docspec/software/` is sealed and written only through `docspec code …`.

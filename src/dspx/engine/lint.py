@@ -578,7 +578,7 @@ def _lint_freeze(layout: Layout) -> list[Finding]:
         detail = f"frozen area (archive/) {problem} -- published versions are immutable"
         if problem.startswith("not registered"):
             # 「未登記」死路變岔路口：附遷移指路的兩條正路（刪除/竄改訊息不加）
-            detail += (" (pre-docspec legacy versions: run 'docspec publish register-legacy "
+            detail += (" (pre-docspec legacy versions: run 'docspec freeze register-legacy "
                        "<dir>', or keep them outside archive/ (e.g. docs/legacy/))")
         findings.append(Finding("V11", ERROR, rel, detail))
     return findings

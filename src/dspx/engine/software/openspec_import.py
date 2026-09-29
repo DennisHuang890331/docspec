@@ -322,7 +322,7 @@ def _change_parts(folder: Path, cid: str, tool: str, rel: str) -> tuple[dict, di
     if merge:
         design["open-questions"] = [
             f"待合併的設計決策：{'、'.join(merge)}（design.md 以「以後者為準」局部取代）。請寫出合併後的"
-            f"完整決策（dspx-govern：覆述 → 裁定 → decision add --supersedes），再用 "
+            f"完整決策（覆述 → 裁定 → decision add --supersedes），再用 "
             f"`docspec code change design --decision` 引用。"]
     if prop["impact"]:
         design["migration"] = prop["impact"]

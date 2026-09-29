@@ -69,7 +69,7 @@ def _resolve_pdf(layout: Layout, article: str, version: str | None,
         versions = layout.existing_versions(article)
         if not versions:
             sys.stderr.write(
-                f"docspec: article \"{article}\" has no published snapshot yet — first `docspec publish {article}`"
+                f"docspec: article \"{article}\" has no published snapshot yet — first `docspec freeze {article}`"
                 f" then `docspec export {article}`.\n")
             return None
         top = max(versions)

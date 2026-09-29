@@ -39,12 +39,13 @@ def _v11(home):
 # ── 2.x 指令面：註冊/可見性/子動詞分派 ─────────────────────────────────
 
 
-def test_register_legacy_folded_into_publish():
-    """freeze 退場：register-legacy 併進 `publish register-legacy`；freeze 不再是指令。"""
+def test_register_legacy_is_a_freeze_subverb():
+    """2026/09/30：定版指令改名 `docspec freeze`（publish 留作別名）；register-legacy 是它的子動詞。"""
     from dspx.commands import REGISTRY
+    from dspx.commands.deliverable import freeze as freeze_main
     from dspx.commands.deliverable import publish as publish_cmd
-    assert "freeze" not in REGISTRY
-    # publish 把 register-legacy 子動詞路由到 freeze 邏輯（非目錄 → 1，證明委派生效）
+    assert REGISTRY["freeze"] is freeze_main and "publish" in REGISTRY
+    assert freeze_main.run(["register-legacy", "/no/such/dir"]) == 1
     assert publish_cmd.run(["register-legacy", "/no/such/dir"]) == 1
 
 
@@ -300,7 +301,7 @@ def test_v11_not_registered_message_points_to_migration(make_project, write_leaf
     findings = _v11(home)
     assert findings
     detail = findings[0].detail
-    assert "docspec publish register-legacy" in detail
+    assert "docspec freeze register-legacy" in detail
     assert "docs/legacy/" in detail
 
 
@@ -398,7 +399,7 @@ def test_guide_projects_migration_recipe(make_project, monkeypatch, capsys):
     assert guide.run([]) == 0
     out = capsys.readouterr().out
     assert "Migration onboarding" in out                          # 含 ToC 條目＋區塊
-    i1 = out.index("publish register-legacy")
+    i1 = out.index("freeze register-legacy")
     i2 = out.index("revision history")
     i3 = out.index("--set-version")
     assert i1 < i2 < i3                                           # 三步依序
@@ -432,12 +433,12 @@ def test_guide_omits_migration_when_schema_lacks_key(make_project, monkeypatch, 
     assert "Workflow (loop)" in out                               # 其餘照印
 
 
-def test_publish_skill_carries_migration_stance():
-    """6.15c：dspx-publish SKILL.md 帶遷移 stance、機制細節指向 docspec guide（不重抄旗標）。"""
-    from dspx.env.skills import available_skills
-    skill = next(s for s in available_skills() if s.name == "dspx-publish")
-    text = skill.source.read_text("utf-8")
-    assert "Migrating an existing project" in text
-    assert "Migration onboarding" in text and "docspec guide" in text
-    assert "--set-version" not in text                            # 旗標不重抄（會漂移）
-    assert "register-legacy" not in text
+def test_freeze_carries_migration_stance(capsys):
+    """2026/09/30：dspx-publish skill 拿掉後，遷移提醒由 `docspec freeze` 自己的說明承接
+    （--set-version 只限首次、延續舊編號；register-legacy 是它的子動詞）。"""
+    from dspx.commands.deliverable import freeze as freeze_main
+    import pytest
+    with pytest.raises(SystemExit):
+        freeze_main.run(["--help"])
+    out = capsys.readouterr().out
+    assert "--set-version" in out and "migrated project" in out

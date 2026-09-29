@@ -49,7 +49,7 @@ docspec/software/
    - 執行 `code archive --dry-run`，看還有哪些問題擋著封存。
    - 審閱證據，並做語意審查：這個測試真的能證明 THEN 嗎？
    - 需要人看的需求，取得使用者驗收。
-   - 最後執行 `code archive`，並用 `code test` 跑回歸測試。
+   - 最後執行 `docspec archive <change>`，並用 `code test` 跑回歸測試。
 
 ## 5. 證據與任務完成
 
@@ -122,7 +122,29 @@ docspec/software/
 - **改 `conftest.py` 或 pytest 設定作弊**：簽收只保護測試檔本身。
 - **程式偵測「正在測試」而作弊**：只能靠驗證時的語意審查。
 
-## 10. 留給第三期
+## 10. 文件與專案層級的配套（2026/09/30 裁定）
+
+- **一個 `docspec archive <change>`**：文件 change 和軟體 change 共用一個入口，程式依名稱判斷是哪一種，兩邊的檢查各自保留。change 名稱跨領域不可重複，建立時就會擋下。舊的 `docspec change archive`、`docspec code archive` 仍然可以用。
+- **定版改名 `docspec freeze`**（舊名 publish 保留為別名）：
+  - 原本寫在 skill 裡要 agent 自己做的檢查，全部併進指令：每一節都寫好、沒有待更新；check 與 lint 無錯誤；快照不含殘留標記。
+  - factcheck 沒跑過只提醒，不擋。
+  - 沒給 `--level` 時自動建議：章節有增減用 minor，否則 patch。
+  - 週報這類文件可用日期當版本：`--date-version`，或在 config 的 `date_versions` 列出文件；同一天只能定一版。
+  - 只在使用者明確要求時執行。
+  - dspx-publish skill 拿掉。
+- **change 預覽標示草稿**：預覽檔的檔頭寫明「草稿，尚未定版」與對應的 change。
+- **排版**：`docspec export <文件>` 一個指令產出 PDF，版型用專案設定。dspx-release 只在使用者說排版不對時使用，只處理被指出的問題。
+- **專案基線**（系統設計 SR10）：
+  - 甲：每次 `docspec freeze`，自動記下當下的軟體規格指紋、各程式 repo 的 commit、進行中的軟體 change、有效的專案決策（`docspec/baselines/documents/<文件>@<版本>.yaml`）。查詢：`docspec baseline doc <文件> <版本>`。
+  - 乙：`docspec baseline <名稱>`，交付時把整個專案一次釘住：所有文件目前的定版版本（以及是否有尚未定版的修改）、軟體規格、各 repo 的 commit、有效決策、還開著的 change；有需要注意的地方會一併列出。名稱不可重複，寫了就不改。查詢：`docspec baseline list`、`docspec baseline show <名稱>`。
+  - 基線檔封條保護，hook 擋手改。
+- **派工規範**：`docspec init --agents-md` 在根目錄 AGENTS.md 寫入協作規範區塊，語言依專案 config 的主語言。dspx-govern skill 拿掉，它的固定行為寫進規範的「使用者的決定」一節。
+
+目前的 skill：
+- 文件：dspx-develop、dspx-apply、dspx-factcheck、dspx-release（只在排版不對時用）、dspx-diagram（輔助）。
+- 軟體：dspx-propose、dspx-test、dspx-implement、dspx-verify。
+
+## 11. 留給第三期
 
 - 同一個 change 在兩個分支各加任務，`tasks.yaml` 合併時會衝突，而且是封條檔，不能手動合併。
 - 證據編號在兩個分支會撞號（和治理層編號同一個問題）。

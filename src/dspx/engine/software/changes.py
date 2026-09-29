@@ -143,6 +143,11 @@ def new_change(layout: Layout, cid: str, *, why: str, what: list[str], new_caps:
         raise io.SoftwareError(reason)
     if change_state(layout, cid):
         raise io.SoftwareError(f"software change \"{cid}\" already exists ({change_state(layout, cid)})")
+    from dspx.commands.change.archive import name_taken_elsewhere
+    clash = name_taken_elsewhere(layout, cid, "software")
+    if clash:
+        raise io.SoftwareError(f"{clash} — change names are shared by documents and software "
+                               f"(one `docspec archive`)")
     existing = set(sp.list_capabilities(layout))
     for c in new_caps:
         if c in existing:
