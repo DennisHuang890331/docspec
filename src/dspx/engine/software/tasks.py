@@ -33,8 +33,9 @@ from dspx.engine.software import specs as sp
 TEST_LEVELS = ("unit", "integration", "browser", "real-model", "e2e")
 TASK_STATUSES = ("not-started", "in-progress", "done", "done-waived", "needs-rerun")
 ENGINE_TASK_FIELDS = ("status", "completed-at", "evidence", "waived-by")
-TASK_FIELDS = ("id", "title", "implements", "files", "verify", "depends-on", *ENGINE_TASK_FIELDS)
-TEST_FIELDS = ("id", "location", "covers", "level", "written-by", "created-at", "note")
+TASK_FIELDS = ("id", "title", "implements", "files", "verify", "depends-on", "created-by",
+               *ENGINE_TASK_FIELDS)
+TEST_FIELDS = ("id", "location", "covers", "level", "written-by", "created-at", "note", "signed")
 STATUS_LABEL = {"not-started": "未開始", "in-progress": "進行中", "done": "完成",
                 "done-waived": "完成（含豁免）", "needs-rerun": "需重跑證據",
                 "imported-done": "匯入時已完成（無證據）"}
@@ -93,8 +94,34 @@ def add_test(tests: dict, *, location: str, covers: list[str], level: str, tool:
     return rec
 
 
+def sign_tests(layout: Layout, ch: dict, test_ids: list[str], *, tool: str, now: str,
+               fingerprint) -> list[dict]:
+    """測試角色簽收：記下測試檔目前的內容指紋。只能由撰寫者（或使用者）簽；檔案必須已存在。"""
+    tests = ch["tests"].get("tests") or []
+    chosen = [t for t in tests if not test_ids or str(t.get("id")) in test_ids]
+    missing = set(test_ids) - {str(t.get("id")) for t in tests}
+    if missing:
+        raise io.SoftwareError(f"no planned test(s) {', '.join(sorted(missing))}")
+    if not chosen:
+        raise io.SoftwareError("nothing to sign: the change has no planned tests")
+    implementers = {t.get("created-by") for t in ch["tasks"].get("tasks") or []} - {None, "user"}
+    for t in chosen:
+        if tool != "user" and tool != t.get("written-by"):
+            raise io.SoftwareError(f"test {t['id']} was written by {t.get('written-by')}; only its author "
+                                   f"(the test role) or the owner signs it off")
+        if tool in implementers and tool != "user":
+            raise io.SoftwareError(f"{tool} created implementation tasks in this change; the test role "
+                                   f"must be a different agent")
+        fp = fingerprint(t["location"])
+        if fp in ("missing", "unknown-repo"):
+            raise io.SoftwareError(f"test {t['id']}: {t['location']} does not exist yet — write it first")
+        t["signed"] = {"by": tool, "at": now, "fingerprint": fp}
+    return chosen
+
+
 def add_task(tasks: dict, *, title: str, implements: list[str], files: list[str],
-             methods: list[str], tests: list[str], allow_skips: bool, depends_on: list[str]) -> dict:
+             methods: list[str], tests: list[str], allow_skips: bool, depends_on: list[str],
+             tool: str | None = None) -> dict:
     if not title.strip():
         raise io.SoftwareError("task needs --title")
     for m in methods:
@@ -117,9 +144,67 @@ def add_task(tasks: dict, *, title: str, implements: list[str], files: list[str]
     rec["verify"] = verify
     if depends_on:
         rec["depends-on"] = depends_on
+    if tool:
+        rec["created-by"] = tool
     rec["status"] = "not-started"
     tasks["tasks"].append(rec)
     return rec
+
+
+def set_task(ch: dict, task_id: str, changes: dict) -> dict:
+    """改任務的連結欄位（None＝不動；空清單＝拿掉）。changes 的鍵：title, implements, files, verify,
+    tests, allow-skips, depends-on。"""
+    t = next((x for x in ch["tasks"].get("tasks") or [] if str(x.get("id")) == str(task_id)), None)
+    if t is None:
+        raise io.SoftwareError(f"change {ch['id']} has no task \"{task_id}\"")
+    v = t.setdefault("verify", {})
+    if changes.get("title"):
+        t["title"] = str(changes["title"]).strip()
+    for key in ("implements", "files", "depends-on"):
+        if changes.get(key) is not None:
+            vals = io.as_list(changes[key])
+            if vals:
+                t[key] = vals
+            else:
+                t.pop(key, None)
+    if changes.get("verify") is not None:
+        methods = io.as_list(changes["verify"])
+        bad = [m for m in methods if m not in sp.VERIFICATION_METHODS]
+        if bad:
+            raise io.SoftwareError(f"task {task_id}: unknown verification method(s) {', '.join(bad)}")
+        v["methods"] = methods
+    if changes.get("tests") is not None:
+        v["tests"] = io.as_list(changes["tests"])
+        if not v["tests"]:
+            v.pop("tests")
+    if changes.get("allow-skips") is not None:
+        if changes["allow-skips"]:
+            v["allow-skips"] = True
+        else:
+            v.pop("allow-skips", None)
+    if "test" in io.as_list(v.get("methods")) and not v.get("tests"):
+        raise io.SoftwareError(f"task {task_id}: a task verified by test needs tests (planned test ids)")
+    return t
+
+
+def gaps(layout: Layout, ch: dict) -> dict:
+    """還缺的連結：沒有任務實作的需求、沒有規劃測試的情境、還沒填驗證方法或檔案的任務。"""
+    tasks = ch["tasks"].get("tasks") or []
+    changed_reqs, changed_scns = _changed_requirements(ch)
+    implemented = {f"{sp.split_ref(x)[0]}/{sp.split_ref(x)[1]}" for t in tasks
+                   for x in io.as_list(t.get("implements"))}
+    covered = {c for t in ch["tests"].get("tests") or [] for c in io.as_list(t.get("covers"))}
+    need_test = []
+    for ref in sorted(changed_scns):
+        cap, rid, _ = sp.split_ref(ref)
+        req = _requirement_after(layout, ch, f"{cap}/{rid}") or {}
+        if "test" in io.as_list(req.get("verification")) and ref not in covered:
+            need_test.append(ref)
+    return {"requirements-without-task": sorted(r for r in changed_reqs if r not in implemented),
+            "scenarios-without-test": need_test,
+            "tasks-to-complete": [t for t in tasks if t.get("status") != "imported-done"
+                                  and (not io.as_list((t.get("verify") or {}).get("methods"))
+                                       or not io.as_list(t.get("files")))]}
 
 
 def add_objection(tests: dict, *, test_id: str, reason: str, tool: str, today: str) -> dict:
@@ -254,8 +339,11 @@ def validate_tasks_and_tests(layout: Layout, ch: dict) -> tuple[list[str], list[
             if not repo_known(layout, repo):
                 errs.append(f"{tw}: file \"{f}\" is in unregistered repo \"{repo}\"")
             elif (repo, path) in test_files:
-                warns.append(f"{tw}: declares test file \"{f}\" — tests belong to the test role, "
-                             f"not the implementer")
+                errs.append(f"{tw}: declares test file \"{f}\" — tests belong to the test role, "
+                            f"not the implementer")
+        if "test" in methods and not io.as_list(t.get("files")) and t.get("status") != "imported-done":
+            warns.append(f"{tw}: declares no files, so later code changes will not send it back to "
+                         f"\"needs re-run\" (`docspec code task set … --files`)")
         for dep in io.as_list(t.get("depends-on")):
             if dep not in task_ids:
                 errs.append(f"{tw}: depends-on unknown task \"{dep}\"")

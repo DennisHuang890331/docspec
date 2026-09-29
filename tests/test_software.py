@@ -294,7 +294,7 @@ def test_task_rules_repo_and_test_file_warning(sw, capsys):
     _rc, out = _status(capsys)
     assert any("unregistered repo \"other\"" in e for e in out["errors"])
     assert any("dependency cycle" in e for e in out["errors"])
-    assert any("tests belong to the test role" in w for w in out["warnings"])
+    assert any("tests belong to the test role" in e for e in out["errors"])
 
 
 def test_decision_references_must_be_active(sw, capsys):

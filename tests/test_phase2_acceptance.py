@@ -72,6 +72,7 @@ def _deliver(cid: str, *, ref: str = "R1/S1", then: str = "第一列完整可見
          "--ref", ref, "--then", then)
     code("testplan", "add", cid, "--location", f"labelvault:tests/browser/test_entry_page.py::{test}",
          "--covers", f"task-entry-page/{ref}", "--level", "browser", "--by", "gemini")
+    code("testplan", "sign", cid, "--by", "gemini")
     code("task", "add", cid, "--title", "6.6 調整首頁版面", "--implements",
          f"task-entry-page/{ref.split('/')[0]}", "--files", "labelvault:src/portal.py",
          "--verify", "test", "--tests", "T1")

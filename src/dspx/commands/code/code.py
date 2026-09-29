@@ -106,6 +106,10 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("--purpose", default=None, help="purpose of a new capability")
     x.add_argument("--from", dest="from_file", default=None,
                    help="YAML file: {capability, purpose?, deltas: [...]} or a list of those")
+    x = cs.add_parser("gaps", help="what links are still missing (tasks, planned tests)")
+    x.add_argument("id")
+    x.add_argument("--template", action="store_true",
+                   help="print a YAML draft to fill in and load with task set --from / testplan add --from")
     x = cs.add_parser("undelta", help="take back spec deltas (to rewrite them)")
     x.add_argument("id")
     x.add_argument("--capability", required=True)
@@ -134,7 +138,10 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("--depends-on", default="", help="task ids in this change")
     x = ts.add_parser("set", help="fill in or change a task's links (e.g. after an OpenSpec import)")
     x.add_argument("change")
-    x.add_argument("task")
+    x.add_argument("task", nargs="?")
+    x.add_argument("--from", dest="from_file", default=None,
+                   help="YAML with `tasks: [{task, implements, files, verify, tests, …}]` "
+                        "(see `docspec code change gaps --template`)")
     x.add_argument("--title", default=None)
     x.add_argument("--implements", default=None, help="replace: cap/R1,…")
     x.add_argument("--files", default=None, help="replace: repo:path,…")
@@ -153,10 +160,17 @@ def _parser() -> argparse.ArgumentParser:
     tps = tp.add_subparsers(dest="op")
     x = tps.add_parser("add", help="plan a test for scenarios")
     x.add_argument("change")
-    x.add_argument("--location", required=True, help="repo:path::test_name")
-    x.add_argument("--covers", required=True, help="cap/R1/S1,… scenarios it verifies")
+    x.add_argument("--location", default=None, help="repo:path::test_name")
+    x.add_argument("--covers", default=None, help="cap/R1/S1,… scenarios it verifies")
+    x.add_argument("--from", dest="from_file", default=None,
+                   help="YAML with `tests: [{location, covers, level, note}]`")
     x.add_argument("--level", default="unit", help=", ".join(tk.TEST_LEVELS))
     x.add_argument("--note", default=None)
+    x.add_argument("--by", default=None)
+    x = tps.add_parser("sign", help="test role: sign off the written tests (evidence refuses tests "
+                       "that are unsigned or changed after sign-off)")
+    x.add_argument("change")
+    x.add_argument("tests", nargs="*", help="test ids (default: all planned tests)")
     x.add_argument("--by", default=None)
     x = tps.add_parser("remove", help="remove a planned test no task uses")
     x.add_argument("change")
@@ -177,7 +191,7 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("--by", default=None)
     evd = top.add_parser("evidence", help="evidence; the engine derives task completion from it")
     es = evd.add_subparsers(dest="op")
-    x = es.add_parser("run", help="engine runs the task's planned tests (or the command after --)")
+    x = es.add_parser("run", help="engine runs the task's planned tests with the repo's test runner")
     x.add_argument("change")
     x.add_argument("task")
     x.add_argument("--timeout", type=int, default=1800)
@@ -292,6 +306,29 @@ def _deltas_from_args(args) -> list[tuple[str, dict, str | None]]:
     return [(args.capability, raw, args.purpose)]
 
 
+def _gaps_template(cid: str, g: dict) -> str:
+    """缺口草稿：agent 填好後分兩次載入（實作者 task set --from；測試角色 testplan add --from）。"""
+    lines = [f"# Missing links for software change {cid}.",
+             "# Implementer: fill `tasks`, then  docspec code task set " + cid + " --from <file>",
+             "# Test role:   fill `tests`, then  docspec code testplan add " + cid + " --from <file>",
+             "#", "# Requirements that no task implements yet (put them in some task's `implements`):"]
+    lines += [f"#   {r}" for r in g["requirements-without-task"]] or ["#   (none)"]
+    lines += ["", "tasks:"]
+    for t in g["tasks-to-complete"]:
+        v = t.get("verify") or {}
+        lines += [f"  - task: \"{t['id']}\"   # {str(t.get('title'))[:70]}",
+                  f"    implements: {json.dumps(io.as_list(t.get('implements')))}",
+                  f"    files: {json.dumps(io.as_list(t.get('files')))}",
+                  f"    verify: {json.dumps(io.as_list(v.get('methods')))}   # test / inspection / "
+                  f"demonstration / analysis",
+                  f"    tests: {json.dumps(io.as_list(v.get('tests')))}   # planned test ids once they exist"]
+    lines += ["", "tests:"]
+    for ref in g["scenarios-without-test"]:
+        lines += ["  - location: \"\"   # repo:path::test_name — leave empty to skip",
+                  f"    covers: [\"{ref}\"]", "    level: unit"]
+    return "\n".join(lines) + "\n"
+
+
 def _print_findings(errs: list[str], warns: list[str]) -> None:
     for e in errs:
         print(f"  ✗ {e}")
@@ -371,6 +408,23 @@ def _change(layout, args) -> int:
         for a in added:
             print(f"code change delta: {args.id}: {a}")
         return 0
+    if args.op == "gaps":
+        g = tk.gaps(layout, ch)
+        if args.template:
+            print(_gaps_template(args.id, g), end="")
+            return 0
+        print(f"change {args.id}:")
+        print(f"  requirements without a task: {len(g['requirements-without-task'])}")
+        for r in g["requirements-without-task"]:
+            print(f"    - {r}")
+        print(f"  scenarios without a planned test: {len(g['scenarios-without-test'])}")
+        for r in g["scenarios-without-test"]:
+            print(f"    - {r}")
+        print(f"  tasks missing verification or files: {len(g['tasks-to-complete'])}")
+        for t in g["tasks-to-complete"]:
+            print(f"    - {t['id']}. {t.get('title')}")
+        print(f"(fill them in bulk: `docspec code change gaps {args.id} --template > links.yaml`)")
+        return 0
     if args.op == "undelta":
         removed = chg.remove_deltas(layout, args.id, args.capability, args.ref)
         print(f"code change undelta: {args.id}: removed {removed} delta(s) on {args.capability} {args.ref}")
@@ -418,42 +472,35 @@ def _task(layout, args) -> int:
     if args.op == "add":
         rec = tk.add_task(ch["tasks"], title=args.title, implements=_csv(args.implements),
                           files=_csv(args.files), methods=_csv(args.verify), tests=_csv(args.tests),
-                          allow_skips=args.allow_skips, depends_on=_csv(args.depends_on))
+                          allow_skips=args.allow_skips, depends_on=_csv(args.depends_on),
+                          tool=gv.detect_tool(None))
         chg.write_part(layout, args.change, "tasks", ch["tasks"])
         print(f"code task add: {args.change} task {rec['id']} — {rec['title']}")
         return 0
     if args.op == "set":
-        t = next((x for x in ch["tasks"].get("tasks") or [] if str(x.get("id")) == args.task), None)
-        if t is None:
-            return fail(f"change {args.change} has no task \"{args.task}\"")
-        v = t.setdefault("verify", {})
-        if args.title:
-            t["title"] = args.title.strip()
-        for key, raw in (("implements", args.implements), ("files", args.files),
-                         ("depends-on", args.depends_on)):
-            if raw is not None:
-                if _csv(raw):
-                    t[key] = _csv(raw)
-                else:
-                    t.pop(key, None)
-        if args.verify is not None:
-            bad = [m for m in _csv(args.verify) if m not in sp.VERIFICATION_METHODS]
-            if bad:
-                return fail(f"--verify: unknown method(s) {', '.join(bad)}")
-            v["methods"] = _csv(args.verify)
-        if args.tests is not None:
-            v["tests"] = _csv(args.tests)
-            if not v["tests"]:
-                v.pop("tests")
-        if args.allow_skips is not None:
-            if args.allow_skips == "yes":
-                v["allow-skips"] = True
-            else:
-                v.pop("allow-skips", None)
-        if "test" in io.as_list(v.get("methods")) and not v.get("tests"):
-            return fail("a task verified by test needs --tests (planned test ids)")
+        if args.from_file:
+            entries = (yaml.safe_load(Path(args.from_file).read_text(encoding="utf-8")) or {}).get("tasks")
+            if not isinstance(entries, list):
+                return fail("--from: the file needs a `tasks:` list")
+            for e in entries:                       # 全部套用成功才寫入
+                if not isinstance(e, dict) or not e.get("task"):
+                    return fail("--from: every entry needs `task: <id>`")
+                tk.set_task(ch, str(e["task"]), {k: e.get(k) for k in (
+                    "title", "implements", "files", "verify", "tests", "allow-skips", "depends-on")})
+            done = [str(e["task"]) for e in entries]
+        else:
+            if not args.task:
+                return fail("task set needs a task id (or --from FILE)")
+            tk.set_task(ch, args.task, {
+                "title": args.title, "implements": None if args.implements is None else _csv(args.implements),
+                "files": None if args.files is None else _csv(args.files),
+                "verify": None if args.verify is None else _csv(args.verify),
+                "tests": None if args.tests is None else _csv(args.tests),
+                "allow-skips": None if args.allow_skips is None else args.allow_skips == "yes",
+                "depends-on": None if args.depends_on is None else _csv(args.depends_on)})
+            done = [args.task]
         chg.write_part(layout, args.change, "tasks", ch["tasks"])
-        print(f"code task set: {args.change} task {args.task} updated")
+        print(f"code task set: {args.change} task(s) {', '.join(done)} updated")
         _report_refresh(ev.refresh(layout, args.change), args.change)
         return 0
     if args.op == "remove":
@@ -502,10 +549,36 @@ def _testplan(layout, args) -> int:
         print(f"code testplan remove: {args.change} {args.test}")
         return 0
     tool = gv.detect_tool(args.by)
+    if args.op == "sign":
+        signed = tk.sign_tests(layout, ch, args.tests, tool=tool, now=ev._now(),
+                               fingerprint=lambda loc: ev.file_hash(layout, ev.test_file_key(loc)))
+        chg.write_part(layout, args.change, "tests", tests)
+        for t in signed:
+            print(f"code testplan sign: {args.change} {t['id']} {t['location']} signed by {tool}")
+        _report_refresh(ev.refresh(layout, args.change), args.change)
+        return 0
     if args.op == "add":
-        rec = tk.add_test(tests, location=args.location, covers=_csv(args.covers), level=args.level,
-                          tool=tool, note=args.note, today=gv.today())
-        msg = f"code testplan add: {args.change} {rec['id']} {rec['location']}"
+        if args.from_file:
+            entries = (yaml.safe_load(Path(args.from_file).read_text(encoding="utf-8")) or {}).get("tests")
+            if not isinstance(entries, list):
+                return fail("--from: the file needs a `tests:` list")
+            added, skipped = [], 0
+            for e in entries:
+                if not isinstance(e, dict) or not str(e.get("location") or "").strip():
+                    skipped += 1                          # 範本裡還沒填位置的列
+                    continue
+                added.append(tk.add_test(tests, location=str(e["location"]).strip(),
+                                         covers=io.as_list(e.get("covers")),
+                                         level=str(e.get("level") or "unit"), tool=tool,
+                                         note=e.get("note"), today=gv.today()))
+            msg = (f"code testplan add: {args.change} {len(added)} test(s) planned"
+                   + (f"; {skipped} entr(ies) without a location skipped" if skipped else ""))
+        else:
+            if not args.location or not args.covers:
+                return fail("testplan add needs --location and --covers (or --from FILE)")
+            rec = tk.add_test(tests, location=args.location, covers=_csv(args.covers), level=args.level,
+                              tool=tool, note=args.note, today=gv.today())
+            msg = f"code testplan add: {args.change} {rec['id']} {rec['location']}"
     elif args.op == "object":
         rec = tk.add_objection(tests, test_id=args.test, reason=args.reason, tool=tool, today=gv.today())
         msg = f"code testplan object: {args.change} {rec['id']} on {rec['test']} (open)"
@@ -525,7 +598,7 @@ def _report_refresh(changed, cid: str, quiet: bool = False) -> None:
         print(f"task {cid}#{task_id}: {tk.STATUS_LABEL.get(old, old)} → {tk.STATUS_LABEL.get(new, new)}")
 
 
-def _evidence(layout, args, command: list[str] | None) -> int:
+def _evidence(layout, args) -> int:
     if args.op == "list":
         rows = [e for e in ev.load_all(layout) if e.get("change") == args.change
                 and (args.task is None or str(e.get("task")) == args.task)]
@@ -544,7 +617,7 @@ def _evidence(layout, args, command: list[str] | None) -> int:
         return 0
     tool = gv.detect_tool(args.by)
     if args.op == "run":
-        rec = ev.run_tests(layout, args.change, args.task, command, tool=tool, timeout=args.timeout)
+        rec = ev.run_tests(layout, args.change, args.task, tool=tool, timeout=args.timeout)
         c = rec["counts"]
         print(f"evidence {rec['id']}: {rec['command']}")
         print(f"  passed {c['passed']}, failed {c['failed']}, skipped {c['skipped']}, "
@@ -567,7 +640,8 @@ def _evidence(layout, args, command: list[str] | None) -> int:
     else:
         rec = ev.waive(layout, args.change, args.task, tool=tool, ruling=args.ruling,
                        reopen_when=args.reopen_when)
-        print(f"evidence {rec['id']}: waived by {rec['ruling']}")
+        print(f"evidence {rec['id']}: task {args.task} waived by 「{rec['ruling-quote']}」"
+              f"({rec['ruling']}) — check that this ruling is really about this task")
     changed = ev.refresh(layout, args.change)
     _report_refresh(changed, args.change)
     if not changed:
@@ -601,6 +675,8 @@ def _archive(layout, args) -> int:
         return 0
     res = arc.archive(layout, args.change, tool=gv.detect_tool(args.by))
     if not args.as_json:
+        for row in res.get("waived", []):
+            print(f"  waived: task {row['task']} ({row['title']}) — {row['why']}")
         print(f"  moved to {res['dest'].relative_to(layout.project_root)}")
         print(f"  baseline written ({len(res['baseline']['evidence'])} evidence record(s))")
         for d in res["dropped-verified-by"]:
@@ -667,10 +743,10 @@ def _test(layout, args) -> int:
 
 
 def run(argv: list[str]) -> int:
-    command = None
-    if "--" in argv:                      # `code evidence run <change> <task> -- <指令…>`
-        i = argv.index("--")
-        argv, command = argv[:i], argv[i + 1:] or None
+    if "--" in argv:
+        return fail("custom test commands are not accepted: the engine builds the command from the "
+                    "planned tests. Change the runner with `test-command` for the repo in "
+                    "docspec/software/config.yaml.")
     p = _parser()
     args = p.parse_args(argv)
     if not args.area or (args.area not in ("archive", "test", "import-openspec")
@@ -682,7 +758,7 @@ def run(argv: list[str]) -> int:
         return 1
     try:
         if args.area == "evidence":
-            return _evidence(layout, args, command)
+            return _evidence(layout, args)
         if args.area == "archive":
             return _archive(layout, args)
         if args.area == "test":

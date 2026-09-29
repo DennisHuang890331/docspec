@@ -62,6 +62,7 @@ def _change(cid: str, then: str = "第一列完整可見", run: bool = True) -> 
          "--ref", "R1/S1", "--then", then)
     code("testplan", "add", cid, "--location", "app:tests/test_entry.py::test_first_row",
          "--covers", "entry/R1/S1", "--by", "gemini")
+    code("testplan", "sign", cid, "--by", "gemini")
     code("task", "add", cid, "--title", "修", "--implements", "entry/R1", "--files", "app:src/entry.py",
          "--verify", "test", "--tests", "T1")
     if run:
@@ -182,6 +183,7 @@ def test_archive_creates_a_new_capability(proj, tmp_path):
          "--verification", "test", "--scenario", "有資料 | 開啟 | 列出")
     code("testplan", "add", "lib", "--location", "app:tests/test_entry.py::test_width",
          "--covers", "library/R1/S1", "--by", "gemini")
+    code("testplan", "sign", "lib", "--by", "gemini")
     code("task", "add", "lib", "--title", "做", "--implements", "library/R1", "--verify", "test",
          "--tests", "T1")
     code("evidence", "run", "lib", "1")

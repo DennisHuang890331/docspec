@@ -76,6 +76,7 @@ def proj(make_project, monkeypatch):
          "--covers", "entry/R1/S2")
     code("testplan", "add", "fix", "--location", "app:tests/test_entry.py::TestLayout::test_width",
          "--covers", "entry/R2/S1")
+    code("testplan", "sign", "fix")                           # 測試角色寫好測試後簽收
     monkeypatch.setenv("DOCSPEC_AGENT", "claude")          # 實作者
     code("task", "add", "fix", "--title", "修第一列", "--implements", "entry/R1",
          "--files", "app:src/entry.py", "--verify", "test", "--tests", "T1,T4")
@@ -143,11 +144,11 @@ def test_planned_test_missing_from_run_fails(proj, capsys):
     assert "not found in the run: T5" in capsys.readouterr().out
 
 
-def test_custom_command_after_double_dash(proj, capsys):
-    cmd = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_entry.py"]
-    assert code("evidence", "run", "fix", "1", "--", *cmd) == 1      # 含未聲明的 skip
-    e = ev.load_all(proj)[0]
-    assert e["command"].endswith("tests/test_entry.py") and e["counts"]["skipped"] == 1
+def test_custom_commands_are_refused(proj, capsys):
+    """A1：不接受自訂指令（`-- true` 曾讓一定失敗的測試變成「完成」）。"""
+    assert code("evidence", "run", "fix", "1", "--", "true") == 1
+    assert "custom test commands are not accepted" in capsys.readouterr().err
+    assert ev.load_all(proj) == []
 
 
 def test_inspection_and_acceptance(proj):
@@ -178,16 +179,22 @@ def test_check_warns_when_recorded_status_is_behind(proj):
     assert any("recorded \"done\" but evidence says \"needs-rerun\"" in w for w in warns)
 
 
-def test_same_agent_writing_and_running_tests_is_flagged(proj, monkeypatch):
+def test_same_agent_writing_tests_and_task_is_flagged(proj, monkeypatch):
+    """B4：比的是「測試撰寫者」和「任務建立者」，不是誰跑了測試。"""
     from dspx.engine.software import validate_all
-    monkeypatch.setenv("DOCSPEC_AGENT", "gemini")
+    monkeypatch.setenv("DOCSPEC_AGENT", "gemini")          # 測試角色自己跑測試：正常
     code("evidence", "run", "fix", "1")
-    _errs, warns = validate_all(proj)
-    assert any("same agent that ran it" in w for w in warns)
+    assert not any("same agent" in w for w in validate_all(proj)[1])
+    code("task", "add", "fix", "--title", "x", "--implements", "entry/R1", "--files", "app:src/entry.py",
+         "--verify", "test", "--tests", "T1")                  # gemini 自己建任務又用自己寫的測試
+    assert any("same agent that created task 2" in w for w in validate_all(proj)[1])
 
 
-def test_junit_matching_handles_rootdir_offsets():
-    case = {"classname": "app.tests.test_entry.TestLayout", "name": "test_width[1]"}
+def test_junit_matching_is_exact():
+    """A2：引擎固定 rootdir＝repo 根目錄，名稱必須完整相符；別處的同名檔不能冒充。"""
+    case = {"classname": "tests.test_entry.TestLayout", "name": "test_width[1]"}
     assert ev._matches("app:tests/test_entry.py::TestLayout::test_width", case)
     assert ev._matches("app:tests/test_entry.py", case)
     assert not ev._matches("app:tests/test_entry.py::test_width", case)
+    fake = {"classname": "test_entry.TestLayout", "name": "test_width"}    # 別的 rootdir 跑出來的
+    assert not ev._matches("app:tests/test_entry.py::TestLayout::test_width", fake)

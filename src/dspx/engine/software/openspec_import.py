@@ -334,6 +334,16 @@ def _change_parts(folder: Path, cid: str, tool: str, rel: str) -> tuple[dict, di
     return proposal, design, tasks
 
 
+_SCREENISH = re.compile(r"\d{3,4}\s*[×x]\s*\d{3,4}|screenshot|visible|layout|scroll|pixel|"
+                        r"interface size|畫面|版面|截圖|捲動", re.I)
+
+
+def screen_like(spec: dict) -> list[str]:
+    """看起來要人看的需求（畫面、版面）：匯入時驗證方法先設 test，報告列出來請人判斷。"""
+    return [f"{spec['capability']}/{r['id']} {r['title']}" for r in spec.get("requirements") or []
+            if _SCREENISH.search(r.get("statement") or "") or _SCREENISH.search(r.get("title") or "")]
+
+
 def run_import(layout: Layout, source: Path, *, tool: str, dry_run: bool = False) -> dict:
     """匯入；回報告資料。已有軟體規格或 change 時拒絕（避免重複匯入）。"""
     specs_root = source / "specs"
@@ -359,6 +369,7 @@ def run_import(layout: Layout, source: Path, *, tool: str, dry_run: bool = False
         for e in sp.validate_spec(spec):
             notes.append(f"imported {e}")
         specs[cap] = spec
+        report.setdefault("screen-like", []).extend(screen_like(spec))
         report["specs"].append({"capability": cap, "requirements": len(spec["requirements"]),
                                 "scenarios": sum(len(r["scenarios"]) for r in spec["requirements"])})
 
@@ -434,7 +445,10 @@ def render_report(report: dict, source: str) -> str:
     for s in report["specs"]:
         lines.append(f"- {s['capability']}：{s['requirements']} 條需求、{s['scenarios']} 個情境")
     lines += ["", "所有需求的驗證方法先設為 test（OpenSpec 沒有這個欄位）。需要人看的需求（畫面、版面），"
-              "請用一個 change 改成 inspection 或 demonstration。", ""]
+              "請在改到它的 change 裡用 modify-requirement 改成 inspection 或 demonstration。", ""]
+    if report.get("screen-like"):
+        lines += ["以下需求的內容提到畫面、版面或截圖，可能需要人看（請判斷）：", ""]
+        lines += [f"- {x}" for x in report["screen-like"]] + [""]
     lines += ["## 進行中的 change", ""]
     for c in report["active"]:
         lines.append(f"- {c['change']}：{c['deltas']} 筆規格差異、{c['tasks']} 個任務"

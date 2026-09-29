@@ -137,7 +137,9 @@ def derive(layout: Layout, ch: dict, task: dict, evs: list[dict]) -> tuple[str, 
     """回 (狀態, 支持完成的證據 id, 說明)。evs＝這個任務的證據（舊到新）。"""
     waivers = [e for e in evs if e.get("type") == "waiver"]
     if waivers:
-        return "done-waived", [waivers[-1]["id"]], f"waived by {waivers[-1].get('ruling')}"
+        w = waivers[-1]
+        return "done-waived", [w["id"]], (f"waived by 「{w.get('ruling-quote')}」({w.get('ruling')})"
+                                          if w.get("ruling-quote") else f"waived by {w.get('ruling')}")
     methods = io.as_list((task.get("verify") or {}).get("methods"))
     keys = watched_files(ch, task)
     support, missing, stale, failing = [], [], [], []
@@ -265,13 +267,47 @@ def _matches(location: str, case: dict) -> bool:
     func = parts[-1] if parts else None
     expected_cls = ".".join([mod, *parts[:-1]]) if parts else mod
     cls = case["classname"]
-
-    def same(a: str, b: str) -> bool:     # pytest 的 rootdir 可能比 repo 根深或淺：比對尾段
-        return a == b or a.endswith("." + b) or b.endswith("." + a)
-
+    # 引擎固定以 repo 根目錄為 rootdir，所以名稱必須完整相符（不比尾段：別處的同名檔不能冒充）
     if not parts:       # 只寫檔案＝那個模組（含其中的類別）裡的全部測試
-        return same(cls, mod) or any(same(cls[:i], mod) for i in range(len(cls)) if cls[i] == ".")
-    return same(cls, expected_cls) and case["name"].split("[", 1)[0] == func
+        return cls == mod or cls.startswith(mod + ".")
+    return cls == expected_cls and case["name"].split("[", 1)[0] == func
+
+
+def test_file_key(location: str) -> str:
+    repo, path = tk.location_file(location)
+    return f"{repo}:{path}"
+
+
+def signoff_problems(layout: Layout, planned: list[dict]) -> list[str]:
+    """測試角色簽收（A3）：規劃測試必須已簽收，且測試檔內容和簽收時相同。"""
+    out = []
+    for t in planned:
+        signed = t.get("signed") or {}
+        key = test_file_key(t["location"])
+        if not signed:
+            out.append(f"test {t['id']} has not been signed off by the test role "
+                       f"(`docspec code testplan sign`)")
+        elif signed.get("fingerprint") != file_hash(layout, key):
+            out.append(f"test {t['id']} ({key}) changed after the test role signed it off — only the "
+                       f"test role changes tests; it re-signs after reviewing the change")
+    return out
+
+
+def build_command(layout: Layout, repo: str, locations: list[str], junit: Path) -> list[str]:
+    """要跑的指令一律由引擎組：repo 設定的執行器 ＋ 固定根目錄 ＋ JUnit 報告 ＋ 規劃測試的位置。
+
+    software/config.yaml 的 repo 可設 `test-command`（預設 `python -m pytest`）；非 pytest 的執行器
+    另設 `junit-arg`（例 `--reporter-out={junit}`）與 `rootdir-arg`（不需要就設成空字串）。
+    執行器必須產出 JUnit 報告，否則測試證據一律不通過。"""
+    cfg = chg.repo_settings(layout).get(repo) or {}
+    root = tk.repo_root(layout, repo)
+    argv = shlex.split(str(cfg.get("test-command") or "python -m pytest"))
+    rootdir_arg = cfg.get("rootdir-arg", "--rootdir={root}")
+    junit_arg = cfg.get("junit-arg", "--junitxml={junit}")
+    if rootdir_arg:
+        argv.append(str(rootdir_arg).format(root=root))
+    argv.append(str(junit_arg).format(junit=junit))
+    return argv + [tk.split_location(loc)[1] for loc in locations]
 
 
 _SUMMARY = re.compile(r"(\d+) (passed|failed|skipped|errors?|error)")
@@ -303,9 +339,8 @@ def _planned(ch: dict, task: dict) -> list[dict]:
     return [by_id[w] for w in wanted]
 
 
-def run_tests(layout: Layout, cid: str, task_id: str, command: list[str] | None, *, tool: str,
-              timeout: int = 1800) -> dict:
-    """引擎代跑測試並寫一筆 test-run 證據；回紀錄。不讓 agent 手填數字。"""
+def run_tests(layout: Layout, cid: str, task_id: str, *, tool: str, timeout: int = 1800) -> dict:
+    """引擎代跑測試並寫一筆 test-run 證據；回紀錄。不讓 agent 手填數字，也不讓它換指令。"""
     ch = chg.load_change(layout, cid)
     task = _task(ch, task_id)
     planned = _planned(ch, task)
@@ -319,15 +354,12 @@ def run_tests(layout: Layout, cid: str, task_id: str, command: list[str] | None,
     if not tk.repo_known(layout, repo):
         raise io.SoftwareError(f"repo \"{repo}\" is not registered in software/config.yaml")
     cwd = tk.repo_root(layout, repo)
-    if not command:
-        base = (chg.repo_settings(layout).get(repo) or {}).get("test-command") or "python -m pytest"
-        command = shlex.split(str(base)) + [tk.split_location(t["location"])[1] for t in planned]
-    is_pytest = any("pytest" in part for part in command)
     keys = watched_files(ch, task)
     files_before = snapshot(layout, keys)
     with tempfile.TemporaryDirectory() as tmp:
         junit = Path(tmp) / "junit.xml"
-        argv = list(command) + ([f"--junitxml={junit}"] if is_pytest else [])
+        argv = build_command(layout, repo, [t["location"] for t in planned], junit)
+        command = [a for a in argv if str(junit) not in a]
         try:
             proc = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout)
             exit_code, output = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
@@ -335,7 +367,7 @@ def run_tests(layout: Layout, cid: str, task_id: str, command: list[str] | None,
             raise io.SoftwareError(f"cannot run {command[0]!r}: {exc}") from exc
         except subprocess.TimeoutExpired:
             exit_code, output = -1, f"timed out after {timeout}s"
-        cases = _parse_junit(junit) if is_pytest and junit.is_file() else None
+        cases = _parse_junit(junit) if junit.is_file() else None
 
     allow_skips = bool((task.get("verify") or {}).get("allow-skips"))
     per_test = []
@@ -359,25 +391,22 @@ def run_tests(layout: Layout, cid: str, task_id: str, command: list[str] | None,
             reasons.append(f"planned test(s) not found in the run: {', '.join(not_run)}")
     else:
         counts = _summary_counts(output)
-        reasons.append("pytest produced no junit report" if is_pytest
-                       else "non-pytest command: per-test results unavailable")
+        reasons.append("the test runner produced no JUnit report, so no test can be confirmed "
+                       "(set junit-arg for this repo in software/config.yaml)")
+    reasons += signoff_problems(layout, planned)
     if exit_code != 0:
         reasons.append(f"exit code {exit_code}")
     if counts["failed"]:
         reasons.append(f"{counts['failed']} failed")
     if counts["skipped"] and not allow_skips:
         reasons.append(f"{counts['skipped']} skipped (not declared with --allow-skips)")
-    if cases is None and is_pytest:
-        result = "fail"
-    else:
-        blocking = [r for r in reasons if not r.startswith("non-pytest")]
-        result = "fail" if blocking else "pass"
+    result = "fail" if reasons else "pass"
     if files_before != snapshot(layout, keys):
         reasons.append("files changed while the tests ran")
         result = "fail"
 
-    ran = [t["id"] for t in planned if cases is None
-           or any(p["test"] == t["id"] and p["outcome"] != "not-run" for p in per_test)]
+    ran = [t["id"] for t in planned
+           if any(p["test"] == t["id"] and p["outcome"] != "not-run" for p in per_test)]
     rec = {"id": next_id(layout, tool), "type": "test-run", "change": cid, "task": str(task_id),
            "recorded-by": tool, "at": _now(), "repo": repo, "command": shlex.join(command),
            "commit": _git(cwd, "rev-parse", "HEAD"), "environment": environment(layout, cwd),
@@ -439,6 +468,7 @@ def waive(layout: Layout, cid: str, task_id: str, *, tool: str, ruling: str, reo
         raise io.SoftwareError("waiver needs --reopen-when (the condition that brings the task back)")
     rec = {"id": next_id(layout, tool), "type": "waiver", "change": cid, "task": str(task_id),
            "recorded-by": tool, "at": _now(), "ruling": f"gov:{rid}",
+           "ruling-quote": str(r.get("quote") or ""),
            "reopen-when": reopen_when.strip(), "result": "pass"}
     return _write(layout, rec)
 
@@ -471,12 +501,12 @@ def validate(layout: Layout) -> tuple[list[str], list[str]]:
                 warns.append(f"software change {cid}: task {row['task']} is recorded "
                              f"\"{row['recorded']}\" but evidence says \"{row['status']}\" — run "
                              f"`docspec code change status {cid}` to refresh ({row['why']})")
-        for e in [x for x in evs if x.get("change") == cid and x.get("type") == "test-run"]:
-            for tid in io.as_list(e.get("tests")):
+        for task in ch["tasks"].get("tasks") or []:
+            author = task.get("created-by")
+            for tid in io.as_list((task.get("verify") or {}).get("tests")):
                 t = by_id.get(tid)
-                if t and t.get("written-by") == e.get("recorded-by") and t.get("written-by") != "user":
-                    warns.append(f"software change {cid}: test {tid} was written by "
-                                 f"{t.get('written-by')}, the same agent that ran it for task "
-                                 f"{e.get('task')} — tests should come from the test role")
-                    break
+                if t and author and author != "user" and t.get("written-by") == author:
+                    warns.append(f"software change {cid}: test {tid} was written by {author}, the same "
+                                 f"agent that created task {task['id']} it verifies — tests should come "
+                                 f"from the test role")
     return errs, list(dict.fromkeys(warns))

@@ -20,11 +20,11 @@ Make the planned tests pass by changing the program, one task at a time. There i
 
 1. **Orient** — `docspec code change status <id>` lists tasks with their derived status and what is missing. Pick a task whose `depends-on` are done. `docspec code spec show <cap> --req R<n>` for the requirement it implements.
 
-2. **Change only what the task declares** — edit the files in the task's `files`. If you must touch another file, first `docspec code task set <id> <task> --files …` so the evidence covers it. Do not edit test files; they belong to the test role.
+2. **Change only what the task declares** — imported tasks (OpenSpec) may lack links: `docspec code change gaps <id> --template`, fill the `tasks:` part, `docspec code task set <id> --from <file>`. Then edit the files in the task's `files`. If you must touch another file, first `docspec code task set <id> <task> --files …` so the evidence covers it. Do not edit test files; they belong to the test role.
 
-3. **Run the evidence** — `docspec code evidence run <id> <task>`. The engine runs the task's planned tests with the repo's test command, records counts, commit and environment, and marks the task done only if every planned test ran, none failed and no undeclared skip occurred. Read the per-test result it prints.
+3. **Run the evidence** — `docspec code evidence run <id> <task>`. The engine builds the command itself (the repo's `test-command` in `docspec/software/config.yaml`, the planned tests, the repo root), records counts, commit and environment, and marks the task done only if every planned test ran and passed, none was skipped without being declared, and every test is still the version the test role signed off. Read the per-test result it prints. Custom commands are not accepted; a different runner is a config change.
 
-4. **When a test fails** — fix the program and run again. If you believe the test misreads the spec, raise it: `docspec code testplan object <id> <T-id> --reason "<which WHEN/THEN it gets wrong>"`, then continue with other tasks until the test role answers.
+4. **When a test fails** — fix the program and run again. Never edit a test, even one you think is wrong ("changed after the test role signed it off" means someone did). If you believe the test misreads the spec, raise it: `docspec code testplan object <id> <T-id> --reason "<which WHEN/THEN it gets wrong>"`, then continue with other tasks until the test role answers.
 
 5. **Non-test verification** — for `inspection` or `demonstration`: `docspec code evidence add <id> <task> --type inspection --subject "<what you looked at: screenshot path, size, scale>" --conclusion "…" --result pass|fail`. When the owner must accept it, show them, read back what they saw, and after they confirm: `docspec code evidence accept <id> <task> --read-back "…" --confirmed "<their reply>"`.
 

@@ -1,5 +1,7 @@
 # 第二期細部設計：軟體領域（取代 OpenSpec）
 
+> **這份是討論過程的紀錄。現行設計請看 `phase2-current.md`**（2026/09/30 整合；內容有出入時以現行版為準）。
+
 - 狀態：細部設計草案，等使用者確認（第二期架構關卡）
 - 依據：`docs/dev/phase2-design.md`（架構）、`docs/dev/system-design.md`
 - 例子取自台中港專案的真實內容（task-entry-page 規格、dataset-library change），只節錄結構，不放進 repo 的測試資料。

@@ -71,6 +71,7 @@ def _change(cid: str, then: str = "完整看到第一列", decision: str = "D-cl
     code("change", "delta", cid, "--capability", "entry", "--op", "modify-scenario",
          "--ref", "R1/S1", "--then", then)
     code("testplan", "add", cid, "--location", location, "--covers", "entry/R1/S1", "--by", "gemini")
+    code("testplan", "sign", cid, "--by", "gemini")
     code("task", "add", cid, "--title", "修", "--implements", "entry/R1", "--verify", "test", "--tests", "T1")
 
 
@@ -109,6 +110,7 @@ def test_archive_clears_requirement_flag_when_it_rewrites_the_basis(proj, capsys
          "--tests", "T1")
     code("testplan", "add", "rebase", "--location", "app:tests/test_entry.py::test_first_row",
          "--covers", "entry/R1/S1", "--by", "gemini")
+    code("testplan", "sign", "rebase", "--by", "gemini")
     code("evidence", "run", "rebase", "1")
     capsys.readouterr()
     assert code("archive", "rebase") == 0

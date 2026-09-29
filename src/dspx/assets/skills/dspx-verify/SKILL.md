@@ -20,7 +20,7 @@ Finish a change honestly: the engine checks the links and evidence; you check th
 
 1. **Engine checks** — `docspec code archive <id> --dry-run`. It lists every blocker: unfinished tasks, missing acceptance, draft or superseded decisions, unarchived prerequisites, spec conflicts, open impact flags. Fix each through the owning skill (implement, test, propose, govern); do not work around one.
 
-2. **Evidence review** — `docspec code evidence list <id>`. For each test run: the planned tests all ran, counts are plausible, no suspicious skips, the environment matches the target (GPU, libraries).
+2. **Evidence review** — `docspec code evidence list <id>`. For each test run: the planned tests all ran, counts are plausible, no suspicious skips, the environment matches the target (GPU, libraries). For each waiver, read the quoted ruling next to it: it must really be about that task.
 
 3. **Semantic review** — for each changed scenario, read its WHEN/THEN (`docspec code spec show …`) and the test that covers it. Does the test fail if the THEN is false? If not, raise it with the test role (dspx-test) and stop here.
 

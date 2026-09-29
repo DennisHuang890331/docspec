@@ -124,6 +124,7 @@ def plan(layout: Layout, cid: str) -> dict:
 
 def archive(layout: Layout, cid: str, *, tool: str) -> dict:
     p = plan(layout, cid)
+    p["waived"] = [r for r in ev.explain(layout, cid) if r["status"] == "done-waived"]
     if not p["ok"]:
         raise io.SoftwareError(f"cannot archive {cid}:\n  - " + "\n  - ".join(p["errors"]))
     date = datetime.date.today().isoformat()
@@ -200,12 +201,12 @@ def run_regression(layout: Layout, capability: str | None = None, timeout: int =
         if not tk.repo_known(layout, repo):
             results.append({"repo": repo, "error": "repo not registered in software/config.yaml"})
             continue
-        base = (chg.repo_settings(layout).get(repo) or {}).get("test-command") or "python -m pytest"
-        command = shlex.split(str(base)) + [tk.split_location(i["location"])[1] for i in items]
         with tempfile.TemporaryDirectory() as tmp:
             junit = Path(tmp) / "junit.xml"
+            argv = ev.build_command(layout, repo, [i["location"] for i in items], junit)
+            command = [a for a in argv if str(junit) not in a]
             try:
-                proc = subprocess.run(command + [f"--junitxml={junit}"], cwd=tk.repo_root(layout, repo),
+                proc = subprocess.run(argv, cwd=tk.repo_root(layout, repo),
                                       capture_output=True, text=True, timeout=timeout)
                 code = proc.returncode
             except (OSError, subprocess.TimeoutExpired) as exc:

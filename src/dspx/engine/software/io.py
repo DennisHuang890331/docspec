@@ -94,8 +94,9 @@ def load(path: Path, kind: str):
     if raw.get("kind") != f"software-{kind}":
         raise SoftwareError(f"{path} is not a software {kind} file (kind={raw.get('kind')})")
     if raw.get("integrity") != _seal(kind, raw["body"]):
-        raise SoftwareError(f"integrity seal mismatch: {path} — a hand-edit corrupted it; change it "
-                            f"through `docspec code …` (or `docspec store fsck --accept` to adopt it).")
+        raise SoftwareError(f"integrity seal mismatch: {path} — the file was edited by hand. Restore it "
+                            f"(e.g. `git checkout -- {path.name}` in its folder) and make the change "
+                            f"through `docspec code …`; hand edits cannot be adopted.")
     return raw["body"]
 
 
