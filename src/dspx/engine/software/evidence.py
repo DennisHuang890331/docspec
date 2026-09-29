@@ -302,7 +302,10 @@ def test_file_key(location: str) -> str:
 
 
 def signoff_problems(layout: Layout, planned: list[dict]) -> list[str]:
-    """測試角色簽收（A3）：規劃測試必須已簽收，且測試檔內容和簽收時相同。"""
+    """測試角色簽收（A3）：規劃測試必須已簽收，且內容和簽收時相同。
+
+    新的簽收比對「這個測試＋檔案裡共用的部分」（test-fingerprint），同檔別的測試變動不影響；
+    舊的簽收沒有這個欄位，照舊比對整個檔案。"""
     out = []
     for t in planned:
         signed = t.get("signed") or {}
@@ -310,7 +313,8 @@ def signoff_problems(layout: Layout, planned: list[dict]) -> list[str]:
         if not signed:
             out.append(f"test {t['id']} has not been signed off by the test role "
                        f"(`docspec code testplan sign`)")
-        elif signed.get("fingerprint") != file_hash(layout, key):
+        elif (signed.get("test-fingerprint") != tk.test_fingerprint(layout, t["location"])
+              if signed.get("test-fingerprint") else signed.get("fingerprint") != file_hash(layout, key)):
             out.append(f"test {t['id']} ({key}) changed after the test role signed it off — only the "
                        f"test role changes tests; it re-signs after reviewing the change")
     return out

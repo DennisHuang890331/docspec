@@ -19,6 +19,7 @@ a minor bump.
 - **A planned test whose name is not in the test file is caught at sign-off**, and evidence names the missing test instead of reporting only the runner's exit code (Python test files; `def`/`class` names).
 - **The AGENTS.md collaboration block is stricter where the run went wrong:** it names the project language (e.g. 繁體中文) and asks for it in every assignment; a confirming reply that adds or changes something is restated again before recording; a conflict with an existing ruling goes to the owner; the test role is not mechanical work; a skipped step is reported as skipped, never "all done".
 - **`code change status` no longer repeats a stale sign-off failure verbatim:** the tests are grouped per file in one line, and when they have been signed off again since, it says to rerun the evidence.
+- **A test's sign-off no longer breaks when someone adds another test to the same file.** New sign-offs record a fingerprint of that test plus the file's shared parts (imports, helpers, fixtures), leaving out the other top-level tests; changing the test or anything shared still invalidates it. Older sign-offs keep comparing the whole file. In the run, test roles taking turns on one file caused four rounds of re-signing.
 - **Design list items can be removed:** `docspec code change design <id> --remove-goal "<text or number>"` (also `--remove-non-goal`, `--remove-risk`, `--remove-open-question`).
 
 ### Changed — freeze, one archive, project baselines, collaboration rules (branch only)

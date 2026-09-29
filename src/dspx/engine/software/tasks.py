@@ -78,6 +78,39 @@ def name_missing(layout: Layout, loc: str) -> str | None:
     return None
 
 
+def test_fingerprint(layout: Layout, loc: str) -> str | None:
+    """這個測試的簽收指紋：整個測試檔，但拿掉「其他」頂層測試（test_* 函式、Test* 類別）。
+
+    同檔新增或修改別的測試不影響它；改到它自己、共用的輔助函式、import 或 fixture 都會變。
+    不是 Python 位置、或檔案解析不了時回 None（沿用整檔指紋）。"""
+    import ast
+    import hashlib
+    repo, rest = split_location(loc)
+    path, _, names = rest.partition("::")
+    if not names or not path.endswith(".py") or not repo_known(layout, repo):
+        return None
+    f = repo_root(layout, repo) / path
+    if not f.is_file():
+        return None
+    text = f.read_text(encoding="utf-8", errors="replace")
+    try:
+        tree = ast.parse(text)
+    except SyntaxError:
+        return None
+    own = names.split("::", 1)[0].split("[", 1)[0]
+    lines = text.splitlines(keepends=True)
+    drop: set[int] = set()
+    for node in tree.body:
+        name = getattr(node, "name", "")
+        is_test = (isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and name.startswith("test")) or \
+                  (isinstance(node, ast.ClassDef) and name.startswith("Test"))
+        if is_test and name != own:
+            start = min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", [])])
+            drop.update(range(start - 1, node.end_lineno))
+    kept = "\n".join(line.rstrip() for i, line in enumerate(lines) if i not in drop and line.strip())
+    return "sha256:" + hashlib.sha256(kept.encode("utf-8")).hexdigest()[:16]
+
+
 def repo_known(layout: Layout, repo: str) -> bool:
     from dspx.engine.software import changes as chg
     return repo == PROJECT_REPO or repo in chg.repos(layout)
@@ -145,6 +178,9 @@ def sign_tests(layout: Layout, ch: dict, test_ids: list[str], *, tool: str, now:
                 f"test {t['id']}: {location_file(t['location'])[1]} has no test named \"{missing}\" — "
                 f"fix the planned location (`docspec code testplan remove` then `testplan add`) or the test name")
         t["signed"] = {"by": tool, "at": now, "fingerprint": fp}
+        own = test_fingerprint(layout, t["location"])
+        if own:
+            t["signed"]["test-fingerprint"] = own
     return chosen
 
 

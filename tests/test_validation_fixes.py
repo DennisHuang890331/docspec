@@ -154,3 +154,32 @@ def test_status_groups_signoff_reasons_and_says_when_resigned(proj, capsys, monk
     assert short.startswith("T1, T2, T3 (app:tests/test_x.py) changed after sign-off")
     assert short.count("re-signs") == 1 and short.endswith("exit code 1")
     assert ev._short_reason("exit code 4") == "exit code 4"
+
+
+def test_signoff_survives_other_tests_added_to_the_same_file(proj, capsys, monkeypatch):
+    """實測 G6：簽收原本以整個測試檔為準，別人在同檔新增測試就讓所有簽收失效，反覆重簽。
+    現在以「這個測試＋檔案共用部分」為準：同檔加別的測試不影響；改共用輔助函式仍會被抓到。"""
+    from dspx.engine.software import tasks as tk
+    code("repo", "add", "app", "app", "--test-command",
+         f"PYTHONPATH=src {sys.executable} -m pytest -q -p no:cacheprovider")
+    code("change", "new", "fix", "--why", "x", "--modified", "entry")
+    code("change", "delta", "fix", "--capability", "entry", "--op", "modify-scenario",
+         "--ref", "R1/S1", "--then", "改")
+    monkeypatch.setenv("DOCSPEC_AGENT", "gemini")
+    code("testplan", "add", "fix", "--location", "app:tests/test_x.py::test_value",
+         "--covers", "entry/R1/S1")
+    assert code("testplan", "sign", "fix") == 0
+    planned = chg.load_change(proj, "fix")["tests"]["tests"]
+    assert planned[0]["signed"]["test-fingerprint"]
+    f = proj.project_root / "app" / "tests" / "test_x.py"
+    f.write_text(f.read_text(encoding="utf-8") + "\n\ndef test_other():\n    assert True\n", encoding="utf-8")
+    assert ev.signoff_problems(proj, planned) == []                     # 同檔新增別的測試：不影響
+    f.write_text(f.read_text(encoding="utf-8").replace("assert VALUE == 1", "assert VALUE >= 0"),
+                 encoding="utf-8")
+    assert "changed after the test role signed it off" in ev.signoff_problems(proj, planned)[0]
+    f.write_text(f.read_text(encoding="utf-8").replace("assert VALUE >= 0", "assert VALUE == 1")
+                 .replace("from pkg import VALUE", "from pkg import VALUE  # helper changed"), encoding="utf-8")
+    assert ev.signoff_problems(proj, planned)                           # 共用部分（import）改了：抓到
+    legacy = [{**planned[0], "signed": {"fingerprint": "sha256:old"}}]
+    assert ev.signoff_problems(proj, legacy)                            # 舊簽收：照舊比對整檔
+    assert tk.test_fingerprint(proj, "app:tests/test_x.py") is None
