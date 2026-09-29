@@ -29,7 +29,7 @@ Keep the project's authority straight. The owner is the only source of rulings; 
 
 5. **Review impact** — after a supersede, withdrawal or rejected ruling, `docspec impact`. For each suspect flag: look at the item, fix it or explain why it still holds, then `docspec impact clear <S-id> --reason "…"`. For each listed document section: review the prose against the new decision, then repoint its `realizes` to the successor (via develop/apply).
 
-6. **Run the roadmap** — `docspec roadmap` shows milestones (checkpoint vs deliverable) and derived status. Add work with `docspec roadmap add --title … --milestone <M-id> --ref change:<id>|doc:<section>|gov:<id>`; link work as it starts (`roadmap link`); close ref-less small work with `roadmap done <id> --note`; record an owner-ruled exception with `roadmap waive <id> --ruling <RL-id> --note … --reopen-when …`. Never hand-write a status: it is derived.
+6. **Run the roadmap** — `docspec roadmap` shows milestones (checkpoint vs deliverable) and derived status. Add work with `docspec roadmap add --title … --milestone <M-id> --ref change:<id>|doc:<section>|gov:<id>|swc:<software change>`; link work as it starts (`roadmap link`); close ref-less small work with `roadmap done <id> --note`; record an owner-ruled exception with `roadmap waive <id> --ruling <RL-id> --note … --reopen-when …`. Never hand-write a status: it is derived.
 
 7. **Hand over** — `docspec brief --write` regenerates `docs/project/status.md`, `design.md` and `pending.md`. Tell the owner, in plain words, which questions are waiting for them.
 

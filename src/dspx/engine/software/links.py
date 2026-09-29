@@ -123,3 +123,30 @@ def clear_requirement_suspects(layout: Layout, cid: str, ch: dict, tool: str) ->
             gv.write_record(layout, "suspect", rec)
             cleared.append(str(s["id"]))
     return cleared
+
+
+def requirement_downstream(layout: Layout, req_ref: str, graph) -> list[tuple[str, str]]:
+    """需求被標記後，順著鏈再往下：驗證它的測試、實作它的任務（含已封存＝只標需重看、不重開）、
+    realizes 它的文件章節。回 [(節點, 連結型別)]。"""
+    cap, rid, _ = sp.split_ref(req_ref)
+    out: list[tuple[str, str]] = []
+    spec = sp.load_spec(layout, cap) if io.has_software(layout) else None
+    req = sp.find_requirement(spec, rid)
+    for s in (req or {}).get("scenarios") or []:
+        for loc in io.as_list(s.get("verified-by")):
+            node = f"test:{loc}"
+            if (node, "verifies") not in out:
+                out.append((node, "verifies"))
+    for node, etype in graph.dependents(req_ref):
+        if etype in ("implements", "realizes") and (node, etype) not in out:
+            out.append((node, etype))
+    for cid in chg.archived_ids(layout):
+        try:
+            hist = chg.load_archived(layout, cid)
+        except io.SoftwareError:
+            continue
+        for t in hist["tasks"].get("tasks") or []:
+            if any(f"{sp.split_ref(x)[0]}/{sp.split_ref(x)[1]}" == f"{cap}/{rid}"
+                   for x in io.as_list(t.get("implements"))):
+                out.append((f"task:{cid}#{t['id']}", "implements"))
+    return out

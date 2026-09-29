@@ -170,6 +170,34 @@ def parse_tasks(text: str) -> list[dict]:
     return out
 
 
+_DEC_H = re.compile(r"^#{2,4}\s+(D\d+(?:\.\d+)?)\b[.:]?\s*(.*)$")
+
+
+def design_decisions(text: str) -> tuple[list[dict], list[str]]:
+    """design.md 的決策標題 → ([{id, title, supersedes, partial}], 待合併的決策 id)。
+
+    標題寫「supersede … where they conflict」＝局部取代（以後者為準）：依 2026/09/29 裁定，取代必須是
+    合併後的完整新版，所以局部取代者與被它取代的決策都列為待合併。"""
+    out = []
+    for line, fenced in _strip_fences(text.splitlines()):
+        m = None if fenced else _DEC_H.match(line)
+        if not m:
+            continue
+        title = m.group(2).strip()
+        partial = bool(re.search(r"supersed|conflict", title, re.I))
+        sup = re.findall(r"\bD\d+(?:\.\d+)?\b", title) if partial else []
+        out.append({"id": m.group(1), "title": title, "supersedes": [s for s in sup if s != m.group(1)],
+                    "partial": partial})
+    merge: list[str] = []
+    for d in out:
+        if d["partial"]:
+            for x in d["supersedes"] + [d["id"]]:
+                if x not in merge:
+                    merge.append(x)
+    order = {d["id"]: i for i, d in enumerate(out)}
+    return out, sorted(merge, key=lambda x: order.get(x, 10**6))
+
+
 def parse_proposal(text: str) -> dict:
     secs = _sections(text)
     what = []
@@ -290,6 +318,12 @@ def _change_parts(folder: Path, cid: str, tool: str, rel: str) -> tuple[dict, di
                 "created-by": tool, "created-at": created, "imported-from": rel}
     design_text = _read(folder / "design.md").strip()
     design = {"context": design_text} if design_text else {}
+    decisions, merge = design_decisions(design_text)
+    if merge:
+        design["open-questions"] = [
+            f"待合併的設計決策：{'、'.join(merge)}（design.md 以「以後者為準」局部取代）。請寫出合併後的"
+            f"完整決策（dspx-govern：覆述 → 裁定 → decision add --supersedes），再用 "
+            f"`docspec code change design --decision` 引用。"]
     if prop["impact"]:
         design["migration"] = prop["impact"]
     tasks = {"tasks": []}
@@ -352,7 +386,9 @@ def run_import(layout: Layout, source: Path, *, tool: str, dry_run: bool = False
             report["not-imported"].append({"change": cid, "files": extra})
         active.append((cid, proposal, design, tasks, deltas))
         n = tasks["tasks"]
-        report["active"].append({"change": cid, "deltas": sum(len(d["deltas"]) for d in deltas.values()),
+        decs, merge = design_decisions(_read(folder / "design.md"))
+        report["active"].append({"decisions": [d["id"] for d in decs], "needs-merge": merge,
+                                 "change": cid, "deltas": sum(len(d["deltas"]) for d in deltas.values()),
                                  "tasks": len(n),
                                  "imported-done": sum(1 for t in n if t["status"] == "imported-done")})
 
@@ -403,6 +439,13 @@ def render_report(report: dict, source: str) -> str:
     for c in report["active"]:
         lines.append(f"- {c['change']}：{c['deltas']} 筆規格差異、{c['tasks']} 個任務"
                      f"（其中 {c['imported-done']} 個標為「匯入時已完成（無證據）」）")
+    for c in report["active"]:
+        if c.get("needs-merge"):
+            lines += ["", f"### {c['change']} 的設計決策", "",
+                      f"design.md 有 {len(c['decisions'])} 條設計決策（{'、'.join(c['decisions'])}），全文保留在"
+                      f" design.yaml 的 context。", "",
+                      f"**待合併：{'、'.join(c['needs-merge'])}**——它們用「以後者為準」局部取代，看不出目前"
+                      f"到底是哪個版本。請寫出合併後的完整決策，經你確認後記成治理層決策。"]
     if report["active"]:
         lines += ["", "接著做之前：用 `docspec code change status <change>` 看還缺什麼。匯入的任務沒有"
                   "驗證方法與測試規劃，需要用 `docspec code task set` 補上，並由測試角色用 "

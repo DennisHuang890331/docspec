@@ -37,7 +37,7 @@ _LABELS = {
 
 
 def status_label(status: str, item: dict, lang: str = "zh") -> str:
-    n = len(item.get("waivers") or [])
+    n = len(item.get("waivers") or []) + int(item.get("software-waived") or 0)
     if status == DONE_WAIVED and not n:          # 豁免在軟體 change 的任務裡，不在項目上
         return "完成（含豁免）" if lang == "zh" else "done (with waivers)"
     return _LABELS[lang][status].format(n=n)
@@ -54,6 +54,7 @@ class Context:
     published: set[str]                  # 至少發布過一版的文章
     open_suspect_targets: set[str] = field(default_factory=set)
     sw_changes: dict[str, str] = field(default_factory=dict)    # 軟體 change → active／archived／archived-waived
+    sw_waived: dict[str, int] = field(default_factory=dict)     # 封存時豁免的任務數
 
 
 def build_context(layout: Layout, leaves: list, gov: gv.Governance | None = None) -> Context:
@@ -76,25 +77,28 @@ def build_context(layout: Layout, leaves: list, gov: gv.Governance | None = None
                    articles=articles, published=published,
                    open_suspect_targets={str(s.get("target")) for s in gov.suspects
                                          if s.get("status") == "open"},
-                   sw_changes=_software_change_states(layout))
+                   **dict(zip(("sw_changes", "sw_waived"), _software_change_states(layout))))
 
 
-def _software_change_states(layout: Layout) -> dict[str, str]:
+def _software_change_states(layout: Layout) -> tuple[dict[str, str], dict[str, int]]:
     from dspx.engine.software import changes as swc
     from dspx.engine.software import io as swio
     if not swio.has_software(layout):
-        return {}
+        return {}, {}
     out = {c: "active" for c in swc.list_active(layout)}
+    waived_n: dict[str, int] = {}
     for cid, folder in swc.archived_ids(layout).items():
         base = swio.baselines_dir(layout) / f"{folder}.yaml"
-        waived = False
+        n = 0
         if base.is_file():
             try:
-                waived = bool((swio.load(base, "baseline").get("tasks") or {}).get("done-waived"))
-            except swio.SoftwareError:
+                n = int((swio.load(base, "baseline").get("tasks") or {}).get("done-waived") or 0)
+            except (swio.SoftwareError, ValueError):
                 pass
-        out[cid] = "archived-waived" if waived else "archived"
-    return out
+        out[cid] = "archived-waived" if n else "archived"
+        if n:
+            waived_n[cid] = n
+    return out, waived_n
 
 
 def is_constraint_ref(ref: str) -> bool:
@@ -218,6 +222,10 @@ def view(layout: Layout, leaves: list, gov: gv.Governance | None = None) -> dict
         st = item_status(w, ctx)
         rows[str(w["id"])] = {**{k: v for k, v in w.items() if not k.startswith("_")},
                               "status": st}
+        sw_n = sum(ctx.sw_waived.get(r[len("swc:"):], 0) for r in gv._as_list(w.get("refs"))
+                   if r.startswith("swc:"))
+        if sw_n:
+            rows[str(w["id"])]["software-waived"] = sw_n
         if st == BLOCKED:
             rows[str(w["id"])]["blocked-because"] = block_reason(w, ctx)
     out = {"milestones": [], "unassigned": []}

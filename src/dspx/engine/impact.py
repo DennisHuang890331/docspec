@@ -139,6 +139,19 @@ def flag_after_change(layout: Layout, changed_id: str, tool: str | None = None,
                 "status": "open", "created-at": gv.today()})
             existing.add((trig, node))
             created.append(sid)
+            if node.startswith("req:"):
+                # 軟體需求：再往下標到測試、任務（已完成的只標需重看，不重開）與 realizes 它的文件章節
+                from dspx.engine.software.links import requirement_downstream
+                for sub, sub_type in requirement_downstream(layout, node, graph):
+                    if (trig, sub) in existing:
+                        continue
+                    sid = gv.next_id(layout, "suspect", tool)
+                    gv.write_record(layout, "suspect", {
+                        "id": sid, "trigger": trig, "target": sub,
+                        "path": [trig, etype, node, sub_type, sub],
+                        "status": "open", "created-at": gv.today()})
+                    existing.add((trig, sub))
+                    created.append(sid)
     return created
 
 

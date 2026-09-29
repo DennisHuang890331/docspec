@@ -17,6 +17,10 @@ _EXPECTED = {
     "dspx-publish",
     "dspx-release",
     "dspx-govern",
+    "dspx-propose",
+    "dspx-test",
+    "dspx-implement",
+    "dspx-verify",
 }
 # support skill（subagent 載入、隨帶 scripts/、不產 command）
 _SUPPORT = {"dspx-diagram"}
@@ -314,6 +318,7 @@ def test_skills_folded_into_init():
 _BODY_BUDGET = {
     "dspx-apply": 150, "dspx-develop": 120, "dspx-factcheck": 90,
     "dspx-publish": 80, "dspx-release": 90, "dspx-diagram": 90, "dspx-govern": 80,
+    "dspx-propose": 60, "dspx-test": 60, "dspx-implement": 60, "dspx-verify": 60,
 }
 
 

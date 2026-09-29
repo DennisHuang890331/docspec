@@ -235,6 +235,10 @@ This project keeps its long-form documents in docspec.
 - Project governance (questions, the owner's rulings, project decisions, the single roadmap) goes
   through `dspx-govern`; start a session with `docspec brief`. Read every ruling back to the owner
   and record it only after they confirm.
+- Software changes (replacing OpenSpec) go through `docspec code …`: `dspx-propose` (change folder,
+  spec deltas, tasks), `dspx-test` (a different agent plans and writes the tests), `dspx-implement`
+  (the engine runs the tests; evidence, not you, marks a task done), `dspx-verify` (review and
+  archive). `docspec/software/` is engine-owned and sealed like the corpus.
 - `docspec/corpus/` is engine-owned and integrity-sealed: change it only through
   `docspec get` / `docspec put`, never by hand.
 - `archive/` folders hold frozen published versions: never modify them; publish a new version.

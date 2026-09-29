@@ -10,6 +10,24 @@ a minor bump.
 
 ## [Unreleased]
 
+### Added — software domain replacing OpenSpec (phase 2; branch only)
+
+Software work now lives in docspec next to the document tree, under the same governance layer (design: `docs/dev/phase2-design.md`, detail and implementation notes: `docs/dev/phase2-detail.md`). Everything under `docspec/software/` is sealed and written only through `docspec code …`.
+
+- **Capability specs** (`docspec code spec list|show`): numbered requirements (R1…) with scenarios (S1…), a verification method per requirement (test, demonstration, inspection, analysis), and `verified-by` links to the tests that prove each scenario. Queries return one requirement at a time (`--req R1 --json`).
+- **Change folders** in the OpenSpec shape (`proposal`, `design`, `specs/<capability>`, `tests`, `tasks`), created and edited by commands (`code change new|set|design|delta|undelta|show|status`).
+  - Deltas name only what changes, down to one scenario. The engine records a base fingerprint, so two changes to the same place cannot silently overwrite each other.
+  - Reference checks: decisions in effect, every changed requirement has a task, every changed scenario has a planned test, files in registered repos, no task cycles, size warning.
+- **A separate test role** plans and writes the tests (`code testplan add`); the implementer can object and only another agent can answer.
+- **Evidence decides completion.** `code evidence run <change> <task>` runs the task's planned tests itself and checks each planned test ran and passed with no undeclared skips; only then does the engine mark the task done in `tasks.yaml`. Inspection, owner acceptance (read back and confirmed) and waivers (citing a ruling) are the other evidence types. A declared file changing after its evidence sends the task back to "needs re-run".
+- **Archive** (`code archive`) merges the deltas into the specs, moves the folder to `changes/_archive/<date>-<id>/` and writes a baseline, only when every task is done or waived and nothing conflicts. A failure midway restores everything. `code test` reruns every test the specs cite and names the scenario each failure affects.
+- **Linked to governance and documents.**
+  - Superseding a decision flags the dependent chain: active changes, requirements, the tasks and tests behind them (finished tasks are flagged, not reopened), and document sections that `realizes: [req:<cap>/R<n>]`.
+  - Roadmap items accept `swc:<change>` and show "done (N waived)".
+  - `docspec brief` gains a software section.
+- **OpenSpec import** (`code import-openspec`): specs, active changes (deltas re-expressed through the engine) and archived changes as history; checked tasks become "completed before import (no evidence)"; partially superseded design decisions are listed for merging; an import report is written and `openspec/` is left untouched.
+- **Skills** `dspx-propose`, `dspx-test`, `dspx-implement`, `dspx-verify`; the hook guard also protects `docspec/software/**.yaml` (except `config.yaml`).
+
 ### Added — project governance layer (phase 1 of the docs + software redesign; branch only)
 
 The outermost layer of a project now holds the records that carry authority, instead of prose files that only grow (design record: `docs/dev/system-design.md`, phase 1: `docs/dev/phase1-design.md`).
