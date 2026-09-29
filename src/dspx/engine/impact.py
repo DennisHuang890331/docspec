@@ -9,6 +9,8 @@
     - 文件章節 → 不另建標記，沿用文件引擎既有的 staleness（上游決策狀態變＝deps 指紋變＝
       stale-upstream）；影響檢視仍列出它們，處理方式是審閱後把 realizes 改指向接替的決策。
   已完成的項目只標「需重看」，不重新打開。
+- 軟體領域（第二期）：進行中的 change（`swc:`）與正式規格的需求（`req:`）依據決策時也是下游，
+  一樣建立可疑標記；節點與邊見 `engine/software/links.py`。
 - 完整性只相對於「已記錄的連結」（SR7）；忘了建的連結看不見，由 check 的強制規則補。
 """
 
@@ -75,6 +77,14 @@ def build_graph(layout: Layout, leaves: list | None = None,
             t = str(t)
             if t.startswith(gv.GOV_NAMESPACE):
                 g.add(DOC_NS + leaf.section, "realizes", gv.strip_ns(t))
+            elif t.startswith("req:"):
+                g.add(DOC_NS + leaf.section, "realizes", t)
+    for w in gov.work:
+        for ref in gv._as_list(w.get("refs")):
+            if ref.startswith("swc:"):
+                g.add(str(w["id"]), "refs", ref)
+    from dspx.engine.software.links import add_to_graph
+    add_to_graph(layout, g)
     return g
 
 

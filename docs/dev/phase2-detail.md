@@ -553,3 +553,13 @@ docspec/software/changes/<change>/
 - `docspec code test [--capability] [--list]`：依正式規格的 `verified-by` 每個 repo 跑一次，失敗時回報影響哪些情境；`--list` 只列清單給 CI。
 - `docspec check` 會檢查 `verified-by` 指到的測試檔是否還在（刪除或改名＝引用斷了）。
 - 情境被修改時，舊的 `verified-by` 保留、新規劃的測試附加上去；「需重看」的標示留到 P2-5 影響分析一起做。
+
+**P2-5（串起治理層與文件樹）**：完成。
+
+- 新的參照：`swc:<change>`（軟體 change）、`req:<能力>/R1`（需求）。追溯圖加入進行中 change、需求、任務、規劃測試的節點與邊（`engine/software/links.py`）。
+- 決策被取代或撤回：依據它的進行中 change 與需求都建立可疑標記。change 被標記時，`code change status` 提醒、`code archive` 擋下，直到看過並用 `docspec impact clear` 清除。封存的 change 若改寫了需求的 based-on（不再引用舊決策），該需求的標記自動清除並寫明理由。
+- roadmap 工作項目可連 `swc:<change>`：進行中＝進行中；被標記＝卡住（寫明原因）；封存＝完成；封存時有豁免任務＝完成（含豁免）。
+- 文件章節可 `realizes: [req:<能力>/R1]`：需求全文（含情境）納入章節的上游指紋，封存改到該需求時章節轉 stale-upstream；指向不存在或已退役的需求，check 報錯。
+- 情境被修改（WHEN／THEN 變了）時，舊的 `verified-by` 不再算數，改由這次規劃的測試接手；被拿掉的舊測試在封存輸出與基線中列出，交給測試角色更新或刪除（取代 P2-4 的「保留舊的」）。
+- `docspec brief` 新增「軟體開發」段：每個進行中 change 的任務進度、可封存、需重跑證據、受上游影響。
+- 補上修正用的指令：`code change design --remove-decision`、`code change undelta`、`code task remove`（已有證據者不可刪，改用豁免）、`code testplan remove`（有任務引用者不可刪）。

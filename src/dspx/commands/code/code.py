@@ -85,6 +85,7 @@ def _parser() -> argparse.ArgumentParser:
     for flag in ("goal", "non-goal", "risk", "open-question"):
         x.add_argument(f"--{flag}", action="append", default=[])
     x.add_argument("--decision", default="", help="governance decision ids (gov:D-…)")
+    x.add_argument("--remove-decision", default="", help="drop cited decisions (e.g. superseded ones)")
     x = cs.add_parser("delta", help="add one spec delta (the engine fills base fingerprints and ids)")
     x.add_argument("id")
     x.add_argument("--capability", default=None)
@@ -104,6 +105,10 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("--purpose", default=None, help="purpose of a new capability")
     x.add_argument("--from", dest="from_file", default=None,
                    help="YAML file: {capability, purpose?, deltas: [...]} or a list of those")
+    x = cs.add_parser("undelta", help="take back spec deltas (to rewrite them)")
+    x.add_argument("id")
+    x.add_argument("--capability", required=True)
+    x.add_argument("--ref", required=True, help="R1, R1/S2, or the id of a requirement this change adds")
     for name, hlp in (("show", "show a change"), ("status", "validation, tasks, conflicts")):
         x = cs.add_parser(name, help=hlp)
         x.add_argument("id")
@@ -126,6 +131,9 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("--allow-skips", action="store_true",
                    help="skipped tests are expected (e.g. no GPU) and do not block completion")
     x.add_argument("--depends-on", default="", help="task ids in this change")
+    x = ts.add_parser("remove", help="remove a task that has no evidence yet")
+    x.add_argument("change")
+    x.add_argument("task")
     x = ts.add_parser("list", help="list tasks with engine status")
     x.add_argument("change")
     x.add_argument("--json", dest="as_json", action="store_true")
@@ -139,6 +147,9 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("--level", default="unit", help=", ".join(tk.TEST_LEVELS))
     x.add_argument("--note", default=None)
     x.add_argument("--by", default=None)
+    x = tps.add_parser("remove", help="remove a planned test no task uses")
+    x.add_argument("change")
+    x.add_argument("test")
     x = tps.add_parser("list", help="list planned tests and objections")
     x.add_argument("change")
     x.add_argument("--json", dest="as_json", action="store_true")
@@ -323,8 +334,13 @@ def _change(layout, args) -> int:
                           ("open-questions", args.open_question)):
             if vals:
                 d[key] = _merge(d.get(key) or [], vals)
+        if args.remove_decision:
+            drop = set(_gov_csv(args.remove_decision))
+            d["decisions"] = [x for x in d.get("decisions") or [] if x not in drop]
         if args.decision:
             d["decisions"] = _merge(d.get("decisions") or [], _gov_csv(args.decision))
+        if not d.get("decisions"):
+            d.pop("decisions", None)
         chg.write_part(layout, args.id, "design", d)
         errs, _w = chg.validate_change(layout, chg.load_change(layout, args.id))
         bad = [e for e in errs if "design." in e]
@@ -338,6 +354,10 @@ def _change(layout, args) -> int:
             added.append(f"{cap} {d['op']} {d.get('ref') or d.get('id')}")
         for a in added:
             print(f"code change delta: {args.id}: {a}")
+        return 0
+    if args.op == "undelta":
+        removed = chg.remove_deltas(layout, args.id, args.capability, args.ref)
+        print(f"code change undelta: {args.id}: removed {removed} delta(s) on {args.capability} {args.ref}")
         return 0
     if args.op == "show":
         if args.as_json:
@@ -381,6 +401,20 @@ def _task(layout, args) -> int:
         chg.write_part(layout, args.change, "tasks", ch["tasks"])
         print(f"code task add: {args.change} task {rec['id']} — {rec['title']}")
         return 0
+    if args.op == "remove":
+        if ev.for_task(ev.load_all(layout), args.change, args.task):
+            return fail(f"task {args.task} already has evidence; it cannot be removed (waive it instead)")
+        tasks = ch["tasks"].get("tasks") or []
+        keep = [t for t in tasks if str(t.get("id")) != args.task]
+        if len(keep) == len(tasks):
+            return fail(f"change {args.change} has no task \"{args.task}\"")
+        users = [t["id"] for t in keep if args.task in io.as_list(t.get("depends-on"))]
+        if users:
+            return fail(f"task(s) {', '.join(users)} depend on task {args.task}")
+        ch["tasks"]["tasks"] = keep
+        chg.write_part(layout, args.change, "tasks", ch["tasks"])
+        print(f"code task remove: {args.change} task {args.task}")
+        return 0
     _report_refresh(ev.refresh(layout, args.change), args.change, quiet=args.as_json)
     ch = chg.load_change(layout, args.change)
     tasks = ch["tasks"].get("tasks") or []
@@ -399,6 +433,18 @@ def _testplan(layout, args) -> int:
             emit_json(tests)
         else:
             print(tk.render_md(layout, ch).split("## Tasks", 1)[0].strip())
+        return 0
+    if args.op == "remove":
+        users = [t["id"] for t in ch["tasks"].get("tasks") or []
+                 if args.test in io.as_list((t.get("verify") or {}).get("tests"))]
+        if users:
+            return fail(f"planned test {args.test} is used by task(s) {', '.join(users)}")
+        before = len(tests.get("tests") or [])
+        tests["tests"] = [t for t in tests.get("tests") or [] if str(t.get("id")) != args.test]
+        if len(tests["tests"]) == before:
+            return fail(f"change {args.change} has no planned test \"{args.test}\"")
+        chg.write_part(layout, args.change, "tests", tests)
+        print(f"code testplan remove: {args.change} {args.test}")
         return 0
     tool = gv.detect_tool(args.by)
     if args.op == "add":
@@ -502,6 +548,11 @@ def _archive(layout, args) -> int:
     if not args.as_json:
         print(f"  moved to {res['dest'].relative_to(layout.project_root)}")
         print(f"  baseline written ({len(res['baseline']['evidence'])} evidence record(s))")
+        for d in res["dropped-verified-by"]:
+            print(f"  ! {d['scenario']} changed; these tests no longer verify it (test role: update or "
+                  f"delete them): {', '.join(d['tests'])}")
+        for sid in res["cleared-suspects"]:
+            print(f"  suspect flag {sid} cleared (requirement rewritten by this change)")
         for other in res["affected"]:
             print(f"  ! active change {other} edits the same capability — run "
                   f"`docspec code change status {other}` to check its deltas still apply")

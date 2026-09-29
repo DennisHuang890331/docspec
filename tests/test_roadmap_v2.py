@@ -111,7 +111,7 @@ def test_dead_refs_are_check_errors(project):
     errs = run_check(load_project(layout), load_schema(), layout).errors
     assert any("\"change:nope\" points to nothing" in e for e in errs)
     assert any("\"doc:guide/nope\" points to nothing" in e for e in errs)
-    assert any("must start with change:, doc: or gov:" in e for e in errs)
+    assert any("must start with change:, doc:, gov: or swc:" in e for e in errs)
 
 
 def test_change_promotion_links_instead_of_collapsing(project, capsys):

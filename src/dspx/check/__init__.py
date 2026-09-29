@@ -61,6 +61,8 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
             gov_decisions = decision_index_entries(layout)
         except GovernanceError:         # 壞封條等：由 ⑬ 回報，這裡不重複炸
             gov_decisions = {}
+        from dspx.engine.software.links import requirement_index_entries
+        gov_decisions = {**requirement_index_entries(layout), **gov_decisions}   # req:（軟體需求）
     errors.extend(_ids_and_refs.check_dead_references(leaves, seen, gov_decisions))  # ②
 
     errors.extend(_cycles._detect_supersede_cycle(leaves))                    # ③

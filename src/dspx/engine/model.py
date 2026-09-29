@@ -570,4 +570,6 @@ def project_decision_index(layout, leaves: list) -> dict:
     status／change／publish／instructions／show／archive／aperture）一律走這裡，確保「投什麼就
     hash 什麼」在各呼叫點一致——任一處漏接治理決策＝status 與 render 對同一章節判定不同。"""
     from dspx.engine.governance import decision_index_entries
-    return decision_index(leaves, decision_index_entries(layout))
+    from dspx.engine.software.links import requirement_index_entries
+    return decision_index(leaves, {**requirement_index_entries(layout),
+                                   **decision_index_entries(layout)})

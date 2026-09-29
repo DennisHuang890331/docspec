@@ -95,6 +95,16 @@ def check_dead_references(leaves: list[Leaf], seen: dict[str, IdRecord],
                         errors.append(f"{sec}: concept.realizes points to a withdrawn governance "
                                       f"decision \"{t}\" (repoint or drop the edge)")
                     continue
+                if t.startswith("req:"):
+                    # 軟體需求（第二期）：必須存在於正式規格；已退役＝要改指向或拿掉。
+                    grec = (gov_decisions or {}).get(t)
+                    if grec is None:
+                        errors.append(f"{sec}: concept.realizes points to nonexistent software "
+                                      f"requirement \"{t}\" (see `docspec code spec list`)")
+                    elif grec.get("status") == "deprecated":
+                        errors.append(f"{sec}: concept.realizes points to a retired software "
+                                      f"requirement \"{t}\" (repoint or drop the edge)")
+                    continue
                 rec = seen.get(t)
                 if rec is None:
                     errors.append(f"{sec}: concept.realizes points to nonexistent id \"{t}\"")

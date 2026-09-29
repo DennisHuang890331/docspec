@@ -197,6 +197,32 @@ def add_delta(layout: Layout, cid: str, capability: str, raw: dict, purpose: str
     return d
 
 
+def remove_deltas(layout: Layout, cid: str, capability: str, ref: str) -> int:
+    """拿掉指向 ref 的差異（R1 連同它底下的情境差異；新增需求用它的編號）。"""
+    ch = load_change(layout, cid)
+    cd = ch["deltas"].get(capability)
+    if not cd:
+        raise io.SoftwareError(f"change {cid} has no deltas on \"{capability}\"")
+    ref = ref.strip("/")
+
+    def hit(d: dict) -> bool:
+        target = str(d.get("ref") or d.get("id") or "")
+        if d.get("op") == "add-scenario":
+            target = f"{d.get('ref')}/{d.get('id')}"
+        return target == ref or target.startswith(ref + "/")
+
+    keep = [d for d in cd.get("deltas") or [] if not hit(d)]
+    removed = len(cd.get("deltas") or []) - len(keep)
+    if not removed:
+        raise io.SoftwareError(f"no delta on {capability} {ref} in change {cid}")
+    path = io.change_dir(layout, cid) / "specs" / f"{capability}.yaml"
+    if keep:
+        write_part(layout, cid, "delta", {**cd, "deltas": keep}, capability)
+    else:
+        path.unlink()
+    return removed
+
+
 def preview_specs(layout: Layout, ch: dict) -> tuple[dict[str, dict], list[str], dict[str, str]]:
     """把 change 的全部差異套到現行規格的副本上（不寫入）。回 (新規格們, 衝突, 編號重配)。"""
     out, conflicts, renames = {}, [], {}
@@ -278,6 +304,13 @@ def validate_change(layout: Layout, ch: dict, *, strict: bool = False) -> tuple[
             errs.append(f"{where}: depends-on \"{dep}\" must be archived first")
     if cid in deps:
         errs.append(f"{where}: depends on itself")
+
+    # 上游決策變更影響（影響分析建立的可疑標記）
+    from dspx.engine.software.links import SWC_NS, open_suspects
+    for s in open_suspects(layout, SWC_NS + cid):
+        (errs if strict else warns).append(
+            f"{where}: affected by a change to {s.get('trigger')} — review the change, then "
+            f"`docspec impact clear {s.get('id')} --reason …` ({s.get('id')})")
 
     # 大小提醒
     lim = size_warning(layout)

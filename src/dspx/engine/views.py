@@ -32,6 +32,12 @@ _T = {
         "all_clear": "目前沒有卡住的事項。",
         "design_title": "目前有效的設計", "based_on": "依據", "history": "取代了",
         "pending_title": "待你裁定的問題", "nothing": "（沒有）",
+        "software": "軟體開發",
+        "sw_line": "{cid}：任務完成 {done}/{total}",
+        "sw_ready": "全部任務完成，可以封存（`docspec code archive {cid}`）",
+        "sw_rerun": "{n} 個任務需要重跑證據", "sw_affected": "受上游決策變更影響，需重看",
+        "n_sw_ready": "有 {n} 個軟體 change 可以封存。",
+        "n_sw_rerun": "有 {n} 個軟體任務在完成後又改了檔案，需要重跑證據。",
     },
     "en": {
         "brief_title": "Project status", "generated": "Generated",
@@ -49,6 +55,13 @@ _T = {
         "all_clear": "Nothing is blocked right now.",
         "design_title": "Current effective design", "based_on": "Based on", "history": "Replaces",
         "pending_title": "Questions awaiting your ruling", "nothing": "(none)",
+        "software": "Software",
+        "sw_line": "{cid}: {done}/{total} tasks done",
+        "sw_ready": "all tasks done, ready to archive (`docspec code archive {cid}`)",
+        "sw_rerun": "{n} task(s) need their evidence re-run",
+        "sw_affected": "affected by an upstream decision change; review it",
+        "n_sw_ready": "{n} software change(s) are ready to archive.",
+        "n_sw_rerun": "{n} software task(s) changed after completion and need their evidence re-run.",
     },
 }
 
@@ -118,6 +131,7 @@ def _brief(layout: Layout, leaves: list, config: dict | None, cap: int) -> str:
     docs = doc_summary(layout, leaves)
     stale_total = sum(d["stale"] for d in docs)
 
+    sw = software_summary(layout)
     lines.append(f"## {t['next']}")
     nxt = []
     if qs:
@@ -126,6 +140,10 @@ def _brief(layout: Layout, leaves: list, config: dict | None, cap: int) -> str:
         nxt.append("- " + t["n_review"].format(n=len(suspects) + len(review_secs)))
     if stale_total:
         nxt.append("- " + t["n_stale"].format(n=stale_total))
+    if any(r["ready"] for r in sw):
+        nxt.append("- " + t["n_sw_ready"].format(n=sum(1 for r in sw if r["ready"])))
+    if any(r["rerun"] for r in sw):
+        nxt.append("- " + t["n_sw_rerun"].format(n=sum(r["rerun"] for r in sw)))
     lines += nxt or ["- " + t["all_clear"]]
     lines.append("")
 
@@ -172,11 +190,49 @@ def _brief(layout: Layout, leaves: list, config: dict | None, cap: int) -> str:
         lines += _capped(prog, "docspec roadmap", t, cap * 2)   # 里程碑行＋未完成項目，給兩倍額度
         lines.append("")
 
+    if sw:
+        lines.append(f"## {t['software']}")
+        items = []
+        for r in sw:
+            notes = []
+            if r["ready"]:
+                notes.append(t["sw_ready"].format(cid=r["change"]))
+            if r["rerun"]:
+                notes.append(t["sw_rerun"].format(n=r["rerun"]))
+            if r["affected"]:
+                notes.append(t["sw_affected"])
+            items.append("- " + t["sw_line"].format(cid=r["change"], done=r["done"], total=r["total"])
+                         + (f"——{'；'.join(notes)}" if notes else ""))
+        lines += _capped(items, "docspec code change list", t, cap)
+        lines.append("")
+
     if docs:
         lines.append(f"## {t['docs']}")
         lines += [f"- {t['doc_line'].format(**d)}" for d in docs][:max(cap, 1) * 2]
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def software_summary(layout: Layout) -> list[dict]:
+    """進行中的軟體 change：任務進度（依證據推導，不讀存值）、可否封存、是否受上游影響。"""
+    from dspx.engine.software import changes as swc
+    from dspx.engine.software import evidence as swev
+    from dspx.engine.software import io as swio
+    from dspx.engine.software.links import SWC_NS, open_suspects
+    if not swio.has_software(layout):
+        return []
+    rows = []
+    try:
+        for cid in swc.list_active(layout):
+            derived = swev.explain(layout, cid)
+            done = sum(1 for r in derived if r["status"] in ("done", "done-waived", "imported-done"))
+            rows.append({"change": cid, "done": done, "total": len(derived),
+                         "ready": bool(derived) and done == len(derived),
+                         "rerun": sum(1 for r in derived if r["status"] == "needs-rerun"),
+                         "affected": bool(open_suspects(layout, SWC_NS + cid))})
+    except swio.SoftwareError:
+        return rows          # 壞封條由 check ⑭ 回報
+    return rows
 
 
 def effective_design(layout: Layout, config: dict | None = None) -> str:

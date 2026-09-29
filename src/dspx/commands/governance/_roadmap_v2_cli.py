@@ -4,7 +4,7 @@
   （無）            檢視：各里程碑進度與工作項目的推導狀態（--json、--milestone）
   add               新增工作項目（相容前一代：--kind gap|task、--target <節|forest>）
   milestone         新增里程碑（--type checkpoint|deliverable、--due）
-  link <id> --ref   加一個指向（change:<id>／doc:<節或文章>／gov:<id>）
+  link <id> --ref   加一個指向（change:<id>／doc:<節或文章>／gov:<id>／swc:<軟體 change>）
   done <id> --note  手動結案（沒有 refs 可推導的小工作）
   waive <id> --ruling RL-… --note … [--reopen-when …]  豁免（依據使用者裁定）
   migrate           前一代 roadmap 一次轉換進來（已啟用治理層時冪等）
@@ -66,7 +66,7 @@ def run(argv: list[str], layout) -> int:
     a.add_argument("--milestone", dest="m", default=None)
     a.add_argument("--parent", default=None)
     a.add_argument("--depends-on", default="")
-    a.add_argument("--ref", default="", help="comma-separated change:<id> / doc:<section> / gov:<id>")
+    a.add_argument("--ref", default="", help="comma-separated change:<id> / doc:<section> / gov:<id> / swc:<software change>")
     a.add_argument("--target", default=None, help="(compat) section path/id or 'forest'")
     a.add_argument("--kind", default=None, choices=("gap", "task"), help="(compat) gap or task")
     a.add_argument("--priority", default="")

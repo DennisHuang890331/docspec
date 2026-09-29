@@ -9,6 +9,7 @@
 - 工作項目用 `refs` 指向實際執行的東西：
     `change:<id>`（文件 change；封存＝滿足）、`doc:<章節路徑>`（該節已同步＝滿足）、
     `doc:<文章>`（已發布且全部章節已同步＝滿足）、`gov:Q-…`／`gov:RL-…`（問題已裁定／裁定已記錄生效）。
+    `swc:<id>`（軟體 change；封存＝完成，封存時有豁免的任務＝完成含豁免；受上游決策影響＝卡住）。
     `gov:D-…`（決策）是**約束**不是完成條件：它讓決策被取代時這個項目被標為可疑（影響分析），
     但決策生效不代表工作做完。
 - 沒有 refs 的項目：有子項目就看子項目；否則只能以 `roadmap done --note` 手動結案。
@@ -37,6 +38,8 @@ _LABELS = {
 
 def status_label(status: str, item: dict, lang: str = "zh") -> str:
     n = len(item.get("waivers") or [])
+    if status == DONE_WAIVED and not n:          # 豁免在軟體 change 的任務裡，不在項目上
+        return "完成（含豁免）" if lang == "zh" else "done (with waivers)"
     return _LABELS[lang][status].format(n=n)
 
 
@@ -50,6 +53,7 @@ class Context:
     articles: set[str]
     published: set[str]                  # 至少發布過一版的文章
     open_suspect_targets: set[str] = field(default_factory=set)
+    sw_changes: dict[str, str] = field(default_factory=dict)    # 軟體 change → active／archived／archived-waived
 
 
 def build_context(layout: Layout, leaves: list, gov: gv.Governance | None = None) -> Context:
@@ -71,7 +75,26 @@ def build_context(layout: Layout, leaves: list, gov: gv.Governance | None = None
     return Context(gov=gov, change_states=chg.all_change_states(layout), sync=sync,
                    articles=articles, published=published,
                    open_suspect_targets={str(s.get("target")) for s in gov.suspects
-                                         if s.get("status") == "open"})
+                                         if s.get("status") == "open"},
+                   sw_changes=_software_change_states(layout))
+
+
+def _software_change_states(layout: Layout) -> dict[str, str]:
+    from dspx.engine.software import changes as swc
+    from dspx.engine.software import io as swio
+    if not swio.has_software(layout):
+        return {}
+    out = {c: "active" for c in swc.list_active(layout)}
+    for cid, folder in swc.archived_ids(layout).items():
+        base = swio.baselines_dir(layout) / f"{folder}.yaml"
+        waived = False
+        if base.is_file():
+            try:
+                waived = bool((swio.load(base, "baseline").get("tasks") or {}).get("done-waived"))
+            except swio.SoftwareError:
+                pass
+        out[cid] = "archived-waived" if waived else "archived"
+    return out
 
 
 def is_constraint_ref(ref: str) -> bool:
@@ -85,6 +108,13 @@ def ref_state(ref: str, ctx: Context) -> str:
     if ref.startswith("change:"):
         st = ctx.change_states.get(ref[len("change:"):])
         return {"archived": DONE, "active": IN_PROGRESS}.get(st, "missing" if st is None else NOT_STARTED)
+    if ref.startswith("swc:"):
+        st = ctx.sw_changes.get(ref[len("swc:"):])
+        if st is None:
+            return "missing"
+        if st.startswith("archived"):
+            return DONE_WAIVED if st == "archived-waived" else DONE
+        return BLOCKED if ref in ctx.open_suspect_targets else IN_PROGRESS
     if ref.startswith("doc:"):
         target = ref[len("doc:"):].strip("/")
         if target in ctx.sync:
@@ -130,12 +160,12 @@ def item_status(item: dict, ctx: Context, _seen: frozenset = frozenset()) -> str
     child_states = [item_status(c, ctx, seen) for c in children]
     parts = states + child_states
     if parts and all(s in _FINISHED for s in parts):
-        return DONE_WAIVED if waived or DONE_WAIVED in child_states else DONE
+        return DONE_WAIVED if waived or DONE_WAIVED in child_states or DONE_WAIVED in states else DONE
     for dep in gv._as_list(item.get("depends-on")):
         d = by_id.get(dep)
         if d is None or item_status(d, ctx, seen) not in _FINISHED:
             return BLOCKED
-    if iid in ctx.open_suspect_targets:
+    if iid in ctx.open_suspect_targets or BLOCKED in states:
         return BLOCKED
     if any(s in (DONE, DONE_WAIVED, IN_PROGRESS, BLOCKED) for s in parts):
         return IN_PROGRESS
@@ -151,6 +181,11 @@ def block_reason(item: dict, ctx: Context, lang: str = "zh") -> str:
     if waiting:
         names = "、".join(f"{w.get('title')}（{w.get('id')}）" for w in waiting)
         parts.append(f"等 {names} 完成" if lang == "zh" else f"waiting for {names}")
+    affected = [r for r in gv._as_list(item.get("refs")) if r in ctx.open_suspect_targets]
+    if affected:
+        names = "、".join(affected)
+        parts.append(f"{names} 受上游決策變更影響，需重看（`docspec impact`）" if lang == "zh"
+                     else f"{names} affected by an upstream decision change; review with `docspec impact`")
     if str(item.get("id")) in ctx.open_suspect_targets:
         parts.append("受上游變更影響，需重看（`docspec impact`）" if lang == "zh"
                      else "affected by an upstream change; review with `docspec impact`")
@@ -232,9 +267,9 @@ def validate_refs(layout: Layout, leaves: list, gov: gv.Governance) -> list[str]
     errs = []
     for w in gov.work:
         for r in gv._as_list(w.get("refs")):
-            if not r.startswith(("change:", "doc:", "gov:")):
+            if not r.startswith(("change:", "doc:", "gov:", "swc:")):
                 errs.append(f"governance work item {w.get('id')}: ref \"{r}\" must start with "
-                            f"change:, doc: or gov:")
+                            f"change:, doc:, gov: or swc:")
             elif ref_state(r, ctx) == "missing":
                 errs.append(f"governance work item {w.get('id')}: ref \"{r}\" points to nothing")
     return errs

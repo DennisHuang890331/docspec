@@ -362,3 +362,17 @@ def test_size_warning(sw, capsys):
     capsys.readouterr()
     _rc, out = _status(capsys, "big")
     assert any("large change" in w for w in out["warnings"])
+
+
+def test_task_and_testplan_remove_guards(sw, capsys):
+    code("change", "new", "c", "--why", "x", "--modified", "task-entry-page")
+    code("testplan", "add", "c", "--location", "tests/t.py::a", "--covers", "task-entry-page/R1/S1")
+    code("task", "add", "c", "--title", "a", "--verify", "test", "--tests", "T1")
+    code("task", "add", "c", "--title", "b", "--verify", "inspection", "--depends-on", "1")
+    assert code("testplan", "remove", "c", "T1") == 1          # 任務 1 用到
+    assert code("task", "remove", "c", "1") == 1                # 任務 2 依賴它
+    assert code("task", "remove", "c", "2") == 0
+    assert code("task", "remove", "c", "1") == 0
+    assert code("testplan", "remove", "c", "T1") == 0
+    ch = chg.load_change(sw, "c")
+    assert ch["tasks"]["tasks"] == [] and ch["tests"]["tests"] == []

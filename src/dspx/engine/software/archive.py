@@ -72,6 +72,18 @@ def plan(layout: Layout, cid: str) -> dict:
     errors += blockers(layout, ch, evs)
     new_specs, _conflicts, renames = chg.preview_specs(layout, ch)   # 衝突已在嚴格檢查裡
 
+    # 被修改的情境：舊的 verified-by 不再保證新行為 → 改由這次規劃的測試接手（舊的列出來給測試角色確認）
+    dropped: list[dict] = []
+    for cap, cd in ch["deltas"].items():
+        for x in cd.get("deltas") or []:
+            if x.get("op") != "modify-scenario" or not ({"when", "then"} & set(x)) or cap not in new_specs:
+                continue
+            ref = _rename(f"{cap}/{x['ref']}", renames)
+            _c, rid, sid = sp.split_ref(ref)
+            scn = sp.find_scenario(sp.find_requirement(new_specs[cap], rid), sid)
+            if scn is not None and scn.get("verified-by"):
+                dropped.append({"scenario": ref, "tests": io.as_list(scn.pop("verified-by"))})
+
     # 併入「情境 ← 測試」（verified-by），依編號重配改寫引用；測到既有能力也一併記上
     for t in ch["tests"].get("tests") or []:
         for ref in io.as_list(t.get("covers")):
@@ -96,7 +108,15 @@ def plan(layout: Layout, cid: str) -> dict:
         if set(oc["deltas"]) & set(new_specs):
             affected.append(other)
     tasks = ch["tasks"].get("tasks") or []
-    return {"change": cid, "ok": not errors, "errors": errors, "warnings": warnings,
+    def now_verifying(ref: str) -> list[str]:
+        c, rid, sid = sp.split_ref(ref)
+        return io.as_list(sp.find_scenario(sp.find_requirement(new_specs[c], rid), sid).get("verified-by"))
+
+    # 這次又規劃了同一個測試的，不算被拿掉
+    dropped = [{"scenario": d["scenario"],
+                "tests": [x for x in d["tests"] if x not in now_verifying(d["scenario"])]} for d in dropped]
+    dropped = [d for d in dropped if d["tests"]]
+    return {"change": cid, "ok": not errors, "dropped-verified-by": dropped, "errors": errors, "warnings": warnings,
             "specs": new_specs, "renames": renames, "affected": affected, "ch": ch,
             "evidence": sorted({e for t in tasks for e in io.as_list(t.get("evidence"))}),
             "tasks": {s: sum(1 for t in tasks if t.get("status") == s) for s in DONE}}
@@ -121,6 +141,8 @@ def archive(layout: Layout, cid: str, *, tool: str) -> dict:
                 "evidence": p["evidence"], "tasks": {k: v for k, v in p["tasks"].items() if v}}
     if p["renames"]:
         baseline["renames"] = p["renames"]
+    if p["dropped-verified-by"]:
+        baseline["dropped-verified-by"] = p["dropped-verified-by"]
     baseline_path = io.baselines_dir(layout) / f"{date}-{cid}.yaml"
 
     # 交易：記下舊內容，失敗就還原
@@ -144,7 +166,9 @@ def archive(layout: Layout, cid: str, *, tool: str) -> dict:
         if dest.exists() and not io.change_dir(layout, cid).exists():
             shutil.move(str(dest), str(io.change_dir(layout, cid)))
         raise
-    return {**p, "baseline": baseline, "dest": dest}
+    from dspx.engine.software.links import clear_requirement_suspects
+    cleared = clear_requirement_suspects(layout, cid, p["ch"], tool)
+    return {**p, "baseline": baseline, "dest": dest, "cleared-suspects": cleared}
 
 
 # ── 回歸測試：依正式規格的 verified-by ────────────────────────────────────
