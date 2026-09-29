@@ -48,6 +48,11 @@ _GOV_BLOCK_MSG = (
     "(questions, rulings, decisions, roadmap, suspect flags). Change them only through docspec "
     "commands (`docspec question|ruling|decision|roadmap|impact ...`).")
 
+_SW_BLOCK_MSG = (
+    "[docspec] Blocked: docspec/software/ holds engine-owned, sealed software records (capability "
+    "specs, change folders, tasks, test plans, evidence). Change them only through `docspec code ...`; "
+    "task completion is written by the engine from evidence. (software/config.yaml is hand-editable.)")
+
 _VIEW_BLOCK_MSG = (
     "[docspec] Blocked: docs/project/*.md are generated views (status, design, pending). "
     "Regenerate them with `docspec brief --write` instead of editing by hand.")
@@ -66,6 +71,16 @@ def _is_governance_file(token: str) -> bool:
         parts[i] == "docspec" and parts[i + 1] == "governance" for i in range(len(parts) - 1))
 
 
+def _is_software_file(token: str) -> bool:
+    """`docspec/software/**.yaml`（`software/config.yaml` 除外）：軟體領域密封紀錄。"""
+    p = _clean(token)
+    parts = p.parts
+    for i in range(len(parts) - 1):
+        if parts[i] == "docspec" and parts[i + 1] == "software":
+            return p.suffix == ".yaml" and parts[i + 2:] != ("config.yaml",)
+    return False
+
+
 def _is_generated_view(token: str) -> bool:
     """`docs/project/*.md`：`docspec brief --write` 產生的檢視。"""
     p = _clean(token)
@@ -80,6 +95,8 @@ def _protected_message(token: str) -> str | None:
         return _STORE_BLOCK_MSG
     if _is_governance_file(token):
         return _GOV_BLOCK_MSG
+    if _is_software_file(token):
+        return _SW_BLOCK_MSG
     if _is_generated_view(token):
         return _VIEW_BLOCK_MSG
     return None
@@ -288,7 +305,7 @@ def _guard_one(tool_input: dict) -> str | None:
         if not sub:
             continue
         for pred, msg in ((_is_store_file, _STORE_BLOCK_MSG), (_is_governance_file, _GOV_BLOCK_MSG),
-                          (_is_generated_view, _VIEW_BLOCK_MSG)):
+                          (_is_software_file, _SW_BLOCK_MSG), (_is_generated_view, _VIEW_BLOCK_MSG)):
             if any(pred(m.group(1)) for m in _REDIRECT.finditer(sub)) or _sub_writes(sub, pred) \
                     or (_PWSH_MUTATE.search(sub) and any(pred(t) for t in sub.split())):
                 return msg

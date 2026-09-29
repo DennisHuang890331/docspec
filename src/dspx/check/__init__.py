@@ -85,6 +85,9 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
                 errors.extend(validate_refs(layout, leaves, _gv.load_governance(layout)))
             except _gv.GovernanceError:
                 pass                                                         # 壞封條已由 ⑬ 回報
+        from dspx.engine.software import validate_all as _validate_sw
+        sw_errors, sw_warnings = _validate_sw(layout)                        # ⑭ — 軟體領域（software/）
+        errors.extend(sw_errors)
 
     ref_errors, warnings = _cross_section._cross_section_decision_refs(leaves)  # trailing F1 check
     errors.extend(ref_errors)
@@ -93,5 +96,6 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
         warnings.extend(_authored.check_inherited_conflicts(leaves))   # ★#27 繼承信封矛盾（非阻塞）
         warnings.extend(_authored.check_authored_state(layout, leaves))  # ★#6.2b 手寫規定檔帶狀態
         warnings.extend(_roadmap._roadmap_id_collisions(layout, leaves))  # B5 活躍/封存撞號（非阻塞）
+        warnings.extend(sw_warnings)                                          # ⑭ 軟體領域提醒（大小、未結異議）
 
     return CheckResult(ok=not errors, errors=errors, index=index, warnings=warnings)

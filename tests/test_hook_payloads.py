@@ -84,6 +84,11 @@ def test_antigravity_payloads_answer_with_json_decision(monkeypatch, capsys):
     ({"tool_input": {"file_path": "docs/project/status.md"}}, True),
     (_cmd("echo hi > docs/project/status.md"), True),
     ({"tool_input": {"file_path": "docs/guide/_latest.md"}}, False),
+    ({"tool_input": {"file_path": "/p/docspec/software/changes/x/tasks.yaml"}}, True),
+    (_cmd("sed -i 's/not-started/done/' docspec/software/changes/x/tasks.yaml"), True),
+    ({"tool_input": {"file_path": "/p/docspec/software/specs/task-entry-page.yaml"}}, True),
+    ({"tool_input": {"file_path": "/p/docspec/software/config.yaml"}}, False),
+    (_cmd("cat docspec/software/changes/x/tasks.yaml"), False),
 ])
 def test_governance_records_and_views_are_engine_owned(monkeypatch, payload, blocked):
     assert _guard(monkeypatch, payload) == (2 if blocked else 0)
