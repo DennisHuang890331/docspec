@@ -36,6 +36,7 @@ RECORD_FORMAT_VERSION = 1
 KINDS: dict[str, tuple[str, str]] = {
     "question": ("Q", "questions"),
     "ruling": ("RL", "rulings"),
+    "info": ("I", "info"),              # 使用者提供的現況資訊（2026/09/30：補回「資訊」那一半）
     "decision": ("D", "decisions"),
     "suspect": ("S", "suspects"),
     "milestone": ("M", "roadmap"),      # 唯一一份專案 roadmap：里程碑與工作項目同住 roadmap/
@@ -50,12 +51,16 @@ _ID_RE = re.compile(r"^(?P<cls>[A-Z]+)-(?P<tool>[a-z]+)-(?P<n>[1-9][0-9]*)$")
 FIELDS: dict[str, dict[str, bool]] = {   # 欄位 → 是否必填
     "question": {"id": True, "title": True, "body": False, "status": True,
                  "raised-by": True, "raised-at": True, "affects": False},
-    # 裁定（2026/09/30 裁定）：agent 先在對話中覆述（read-back），使用者回覆確認（confirmed-reply）
-    # 後才寫入，寫入即生效。原話、覆述、確認回覆、轉記者一起留下（可見性取代事前把關）。
+    # 裁定＝使用者的決定。一律保存原話；講得不清楚時才覆述（read-back）並記下確認回覆
+    # （confirmed-reply）——2026/09/30 實測後修訂，原本兩欄必填。
     "ruling": {"id": True, "quote": True, "date": True, "recorded-by": True,
-               "read-back": True, "confirmed-reply": True, "status": True, "answers": False,
+               "read-back": False, "confirmed-reply": False, "status": True, "answers": False,
                "supersedes": False, "provisional": False, "rejected-reason": False,
                "rejected-at": False},
+    # 資訊＝使用者提供的現況（不是決定）：原話、主題、來源；可被文件引用、當第一手來源。
+    "info": {"id": True, "quote": True, "about": True, "source": False, "date": True,
+             "recorded-by": True, "read-back": False, "confirmed-reply": False, "status": True,
+             "supersedes": False, "withdrawn-reason": False, "withdrawn-at": False},
     "decision": {"id": True, "title": True, "statement": True, "rationale": False,
                  "status": True, "based-on": False, "supersedes": False,
                  "created-by": True, "created-at": True},
@@ -74,6 +79,7 @@ MILESTONE_TYPES = ("checkpoint", "deliverable")   # 計畫查核點 vs 交付物
 STORED_STATUS: dict[str, tuple[str, ...]] = {
     "question": ("open", "needs-explanation", "withdrawn"),
     "ruling": ("effective", "rejected"),
+    "info": ("current", "withdrawn"),
     "decision": ("draft", "active", "withdrawn"),
     "suspect": ("open", "cleared"),
 }
@@ -203,11 +209,12 @@ class Governance:
     suspects: list[dict]
     milestones: list[dict] = field(default_factory=list)
     work: list[dict] = field(default_factory=list)
+    infos: list[dict] = field(default_factory=list)
 
     def by_id(self) -> dict[str, dict]:
         out: dict[str, dict] = {}
         for recs in (self.questions, self.rulings, self.decisions, self.suspects,
-                     self.milestones, self.work):
+                     self.milestones, self.work, self.infos):
             for r in recs:
                 out[str(r.get("id"))] = r
         return out
@@ -216,7 +223,7 @@ class Governance:
 def load_governance(layout: Layout) -> Governance:
     return Governance(*(load_all(layout, k) for k in ("question", "ruling", "decision",
                                                         "suspect", "milestone",
-                                                        "work")))
+                                                        "work", "info")))
 
 
 def has_governance(layout: Layout) -> bool:
@@ -318,6 +325,18 @@ def decision_index_entries(layout: Layout) -> dict:
             "status": _STATUS_MAP.get(status, status),
             "superseded_by": (GOV_NAMESPACE + succ) if succ else None,
         }
+    # 資訊（使用者提供的現況）：文件章節可以 realizes 它；被較新的資訊取代或撤回時，
+    # 引用它的章節轉為需要更新（同決策的機制）。
+    for i in gov.infos:
+        status = info_effective_status(i, gov)
+        newer = next((str(o["id"]) for o in gov.infos if o.get("status") != "withdrawn"
+                      and str(i["id"]) in _as_list(o.get("supersedes"))), None)
+        out[GOV_NAMESPACE + str(i["id"])] = {
+            "section": None, "statement": f"{i.get('about')}：{i.get('quote')}", "kind": "info",
+            "status": {"current": "active", "superseded": "superseded",
+                       "withdrawn": "deprecated"}[status],
+            "superseded_by": (GOV_NAMESPACE + newer) if newer else None,
+        }
     return out
 
 
@@ -335,7 +354,7 @@ def validate(layout: Layout) -> list[str]:
     for kind, recs in (("question", gov.questions), ("ruling", gov.rulings),
                        ("decision", gov.decisions), ("suspect", gov.suspects),
                        ("milestone", gov.milestones),
-                       ("work", gov.work)):
+                       ("work", gov.work), ("info", gov.infos)):
         fields = FIELDS[kind]
         for r in recs:
             rid = str(r.get("id") or "")
@@ -370,6 +389,8 @@ def validate(layout: Layout) -> list[str]:
         where = f"governance ruling {r.get('id')}"
         expect(where, r.get("answers"), "question", "answers")
         expect(where, r.get("supersedes"), "ruling", "supersedes")
+    for i in gov.infos:
+        expect(f"governance info {i.get('id')}", i.get("supersedes"), "info", "supersedes")
     for d in gov.decisions:
         where = f"governance decision {d.get('id')}"
         expect(where, d.get("based-on"), "ruling", "based-on")
@@ -428,3 +449,13 @@ def _supersede_cycles(recs: list[dict], kind: str, field_name: str = "supersedes
         if state.get(n) is None:
             visit(n, [n])
     return errs
+
+
+def info_effective_status(rec: dict, gov: "Governance") -> str:
+    """資訊的有效狀態：withdrawn（撤回）＞ superseded（被較新的資訊取代）＞ current。"""
+    if rec.get("status") == "withdrawn":
+        return "withdrawn"
+    rid = str(rec.get("id"))
+    if any(rid in _as_list(o.get("supersedes")) for o in gov.infos if o.get("status") != "withdrawn"):
+        return "superseded"
+    return "current"

@@ -1,9 +1,10 @@
-"""docspec ruling — 使用者裁定（agent 在對話中覆述、使用者確認後轉記；寫入即生效）。
+"""docspec ruling — 使用者的決定（保存原話；寫入即生效）。
 
-2026/09/30 裁定「對話中覆述確認」：
-1. agent 在對話中用白話覆述自己的理解（`--read-back`）。
-2. 使用者回覆確認或更正；確認的回覆原文放進 `--confirmed`。沒有確認回覆就不能寫入。
-3. 寫入後即生效，可作為決策的依據。
+2026/09/30 實測後修訂：
+1. 一律保存使用者原話（`--quote`）。
+2. 使用者講得清楚就直接記；講得不清楚時，先在對話中覆述（`--read-back`），使用者回覆確認後
+   把回覆原文放進 `--confirmed`（兩者一起給）。
+3. 寫入後即生效，可作為決策的依據。使用者提供的現況資訊（不是決定）用 `docspec info`。
 使用者事後說「記錯了」→ `ruling reject <id> --reason "<使用者原話>"`，觸發影響分析。
 「被取代」不手寫：由之後的裁定 `--supersedes` 推導。
 """
@@ -17,8 +18,8 @@ from dspx.commands.governance._gov_common import (emit_json, fail, label, open_l
 from dspx.engine import governance as gv
 
 NAME = "ruling"
-HELP = ("governance: the owner's rulings — read back in the conversation, confirmed by the owner, "
-        "then recorded (add / reject / list / show)")
+HELP = ("governance: the owner's decisions, kept in their own words (read back only when unclear) "
+        "(add / reject / list / show); information the owner gives is `docspec info`")
 
 _STATUS_NOTE = {"effective": "effective", "rejected": "rejected by the owner",
                 "superseded": "superseded"}
@@ -27,12 +28,12 @@ _STATUS_NOTE = {"effective": "effective", "rejected": "rejected by the owner",
 def run(argv: list[str]) -> int:
     p = argparse.ArgumentParser(prog="docspec ruling", description=HELP)
     sub = p.add_subparsers(dest="op")
-    a = sub.add_parser("add", help="record a ruling the owner confirmed in the conversation")
+    a = sub.add_parser("add", help="record a decision the owner made")
     a.add_argument("--quote", required=True, help="the owner's exact words")
-    a.add_argument("--read-back", required=True,
-                   help="how you restated it to the owner, in plain words, before recording")
-    a.add_argument("--confirmed", required=True,
-                   help="the owner's reply confirming your read-back (verbatim)")
+    a.add_argument("--read-back", default="",
+                   help="only when the owner was unclear: how you restated it, in plain words")
+    a.add_argument("--confirmed", default="",
+                   help="with --read-back: the owner's reply confirming it (verbatim)")
     a.add_argument("--answers", default="", help="comma-separated question ids it answers")
     a.add_argument("--supersedes", default="", help="comma-separated earlier ruling ids it replaces")
     a.add_argument("--provisional", action="store_true", help="the owner said this is tentative")
@@ -56,14 +57,16 @@ def run(argv: list[str]) -> int:
         return 1
     try:
         if args.op == "add":
-            if not args.read_back.strip() or not args.confirmed.strip():
-                return fail("read the ruling back to the owner and record their confirming reply "
-                            "(--read-back and --confirmed must not be empty)")
+            if bool(args.read_back.strip()) != bool(args.confirmed.strip()):
+                return fail("--read-back and --confirmed go together: when the owner was unclear, "
+                            "record both your restatement and their confirming reply")
             tool = gv.detect_tool(args.by)
             rid = gv.next_id(layout, "ruling", tool)
             rec = {"id": rid, "quote": args.quote.strip(), "date": args.date or gv.today(),
-                   "recorded-by": tool, "read-back": args.read_back.strip(),
-                   "confirmed-reply": args.confirmed.strip(), "status": "effective"}
+                   "recorded-by": tool, "status": "effective"}
+            if args.read_back.strip():
+                rec["read-back"] = args.read_back.strip()
+                rec["confirmed-reply"] = args.confirmed.strip()
             for key, raw in (("answers", args.answers), ("supersedes", args.supersedes)):
                 if split_csv(raw):
                     rec[key] = split_csv(raw)

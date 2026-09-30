@@ -217,8 +217,8 @@ def test_agents_md_names_the_language_and_the_restate_rule():
     from dspx.commands.maintenance.init import agents_md_block
     zh = agents_md_block("zh-TW")
     assert "繁體中文（zh-TW）" in zh and "{lang_name}" not in zh
-    assert "再覆述一次" in zh and "衝突" in zh
+    assert "docspec info add" in zh and "講得不清楚" in zh and "衝突" in zh
     assert "不算機械式工作" in zh and "不回報「全部完成」" in zh
     assert "简体中文" in agents_md_block("zh-CN")
     en = agents_md_block("en")
-    assert "English" in en and "restate the changed version" in en and "never report" in en
+    assert "English" in en and "docspec info add" in en and "never report" in en

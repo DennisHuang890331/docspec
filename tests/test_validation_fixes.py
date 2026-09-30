@@ -197,7 +197,7 @@ def test_brief_notes_outdated_skills_and_rules(tmp_path, monkeypatch, capsys):
     skill = tmp_path / ".claude" / "skills" / "dspx-test" / "SKILL.md"
     skill.write_text(skill.read_text(encoding="utf-8") + "\n舊版內容\n", encoding="utf-8")
     agents = tmp_path / "AGENTS.md"
-    agents.write_text(agents.read_text(encoding="utf-8").replace("再覆述一次", "覆述"), encoding="utf-8")
+    agents.write_text(agents.read_text(encoding="utf-8").replace("講得不清楚", "不清楚"), encoding="utf-8")
     stale = outdated_installs(tmp_path)
     assert ".claude/skills/dspx-test/SKILL.md" in stale and "AGENTS.md (docspec block)" in stale
     assert init_cmd.run(["--tool", "claude", "--agents-md", "--no-tex-hint", "--no-update-check"]) == 0

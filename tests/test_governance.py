@@ -80,14 +80,36 @@ def test_question_answered_is_derived(gov_project):
     assert gov.rulings[0]["status"] == "effective"
 
 
-def test_ruling_needs_read_back_and_owner_reply(gov_project):
-    """2026/09/30：沒有覆述與使用者的確認回覆就不能寫入裁定。"""
-    with pytest.raises(SystemExit):
-        ruling_cmd.run(["add", "--quote", "刪除就是刪除"])
-    assert ruling_cmd.run(["add", "--quote", "刪除就是刪除", "--read-back", " ", "--confirmed", "對"]) == 1
-    assert ruling_cmd.run(["add", "--quote", "刪除就是刪除", *RB]) == 0
+def test_ruling_read_back_only_when_unclear(gov_project):
+    """2026/09/30 實測後修訂：講得清楚就直接記原話；講得不清楚時覆述與確認回覆一起記。"""
+    assert ruling_cmd.run(["add", "--quote", "刪除就是刪除"]) == 0
     rec = gv.load_governance(Layout(gov_project)).rulings[0]
-    assert (rec["status"], rec["read-back"], rec["confirmed-reply"]) == ("effective", "覆述內容", "對，就是這樣")
+    assert rec["status"] == "effective" and "read-back" not in rec
+    assert ruling_cmd.run(["add", "--quote", "那個照舊", "--read-back", "照舊＝依學號排"]) == 1   # 缺確認回覆
+    assert ruling_cmd.run(["add", "--quote", "那個照舊", *RB]) == 0
+    rec = next(r for r in gv.load_governance(Layout(gov_project)).rulings if r["quote"] == "那個照舊")
+    assert (rec["read-back"], rec["confirmed-reply"]) == ("覆述內容", "對，就是這樣")
+
+
+def test_info_records_owner_information(gov_project, capsys):
+    """使用者提供的現況資訊（不是決定）：保存原話與主題；較新的取代較舊的；可被文件引用。"""
+    from dspx.commands.governance import info as info_cmd
+    assert info_cmd.run(["add", "--quote", "教務處電腦大多是 Windows 10", "--about", "電腦環境",
+                         "--source", "資訊組（負責人轉述）"]) == 0
+    assert info_cmd.run(["add", "--quote", "全部都是 Windows 11 了", "--about", "電腦環境",
+                         "--supersedes", "I-claude-1"]) == 0
+    capsys.readouterr()
+    assert info_cmd.run(["list"]) == 0
+    out = capsys.readouterr().out
+    assert "Windows 11" in out and "Windows 10" not in out
+    assert info_cmd.run(["list", "--all"]) == 0
+    assert "[superseded]" in capsys.readouterr().out
+    idx = gv.decision_index_entries(Layout(gov_project))
+    assert idx["gov:I-claude-1"]["status"] == "superseded"
+    assert idx["gov:I-claude-1"]["superseded_by"] == "gov:I-claude-2"
+    assert info_cmd.run(["withdraw", "I-claude-2", "--reason", "問錯人"]) == 0
+    assert gv.decision_index_entries(Layout(gov_project))["gov:I-claude-2"]["status"] == "deprecated"
+    assert gv.validate(Layout(gov_project)) == []
 
 
 def test_decision_needs_a_ruling_and_rejected_ruling_blocks_it(gov_project, capsys):
