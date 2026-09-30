@@ -19,7 +19,7 @@ Shape one software change so the engine can check it. Every file under `docspec/
 
 **Steps**
 
-1. **Orient** — `docspec brief`, then `docspec code spec list` and `docspec code spec show <capability> --req R<n> --json` for just the requirements involved. Check `docspec decision list --json` for project decisions that bind this work.
+1. **Orient** — `docspec handover` and `docspec roadmap`, then `docspec code spec list` and `docspec code spec show <capability> --req R<n> --json` for just the requirements involved. Check `docspec decision list --json` for project decisions that bind this work.
 
 2. **Decide with the owner first** — anything the owner must choose is recorded as a question and ruled by the owner (read back, then `docspec ruling add`; see AGENTS.md). Do not write deltas that assume an unconfirmed choice.
 

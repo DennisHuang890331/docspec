@@ -100,7 +100,7 @@ docspec/software/
   - 封存時有豁免任務 → 完成（含豁免 N 項）。
 - **文件章節**可以 `realizes: [req:…]`。需求內容變了，章節轉為 stale-software：照樣提醒更新，但**不擋文件定版**；定版時把這些章節記進該版紀錄（`software-divergence`）。
 - **兩個領域互不阻擋**（2026/09/30 裁定「文件管文件、軟體管軟體」）：`docspec check` 把軟體錯誤另列，不讓文件的狀態與定版變紅（整體結束碼仍反映軟體問題）；文件引用已退役的需求只提醒；軟體封存不看文件。差異由系統記錄，不強制對齊。
-- **`docspec brief`** 有「軟體開發」一段。
+- 現況看 `docspec roadmap`；交接看 `docspec handover`（`docspec brief` 已拿掉，見第 10 節後的實測後修訂）。
 
 ## 8. OpenSpec 匯入
 

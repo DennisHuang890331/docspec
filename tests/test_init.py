@@ -197,7 +197,7 @@ def test_init_agents_md_dispatch_rules_follow_project_language(tmp_path, monkeyp
     monkeypatch.chdir(zh)
     assert init_cmd.run(["--tool", "codex", "--agents-md", "--lang", "zh-TW"]) == 0
     text = (zh / "AGENTS.md").read_text(encoding="utf-8")
-    assert "## docspec 協作規範" in text and "docspec brief" in text
+    assert "## docspec 協作規範" in text and "docspec handover" in text
     assert "docspec ruling add" in text and "docspec freeze" in text
     assert "testplan sign" in text and "不用表格" not in text     # 個人偏好不進預設
     en = tmp_path / "en"

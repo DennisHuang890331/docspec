@@ -28,7 +28,7 @@ Finish a change honestly: the engine checks the links and evidence; you check th
 
 5. **Archive** — `docspec code archive <id>`. Read its output: specs updated, tests that no longer verify a changed scenario (tell the test role), active changes on the same capability (they must re-check their deltas).
 
-6. **Regression and status** — `docspec code test` runs every test the specs cite and names the scenario each failure affects. Then `docspec brief` and tell the owner in plain words what is finished and what needs them.
+6. **Regression and status** — `docspec code test` runs every test the specs cite and names the scenario each failure affects. Then `docspec code change status <id>` and `docspec roadmap`, and tell the owner in plain words what is finished, what is verified, and what needs them.
 
 **Output**
 

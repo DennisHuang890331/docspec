@@ -275,43 +275,43 @@ def test_trace_shows_both_directions(gov_project, write_leaf, capsys):
     assert {"ref": "doc:guide/home", "type": "realizes"} in t["downstream"]
 
 
-# ── 檢視（第 6 步） ─────────────────────────────────────────────────────────
+# ── 交接單（2026/09/30：取代 brief，每次整份重寫） ──────────────────────────
 
-from dspx.commands.governance import brief as brief_cmd  # noqa: E402
-from dspx.engine import views  # noqa: E402
+from dspx.commands.governance import handover as handover_cmd  # noqa: E402
 
 
-def test_brief_is_one_page_plain_and_points_to_next_steps(gov_project, write_leaf, capsys):
-    """驗收情境 S4（機械半）：兩千字以內、編號只在括號裡、有下一步。"""
-    _supersede_d7(gov_project)
-    _doc_section(gov_project, write_leaf, ["gov:D-claude-1"])
-    for i in range(40):                                    # 大量待決問題也不能撐爆一頁
-        question_cmd.run(["add", "--title", f"第 {i} 個待決問題，描述很長很長很長很長很長很長很長"])
-    ruling_cmd.run(["add", "--quote", "先這樣寫", *RB, "--provisional"])
+def test_handover_note_is_rewritten_whole_and_points_to_roadmap(gov_project, capsys):
+    question_cmd.run(["add", "--title", "門牌要不要印班級"])
     capsys.readouterr()
-    assert brief_cmd.run([]) == 0
-    text = capsys.readouterr().out
-    assert len(text) <= views.BRIEF_LIMIT
-    assert "下一步" in text and "問題等你裁定" in text
-    assert "還有" in text                                   # 長清單被截短並指路
-    assert "（暫定）" in text                               # 暫定裁定標示
-    assert "（Q-claude-1）" in text                          # 編號在括號
+    assert handover_cmd.run([]) == 0
+    out = capsys.readouterr().out
+    assert "還沒有交接單" in out or "No handover note yet" in out
+    assert "docspec roadmap" in out and "question list" in out
+    assert handover_cmd.run(["write", "--done", "主任版初稿", "--in-progress", "寫手改稿中",
+                             "--promise", "初稿先給組長看", "--next", "等事實核對"]) == 0
+    assert handover_cmd.run(["write", "--next", "交給組長"]) == 0          # 整份重寫：舊內容不留
+    capsys.readouterr()
+    assert handover_cmd.run([]) == 0
+    out = capsys.readouterr().out
+    assert "交給組長" in out and "主任版初稿" not in out and "初稿先給組長看" not in out
+    assert handover_cmd.run(["write"]) == 1                                  # 空的交接單不寫
 
 
-def test_design_view_lists_only_active_full_text(gov_project, capsys):
+def test_handover_note_is_sealed(gov_project):
+    from dspx.engine import handover as ho
+    handover_cmd.run(["write", "--next", "x"])
+    p = ho.path(Layout(gov_project))
+    p.write_text(p.read_text(encoding="utf-8").replace("next", "nxt"), encoding="utf-8")
+    assert handover_cmd.run([]) == 1
+
+
+def test_decision_list_shows_only_active_decisions(gov_project, capsys):
     _supersede_d7(gov_project)
     decision_cmd.run(["activate", "D-claude-2"])
     capsys.readouterr()
-    assert brief_cmd.run(["--design"]) == 0
+    assert decision_cmd.run(["list"]) == 0
     text = capsys.readouterr().out
-    assert "三頁合併" in text and "/tasks 頁面維持不變" not in text
-    assert "D-claude-1" in text                             # 只以「取代了」出現
-
-
-def test_brief_write_regenerates_view_files(gov_project):
-    assert brief_cmd.run(["--write"]) == 0
-    out = gov_project.parent / "docs" / "project"
-    assert sorted(p.name for p in out.iterdir()) == ["design.md", "pending.md", "status.md"]
+    assert "D-claude-2" in text and "D-claude-1" not in text
 
 
 def test_activating_replacement_clears_flags_on_replaced_decision(gov_project):

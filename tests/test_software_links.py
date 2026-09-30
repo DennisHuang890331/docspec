@@ -17,7 +17,6 @@ from dspx.commands.governance import roadmap as roadmap_cmd
 from dspx.commands.governance import ruling as ruling_cmd
 from dspx.commands.governance import trace as trace_cmd
 from dspx.commands.query.status import _docs_hashes, _leaf_row
-from dspx.engine import views
 from dspx.engine.layout import Layout
 from dspx.engine.model import load_project, project_decision_index
 from dspx.engine.schema import load_schema
@@ -241,17 +240,6 @@ def test_software_errors_do_not_hold_up_documents(proj, write_leaf, capsys):
     assert check_cmd.run([]) == 1                                   # 整體健康檢查照樣反映軟體問題
     out = capsys.readouterr().out
     assert "check passed (documents)" in out and "do not hold up documents" in out
-
-
-# ── 一頁現況 ─────────────────────────────────────────────────────────────
-
-def test_brief_lists_software_progress(proj):
-    _change("fix")
-    text = views.brief(proj, load_project(proj), {"language": "zh-TW"})
-    assert "## 軟體開發" in text and "fix：任務完成 0/1" in text
-    code("evidence", "run", "fix", "1")
-    text = views.brief(proj, load_project(proj), {"language": "zh-TW"})
-    assert "有 1 個軟體 change 可以封存" in text and "docspec code archive fix" in text
 
 
 def test_undelta_takes_back_a_wrong_delta(proj, capsys):
