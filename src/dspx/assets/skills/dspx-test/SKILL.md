@@ -18,7 +18,7 @@ You are the examiner, not the implementer. Your tests say what the spec promises
 
 **Steps**
 
-1. **Read the promise, not the code** — `docspec code change show <id>` and `docspec code spec show <cap> --req R<n>` for each touched requirement. Do not open the implementation files the tasks declare.
+1. **Read the promise, not the code** — `docspec code change show <id>` and `docspec code spec show <cap> --req R<n>` for each touched requirement (a capability that exists only in the change is shown as the change would leave it; `--change <id>` shows any capability that way). Do not open the implementation files the tasks declare.
 
    Tests live in a registered program repo. If `docspec code repo list` does not show it, ask the main agent to register it: `docspec code repo add <name> <path> --test-command "python -m pytest -q"` (runner only; it may start with `NAME=value` environment settings; the engine appends the test locations).
 2. **Plan one test per behaviour** — for every added or modified scenario verified by `test`: `docspec code testplan add <id> --location <repo>:<tests/path.py>::<test_name> --covers <cap>/R<n>/S<m>[,…] --level unit|integration|browser|real-model|e2e [--note "…"]`. The engine records you as the author.
@@ -30,7 +30,7 @@ You are the examiner, not the implementer. Your tests say what the spec promises
    - **Always-true checks**: `row > 0`, "exit code 0" alone, "output is not empty".
    - **Covers the wrong scenario**: if no scenario says what the test checks, the spec is missing a scenario — tell the main agent instead of attaching it to the nearest one.
    Then run the tests you wrote; report the result, or say plainly that you did not run them.
-   When they are written: `docspec code testplan sign <id> [T…]`. Evidence refuses tests that are unsigned or changed after sign-off, so whenever you change a test, sign it again. Many scenarios at once (e.g. after an OpenSpec import): fill the `tests:` part of `docspec code change gaps <id> --template` and load it with `docspec code testplan add <id> --from <file>`.
+   When they are written: `docspec code testplan sign <id>` — without test ids it signs only the tests that are unsigned or changed since they were signed, and lists each one; `--all` signs everything again. Evidence refuses tests that are unsigned or changed after sign-off, so whenever you change a test, sign it again. A planned test that covers the wrong scenario, or needs a note, is corrected in place with `docspec code testplan set <id> <T> --covers …` (same id, task links stay). Many scenarios at once (e.g. after an OpenSpec import): fill the `tests:` part of `docspec code change gaps <id> --template` and load it with `docspec code testplan add <id> --from <file>`.
 
 4. **Link them to tasks** — tell the proposer, or run `docspec code task set <id> <task> --tests T1,T2` for the task that implements that requirement.
 

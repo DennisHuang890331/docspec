@@ -161,7 +161,8 @@ def sign_tests(layout: Layout, ch: dict, test_ids: list[str], *, tool: str, now:
     for t in chosen:
         if tool != "user" and tool != t.get("written-by"):
             raise io.SoftwareError(f"test {t['id']} was written by {t.get('written-by')}; only its author "
-                                   f"(the test role) or the owner signs it off")
+                                   f"(the test role) or the owner signs it off (you are \"{tool}\" — "
+                                   f"set DOCSPEC_AGENT to the test role's label)")
         if tool in implementers and tool != "user":
             raise io.SoftwareError(f"{tool} created implementation tasks in this change; the test role "
                                    f"must be a different agent")

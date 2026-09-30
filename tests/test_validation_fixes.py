@@ -214,3 +214,40 @@ def test_bad_verification_value_is_refused_when_written(proj, capsys):
     assert code("change", "delta", "fix", "--capability", "web", "--purpose", "p", "--op", "add-requirement",
                 "--title", "t", "--statement", "It SHALL x.", "--verification", "test,inspection",
                 "--scenario", "a | b | c") == 0
+
+
+def test_spec_show_finds_a_capability_that_lives_only_in_a_change(proj, capsys):
+    """實測：新能力只存在於 change 裡，`spec show` 回「沒有這個能力」，每個角色都卡過。"""
+    code("change", "new", "fix", "--why", "x", "--new", "roster")
+    code("change", "delta", "fix", "--capability", "roster", "--purpose", "名單", "--op", "add-requirement",
+         "--title", "匯入", "--statement", "It SHALL import.", "--verification", "test",
+         "--scenario", "a | b | c")
+    capsys.readouterr()
+    assert code("spec", "show", "roster", "--req", "R1") == 0
+    cap = capsys.readouterr()
+    assert "It SHALL import." in cap.out and "not archived yet" in cap.err
+    assert code("spec", "list") == 0
+    assert "roster — new in active change fix" in capsys.readouterr().out
+    assert code("spec", "show", "entry", "--change", "fix") == 0          # 沒被這個 change 改到：正式版
+
+
+def test_testplan_set_fixes_a_test_in_place_and_sign_skips_unchanged(proj, capsys, monkeypatch):
+    """實測：測試對錯情境只能刪掉重建（編號全換、要重連任務與重簽）；sign 不帶編號一次蓋全部。"""
+    code("repo", "add", "app", "app", "--test-command",
+         f"PYTHONPATH=src {sys.executable} -m pytest -q -p no:cacheprovider")
+    code("change", "new", "fix", "--why", "x", "--modified", "entry")
+    code("change", "delta", "fix", "--capability", "entry", "--op", "add-scenario", "--ref", "R1",
+         "--title", "另一個", "--when", "w", "--then", "t")
+    monkeypatch.setenv("DOCSPEC_AGENT", "gemini")
+    code("testplan", "add", "fix", "--location", "app:tests/test_x.py::test_value", "--covers", "entry/R1/S1")
+    assert code("testplan", "sign", "fix") == 0
+    capsys.readouterr()
+    assert code("testplan", "set", "fix", "T1", "--covers", "entry/R1/S2", "--note", "改對情境") == 0
+    t = chg.load_change(proj, "fix")["tests"]["tests"][0]
+    assert t["id"] == "T1" and t["covers"] == ["entry/R1/S2"] and t.get("signed")   # 簽收還在
+    capsys.readouterr()
+    assert code("testplan", "sign", "fix") == 0
+    assert "every planned test is signed and unchanged" in capsys.readouterr().out
+    monkeypatch.setenv("DOCSPEC_AGENT", "claude")
+    assert code("testplan", "set", "fix", "T1", "--note", "x") == 1
+    assert 'you are "claude"' in capsys.readouterr().err

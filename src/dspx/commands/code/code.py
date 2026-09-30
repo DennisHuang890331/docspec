@@ -76,6 +76,8 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("--req", default=None, help="only this requirement, e.g. R1")
     x.add_argument("--json", dest="as_json", action="store_true")
     x.add_argument("--md", action="store_true", help="Markdown for people / PR review")
+    x.add_argument("--change", default=None,
+                   help="show the capability as this active change would leave it (not yet archived)")
 
     change = top.add_parser("change", help="change folders: proposal, design, spec deltas")
     cs = change.add_subparsers(dest="op")
@@ -189,7 +191,19 @@ def _parser() -> argparse.ArgumentParser:
     x = tps.add_parser("sign", help="test role: sign off the written tests (evidence refuses tests "
                        "that are unsigned or changed after sign-off)")
     x.add_argument("change")
-    x.add_argument("tests", nargs="*", help="test ids (default: all planned tests)")
+    x.add_argument("tests", nargs="*", help="test ids (default: the tests that are unsigned or "
+                   "changed since they were signed)")
+    x.add_argument("--all", dest="sign_all", action="store_true",
+                   help="sign every planned test again, changed or not")
+    x.add_argument("--by", default=None)
+    x = tps.add_parser("set", help="test role: correct a planned test in place (same id; task links "
+                       "stay). Changing --location needs a new sign-off")
+    x.add_argument("change")
+    x.add_argument("test")
+    x.add_argument("--covers", default=None, help="replace the scenarios it verifies: cap/R1/S1,…")
+    x.add_argument("--note", default=None)
+    x.add_argument("--level", default=None, help=", ".join(tk.TEST_LEVELS))
+    x.add_argument("--location", default=None, help="repo:path::test_name")
     x.add_argument("--by", default=None)
     x = tps.add_parser("remove", help="remove a planned test no task uses")
     x.add_argument("change")
@@ -315,14 +329,24 @@ def _spec(layout, args) -> int:
         if args.as_json:
             emit_json(rows)
             return 0
-        if not rows:
+        pending = _pending_capabilities(layout)
+        if not rows and not pending:
             print("(no capability specs yet)")
         for r in rows:
-            print(f"{r['capability']} — {r['requirements']} requirement(s): {r['purpose']}")
+            note = (f"  [changed by active change {', '.join(pending[r['capability']])}]"
+                    if r["capability"] in pending else "")
+            print(f"{r['capability']} — {r['requirements']} requirement(s): {r['purpose']}{note}")
+        for cap, cids in pending.items():
+            if cap not in {r["capability"] for r in rows}:
+                print(f"{cap} — new in active change {', '.join(cids)}, not archived yet "
+                      f"(`docspec code spec show {cap}`)")
         return 0
-    spec = sp.load_spec(layout, args.capability)
+    spec, note = _spec_for_show(layout, args.capability, args.change)
     if spec is None:
-        return fail(f"no capability \"{args.capability}\" (see `docspec code spec list`)")
+        return fail(note)
+    if note:
+        import sys as _sys
+        _sys.stderr.write(f"note: {note}\n")
     if args.req and sp.find_requirement(spec, args.req) is None:
         return fail(f"{args.capability} has no requirement \"{args.req}\"")
     if args.as_json:
@@ -333,6 +357,47 @@ def _spec(layout, args) -> int:
         return 0
     print(sp.render_md(spec, args.req), end="")
     return 0
+
+
+def _pending_capabilities(layout) -> dict[str, list[str]]:
+    """進行中的 change 改到（或新增）的能力 → change 名單。"""
+    out: dict[str, list[str]] = {}
+    for cid in chg.list_active(layout):
+        try:
+            ch = chg.load_change(layout, cid)
+        except io.SoftwareError:
+            continue
+        for cap in ch["deltas"]:
+            out.setdefault(cap, []).append(cid)
+    return out
+
+
+def _spec_for_show(layout, capability: str, change: str | None) -> tuple[dict | None, str]:
+    """spec show 要看的規格：正式規格；指定 --change 或只存在於進行中的 change 時，給套用後的版本。
+
+    實測：新能力只存在於 change 裡，`spec show` 回「沒有這個能力」，每個角色都卡過。"""
+    pending = _pending_capabilities(layout).get(capability, [])
+    if change:
+        ch = chg.load_change(layout, change)
+        if capability not in ch["deltas"]:
+            spec = sp.load_spec(layout, capability)
+            return (spec, "") if spec else (None, f"change {change} does not touch \"{capability}\"")
+        specs, conflicts, _r = chg.preview_specs(layout, ch)
+        if capability not in specs:
+            return None, f"cannot apply change {change} to \"{capability}\": {'; '.join(conflicts)}"
+        return specs[capability], f"\"{capability}\" as change {change} would leave it (not archived yet)"
+    spec = sp.load_spec(layout, capability)
+    if spec is not None:
+        note = (f"this is the archived spec; active change {', '.join(pending)} changes it — add "
+                f"`--change {pending[0]}` to see that version") if pending else ""
+        return spec, note
+    if len(pending) == 1:
+        return _spec_for_show(layout, capability, pending[0])
+    if pending:
+        return None, (f"\"{capability}\" is new in several active changes ({', '.join(pending)}); "
+                      f"pick one with --change")
+    return None, (f"no capability \"{capability}\" (see `docspec code spec list`; a change's own "
+                  f"deltas are in `docspec code change show <change>`)")
 
 
 # ── change ───────────────────────────────────────────────────────────────
@@ -630,8 +695,54 @@ def _testplan(layout, args) -> int:
         print(f"code testplan remove: {args.change} {args.test}")
         return 0
     tool = gv.detect_tool(args.by)
+    if args.op == "set":
+        t = next((x for x in tests.get("tests") or [] if str(x.get("id")) == args.test), None)
+        if t is None:
+            return fail(f"change {args.change} has no planned test \"{args.test}\"")
+        if tool != "user" and tool != t.get("written-by"):
+            return fail(f"test {args.test} was written by {t.get('written-by')}; only its author "
+                        f"(the test role) or the owner changes it (you are \"{tool}\")")
+        changed = []
+        if args.covers is not None:
+            t["covers"] = _csv(args.covers)
+            changed.append("covers")
+        if args.note is not None:
+            if args.note.strip():
+                t["note"] = args.note.strip()
+            else:
+                t.pop("note", None)
+            changed.append("note")
+        if args.level is not None:
+            if args.level not in tk.TEST_LEVELS:
+                return fail(f"level must be one of {', '.join(tk.TEST_LEVELS)}")
+            t["level"] = args.level
+            changed.append("level")
+        if args.location is not None and args.location != t.get("location"):
+            t["location"] = args.location
+            t.pop("signed", None)
+            changed.append("location")
+        if not changed:
+            return fail("nothing to change (give --covers, --note, --level or --location)")
+        chg.write_part(layout, args.change, "tests", tests)
+        print(f"code testplan set: {args.change} {args.test} ({', '.join(changed)})"
+              + ("; the location changed — write the test there and sign it again"
+                 if "location" in changed else ""))
+        return 0
     if args.op == "sign":
-        signed = tk.sign_tests(layout, ch, args.tests, tool=tool, now=ev._now(),
+        ids = list(args.tests)
+        if not ids and not args.sign_all:
+            # 不帶編號＝只簽「還沒簽」或「簽了之後改過」的；逐一列出原因。全部重簽要明說 --all。
+            pending = [(t, ev.signoff_problems(layout, [t])) for t in tests.get("tests") or []]
+            pending = [(t, probs) for t, probs in pending if probs]
+            if not pending:
+                print(f"code testplan sign: {args.change}: every planned test is signed and unchanged "
+                      f"(use --all to sign them all again)")
+                return 0
+            ids = [str(t["id"]) for t, _p in pending]
+            for t, probs in pending:
+                why = "not signed yet" if not t.get("signed") else "changed since it was signed"
+                print(f"  {t['id']} {t['location']}: {why}")
+        signed = tk.sign_tests(layout, ch, ids, tool=tool, now=ev._now(),
                                fingerprint=lambda loc: ev.file_hash(layout, ev.test_file_key(loc)))
         chg.write_part(layout, args.change, "tests", tests)
         for t in signed:
