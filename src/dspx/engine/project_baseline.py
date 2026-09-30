@@ -136,13 +136,17 @@ def doc_record_path(layout: Layout, article: str, version: str) -> Path:
 
 
 def record_doc_version(layout: Layout, article: str, version: str, *,
-                       software_divergence: list[str] | None = None) -> Path | None:
+                       software_divergence: list[str] | None = None,
+                       unlinked: list[str] | None = None) -> Path | None:
     path = doc_record_path(layout, article, version)
     body = {"document": article, "version": version, "frozen-at": _now(),
             "software": software_state(layout), "governance": governance_state(layout)}
     if software_divergence:
         # 定版時仍落後於軟體需求的章節（差異記下、不擋定版）
         body["software-divergence"] = list(software_divergence)
+    if unlinked:
+        # 沒連到任何決策、資訊或需求的章節：之後依據改了，它們不會被標為需要更新
+        body["unlinked-sections"] = list(unlinked)
     try:
         _write(path, "document", body)
     except OSError:

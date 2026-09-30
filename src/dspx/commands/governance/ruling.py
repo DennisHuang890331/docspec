@@ -74,6 +74,17 @@ def run(argv: list[str]) -> int:
                 rec["provisional"] = True
             gv.write_record(layout, "ruling", rec)
             print(f"ruling add: {label(rec)}")
+            # 連結提醒（不擋）：新裁定可能改變現行決策；不取代＝兩者並存、影響分析永遠看不到。
+            gov = gv.load_governance(layout)
+            active = [d for d in gov.decisions if gv.decision_effective_status(d, gov) == "active"]
+            if active:
+                print(f"  active project decisions — if this ruling changes one of them, write the full "
+                      f"new version with `docspec decision add --supersedes <id> --based-on {rid} …` "
+                      f"and activate it:")
+                for d in active[:8]:
+                    print(f"    - {d.get('title')}（{d.get('id')}）")
+                if len(active) > 8:
+                    print(f"    … {len(active) - 8} more (`docspec decision list`)")
             if rec.get("supersedes"):
                 from dspx.engine.impact import flag_after_change
                 flagged = flag_after_change(layout, rid)

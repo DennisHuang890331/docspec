@@ -323,10 +323,16 @@ def validate_change(layout: Layout, ch: dict, *, strict: bool = False) -> tuple[
 
     for ref in io.as_list(ch["design"].get("decisions")):
         check_decision(ref, "design.decisions")
+    active = [did for did, d in decisions.items() if gv.decision_effective_status(d, gov) == "active"]
     for cap, cd in ch["deltas"].items():
         for d in cd.get("deltas") or []:
             for ref in io.as_list(d.get("based-on")):
                 check_decision(ref, f"{cap} {d.get('op')} {d.get('ref') or d.get('id')} based-on")
+            # 連結提醒（不擋）：專案有有效決策，而新需求沒標依據＝決策改了，影響分析找不到它。
+            if d.get("op") == "add-requirement" and active and not d.get("based-on"):
+                warns.append(f"{where}: {cap} {d.get('id')} has no based-on — if it follows a project "
+                             f"decision ({', '.join(active[:4])}{', …' if len(active) > 4 else ''}), "
+                             f"link it so impact analysis can find it")
 
     # 差異對現行規格：目標存在、基準指紋一致
     _preview, conflicts, _ren = preview_specs(layout, ch)

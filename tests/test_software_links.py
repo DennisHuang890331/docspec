@@ -13,6 +13,7 @@ from dspx.commands.code import code as code_cmd
 from dspx.commands.deliverable import render as render_cmd
 from dspx.commands.governance import decision as decision_cmd
 from dspx.commands.governance import impact as impact_cmd
+from dspx.engine.software import changes as chg
 from dspx.commands.governance import roadmap as roadmap_cmd
 from dspx.commands.governance import ruling as ruling_cmd
 from dspx.commands.governance import trace as trace_cmd
@@ -251,3 +252,34 @@ def test_undelta_takes_back_a_wrong_delta(proj, capsys):
     from dspx.engine.software import changes as chg
     assert chg.load_change(proj, "fix")["deltas"] == {}
     assert code("change", "undelta", "fix", "--capability", "entry", "--ref", "R1") == 1
+
+
+def test_linking_reminders_do_not_block(proj, write_leaf, capsys):
+    """實測後（項目 5）：追溯鏈沒建起來、影響分析整場用不上。提醒要連，但都不擋。"""
+    from dspx.commands.governance import ruling as ruling_cmd
+    from dspx.commands.deliverable import freeze as freeze_cmd
+    from dspx.commands.deliverable import render as render_cmd2
+    from dspx.engine import project_baseline as pb
+    capsys.readouterr()
+    assert ruling_cmd.run(["add", "--quote", "改成全部集中"]) == 0            # 講清楚：不必覆述
+    out = capsys.readouterr().out
+    assert "active project decisions" in out and "D-claude-1" in out and "--supersedes" in out
+    code("change", "new", "more", "--why", "x", "--modified", "entry")
+    code("change", "delta", "more", "--capability", "entry", "--op", "add-requirement", "--title", "t",
+         "--statement", "It SHALL x.", "--verification", "test", "--scenario", "a | b | c")
+    errs, warns = chg.validate_change(proj, chg.load_change(proj, "more"))
+    assert any("has no based-on" in w for w in warns)
+    assert not any("based-on" in e for e in errs)
+    home = proj.planning_home
+    write_leaf(home, "memo", concept={"id": "c-memo", "title": "備忘", "order": 0, "concept": "備忘",
+                                      "brief": {"audience": "x", "depth": "y", "breadth": "z"}})
+    write_leaf(home, "memo/a", concept={"id": "c-a", "title": "甲", "order": 1})
+    render_cmd2.run(["memo"])
+    latest = home.parent / "docs" / "memo" / "_latest.md"
+    latest.write_text(latest.read_text(encoding="utf-8").replace("## 1. 甲\n", "## 1. 甲\n\n內文。\n")
+                      .replace("# 備忘\n", "# 備忘\n\n開頭。\n"), encoding="utf-8")
+    render_cmd2.run(["memo"])
+    capsys.readouterr()
+    assert freeze_cmd.run(["memo"]) == 0
+    assert "link to no decision" in capsys.readouterr().err
+    assert pb.doc_version_record(proj, "memo", "1.0.0")["unlinked-sections"] == ["memo/a"]

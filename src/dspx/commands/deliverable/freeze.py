@@ -179,6 +179,11 @@ def run(argv: list[str]) -> int:
     # 文件管文件、軟體管軟體（2026/09/30）：只因軟體需求變了而落後的節不擋定版，記進版本紀錄。
     software_divergence = [sec for sec, sync in incomplete if sync == "stale-software"]
     incomplete = [(sec, sync) for sec, sync in incomplete if sync != "stale-software"]
+    unlinked = _unlinked_sections(layout, leaves, args.article)
+    if unlinked:
+        sys.stderr.write(f"docspec: note -- {len(unlinked)} section(s) link to no decision, information "
+                         f"or requirement, so later changes to those will not mark them for an update "
+                         f"(recorded with this version, not blocking): {', '.join(unlinked)}\n")
     if software_divergence:
         sys.stderr.write(f"docspec: note -- {len(software_divergence)} section(s) describe software "
                          f"requirements that changed since they were written (recorded with this "
@@ -274,7 +279,8 @@ def run(argv: list[str]) -> int:
 
     from dspx.engine import project_baseline
     base_path = project_baseline.record_doc_version(layout, args.article, version,
-                                                    software_divergence=software_divergence)
+                                                    software_divergence=software_divergence,
+                                                    unlinked=unlinked)
 
     print(f"frozen \"{args.article}\" v{version}")
     print(f"  _latest: {latest} (working copy, section markers preserved)")
@@ -300,6 +306,23 @@ def _incomplete_sections(layout, schema, leaves, article: str, check_ok: bool) -
         sync = _leaf_row(layout, lf, schema, check_ok, hashes, by_section, dindex)["sync"]
         if sync != "synced":
             out.append((lf.section, sync))
+    return out
+
+
+def _unlinked_sections(layout, leaves, article: str) -> list[str]:
+    """專案有治理紀錄或軟體規格時，沒有 realizes 任何東西的葉節（只記錄、不擋定版）。"""
+    from dspx.engine import governance as gv
+    from dspx.engine.software import io as swio
+    if not (gv.has_governance(layout) or swio.has_software(layout)):
+        return []
+    sections = {lf.section for lf in leaves if lf.article == article}
+    parents = {s.rsplit("/", 1)[0] for s in sections if "/" in s}
+    out = []
+    for lf in leaves:
+        if lf.article != article or lf.section in parents or lf.concept is None:
+            continue
+        if not lf.concept.get("realizes"):
+            out.append(lf.section)
     return out
 
 
