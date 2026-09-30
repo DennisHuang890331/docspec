@@ -209,13 +209,38 @@ def test_doc_section_realizing_a_requirement_goes_stale_when_it_changes(proj, wr
     render_cmd.run(["guide"])
     latest = home.parent / "docs" / "guide" / "_latest.md"
     latest.write_text(latest.read_text(encoding="utf-8").replace(
-        "## 1. 首頁\n", "## 1. 首頁\n\n打開就能看到第一列。\n"), encoding="utf-8")
+        "## 1. 首頁\n", "## 1. 首頁\n\n打開就能看到第一列。\n").replace(
+        "# 說明書\n", "# 說明書\n\n這份說明書介紹首頁。\n"), encoding="utf-8")
     render_cmd.run(["guide"])
     assert _sync(home, "guide/home") == "synced"
     _change("fix", decision="D-claude-1")
     code("evidence", "run", "fix", "1")
     assert code("archive", "fix") == 0
-    assert _sync(home, "guide/home") == "stale-upstream"
+    # 2026/09/30 裁定：文件管文件、軟體管軟體。只因軟體需求變了而落後＝stale-software：
+    # 記下差異、照樣提醒更新，但不擋文件定版；差異寫進該版的紀錄。
+    assert _sync(home, "guide/home") == "stale-software"
+    from dspx.commands.deliverable import freeze as freeze_cmd
+    from dspx.engine import project_baseline as pb
+    capsys.readouterr()
+    assert freeze_cmd.run(["guide"]) == 0
+    assert "guide/home" in capsys.readouterr().err
+    assert pb.doc_version_record(proj, "guide", "1.0.0")["software-divergence"] == ["guide/home"]
+
+
+def test_software_errors_do_not_hold_up_documents(proj, write_leaf, capsys):
+    """軟體 change 有錯（缺測試、缺任務）時，文件的 check 仍是綠的；`docspec check` 另列軟體問題。"""
+    home = proj.planning_home
+    _doc_section(home, write_leaf, ["req:entry/R1"])
+    code("change", "new", "half", "--why", "x", "--modified", "entry")
+    code("change", "delta", "half", "--capability", "entry", "--op", "modify-scenario",
+         "--ref", "R1/S1", "--then", "改")
+    res = run_check(load_project(proj), load_schema(), proj)
+    assert res.ok and res.software_errors
+    from dspx.commands.query import check as check_cmd
+    capsys.readouterr()
+    assert check_cmd.run([]) == 1                                   # 整體健康檢查照樣反映軟體問題
+    out = capsys.readouterr().out
+    assert "check passed (documents)" in out and "do not hold up documents" in out
 
 
 # ── 一頁現況 ─────────────────────────────────────────────────────────────

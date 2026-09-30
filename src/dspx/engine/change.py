@@ -988,7 +988,7 @@ def _derive_one(layout, change, schema, t, section, leaves, by_section, dindex,
         if sync != "synced":
             # B6（engine-record-integrity）：stale-own 卡住的節帶診斷——plain render 對「散文未變」
             # 刻意不清（F2 保信號），別讓 agent 逆向工程 ledger 或 perturb-revert。
-            if sync in ("stale-own", "stale-upstream"):
+            if sync in ("stale-own", "stale-upstream", "stale-software"):
                 return False, (f"{sync} — source changed, prose not rewritten (a plain render "
                                "keeps the signal on purpose): rewrite the prose then render; if "
                                "the prose truly needs no change, the ack path requires the "
@@ -1004,7 +1004,7 @@ def _derive_one(layout, change, schema, t, section, leaves, by_section, dindex,
 
     if t.action == "align":
         # align ⇔ 清髒（stale-inherited/style 消失）或 ack 留痕
-        if sync in ("stale-own", "stale-upstream", "stale-norm"):
+        if sync in ("stale-own", "stale-upstream", "stale-software", "stale-norm"):
             return False, f"{sync} (a content change, not an alignment — rewrite)"
         if sync in ("stale-inherited", "stale-style"):
             return False, f"{sync} (align the prose or render --ack)"

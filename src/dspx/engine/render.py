@@ -23,6 +23,7 @@ from dspx.engine.model import (
     ancestor_normative_fingerprint,
     decision_index,
     project_decision_index,
+    deps_doc_fingerprint,
     deps_fingerprint,
     style_fingerprint,
 )
@@ -758,7 +759,7 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
             prev = prior_ledger.get(lf.section)
 
             def _current() -> dict:
-                return {
+                rec = {
                     "own": lf.source_hash(),
                     "anc": ancestor_brief_fingerprint(lf.section, by_section),
                     "deps": deps_fingerprint(lf, dindex),
@@ -766,6 +767,12 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
                     "style": style_now,
                     "prose": prose_now,
                 }
+                # 只在章節實現了軟體需求（req:）時多記「文件自己的依據」指紋，
+                # 讓 status 分得出 stale-software（不擋定版）與 stale-upstream。
+                deps_doc = deps_doc_fingerprint(lf, dindex)
+                if deps_doc != rec["deps"]:
+                    rec["deps-doc"] = deps_doc
+                return rec
 
             def _reuse_or_current() -> dict:
                 if isinstance(prev, dict) and prev.get("prose") == prose_now:
@@ -778,6 +785,8 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
                            "norm": prev.get("norm"),
                            "style": prev.get("style") or style_now,
                            "prose": prose_now}
+                    if prev.get("deps-doc") is not None:
+                        rec["deps-doc"] = prev["deps-doc"]
                     # 標髒旗標（stale/redraft 動詞）隨沿用分支攜帶＝信號跨（骨架）render 存活；
                     # 散文真重寫走 _current()（不含旗標）＝自然清除，無需顯式 un-mark 動詞。
                     if prev.get("redraft"):
@@ -824,6 +833,8 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
                        "norm": prev.get("norm"),
                        "style": prev.get("style") or style_now,
                        "prose": prose_now}
+                if "deps-doc" in cur:
+                    rec["deps-doc"] = cur["deps-doc"]
                 ack_owned.append(lf.section)
                 verdicts.append(_verdict("ack-own", rec))
             else:

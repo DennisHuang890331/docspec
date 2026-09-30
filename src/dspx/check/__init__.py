@@ -54,6 +54,7 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
                                                                                # check_dead_references
                                                                                # can hand back
     gov_decisions = None
+    sw_errors: list[str] = []
     if layout is not None:
         from dspx.engine.governance import (GovernanceError, decision_index_entries,
                                              validate as _validate_gov)
@@ -63,7 +64,10 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
             gov_decisions = {}
         from dspx.engine.software.links import requirement_index_entries
         gov_decisions = {**requirement_index_entries(layout), **gov_decisions}   # req:（軟體需求）
-    errors.extend(_ids_and_refs.check_dead_references(leaves, seen, gov_decisions))  # ②
+    ref_errs = _ids_and_refs.check_dead_references(leaves, seen, gov_decisions)  # ②
+    # 文件引用的軟體需求已退役＝兩個領域的差異：記下（提醒），不擋文件（2026/09/30 裁定）。
+    retired_req = [e for e in ref_errs if "points to a retired software requirement" in e]
+    errors.extend(e for e in ref_errs if e not in retired_req)
 
     errors.extend(_cycles._detect_supersede_cycle(leaves))                    # ③
     errors.extend(_cycles._detect_governs_cycle(leaves))
@@ -88,11 +92,11 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
             except _gv.GovernanceError:
                 pass                                                         # 壞封條已由 ⑬ 回報
         from dspx.engine.software import validate_all as _validate_sw
-        sw_errors, sw_warnings = _validate_sw(layout)                        # ⑭ — 軟體領域（software/）
-        errors.extend(sw_errors)
+        sw_errors, sw_warnings = _validate_sw(layout)                        # ⑭ — 軟體領域（software/）：另列、不擋文件
 
     ref_errors, warnings = _cross_section._cross_section_decision_refs(leaves)  # trailing F1 check
     errors.extend(ref_errors)
+    warnings.extend(retired_req)
     if layout is not None:
         warnings.extend(_hygiene._scan_hygiene(layout))   # 衛生 WARN（衝突副本/死資料夾，非阻塞）
         warnings.extend(_authored.check_inherited_conflicts(leaves))   # ★#27 繼承信封矛盾（非阻塞）
@@ -100,4 +104,5 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
         warnings.extend(_roadmap._roadmap_id_collisions(layout, leaves))  # B5 活躍/封存撞號（非阻塞）
         warnings.extend(sw_warnings)                                          # ⑭ 軟體領域提醒（大小、未結異議）
 
-    return CheckResult(ok=not errors, errors=errors, index=index, warnings=warnings)
+    return CheckResult(ok=not errors, errors=errors, index=index, warnings=warnings,
+                       software_errors=sw_errors if layout is not None else [])

@@ -51,6 +51,7 @@ def run(argv: list[str]) -> int:
             "ok": result.ok,
             "errors": result.errors,
             "warnings": result.warnings,
+            "software_errors": result.software_errors,
             "index": {
                 "ids": {k: {"section": v.section, "kind": v.kind, "status": v.status}
                         for k, v in result.index.ids.items() if _in_scope(v.section)},
@@ -60,7 +61,7 @@ def run(argv: list[str]) -> int:
         if args.article:
             payload["scope"] = args.article
         print(json.dumps(payload, ensure_ascii=False, indent=2))
-        return 0 if result.ok else 1
+        return 0 if result.ok and not result.software_errors else 1
 
     def _print_warnings() -> None:
         if result.warnings:
@@ -68,19 +69,30 @@ def run(argv: list[str]) -> int:
             for w in result.warnings:
                 print(f"  ⚠ {w}")
 
+    def _print_software() -> int:
+        """軟體領域的錯誤另列：它們不擋文件（狀態、定版），但照樣回報並讓結束碼非 0。"""
+        if not result.software_errors:
+            return 0
+        print(f"software ({len(result.software_errors)} issue(s); they do not hold up documents — "
+              f"`docspec code change status <change>` for detail):")
+        for err in result.software_errors:
+            print(f"  ✗ {err}")
+        return 1
+
     if result.ok:
         scoped_sections = [s for s in result.index.sections if _in_scope(s)]
         scoped_ids = {k: v for k, v in result.index.ids.items() if _in_scope(v.section)}
-        print(f"check passed: {len(scoped_sections)} leaf sections, {len(scoped_ids)} ids.")
+        print(f"check passed{' (documents)' if result.software_errors else ''}: {len(scoped_sections)} leaf sections, {len(scoped_ids)} ids.")
         if args.article:
             print(f"(index scoped to \"{args.article}\"; check itself always validates the whole project)")
         for the_id, rec in sorted(scoped_ids.items()):
             print(f"  {the_id:<24} {rec.kind:<9} {rec.section}")
         _print_warnings()
-        return 0
+        return _print_software()
 
     print(f"check failed ({len(result.errors)} issue(s)):")
     for err in result.errors:
         print(f"  ✗ {err}")
     _print_warnings()
+    _print_software()
     return 1

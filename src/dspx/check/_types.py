@@ -29,3 +29,6 @@ class CheckResult:
     errors: list[str]
     index: Index
     warnings: list[str] = field(default_factory=list)   # 非阻塞提示（不影響 ok / exit code）
+    # 軟體領域（software/）的錯誤另列：文件管文件、軟體管軟體（2026/09/30 裁定）。
+    # 不影響 ok（文件的狀態與定版不被軟體擋）；`docspec check` 照樣回報並反映在結束碼。
+    software_errors: list[str] = field(default_factory=list)

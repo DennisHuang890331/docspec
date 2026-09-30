@@ -350,8 +350,9 @@ def test_check_reports_software_errors(sw):
     code("change", "delta", "entry-fix", "--capability", "task-entry-page", "--op",
          "modify-scenario", "--ref", "R1/S1", "--then", "y")
     res = run_check(load_project(sw), load_schema(), sw)
-    assert not res.ok
-    assert any("no task implements it" in e for e in res.errors)
+    # 2026/09/30 裁定：文件管文件、軟體管軟體——軟體錯誤另列，不讓文件的 check 變紅。
+    assert res.ok
+    assert any("no task implements it" in e for e in res.software_errors)
 
 
 def test_size_warning(sw, capsys):

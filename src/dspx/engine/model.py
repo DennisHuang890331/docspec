@@ -184,6 +184,15 @@ def realized_statements(leaf, dindex: dict) -> list:
     return out
 
 
+def deps_doc_fingerprint(leaf, dindex: dict) -> str:
+    """同 deps_fingerprint，但只算「文件自己的依據」（治理決策、其他章節），不含軟體需求（req:）。
+
+    用來分辨：deps 變了是因為文件的依據變了（要先更新才能定版），還是只因為它實現的軟體需求
+    變了（stale-software：記下差異、不擋定版——2026/09/30 裁定「文件管文件、軟體管軟體」）。"""
+    doc_only = {k: v for k, v in dindex.items() if not str(k).startswith("req:")}
+    return deps_fingerprint(leaf, doc_only)
+
+
 def deps_fingerprint(leaf, dindex: dict) -> str:
     """本節對「上游被 realizes 決策」的依賴指紋。
 

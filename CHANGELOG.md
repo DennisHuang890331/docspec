@@ -12,6 +12,11 @@ a minor bump.
 
 ### Fixed — gaps found by the exam-seating validation run (branch only)
 
+- **Documents and software no longer hold each other up** (ruling: documents govern documents, software governs software; differences are recorded, not enforced).
+  - `docspec check` lists software errors separately. They still make the command exit non-zero, but they no longer turn document sections to `waiting(check red)` or block `docspec freeze`.
+  - A section that describes a software requirement which changed since it was written is `stale-software`: still flagged for an update, but not blocking the freeze; the version record lists such sections under `software-divergence`.
+  - A section realizing a retired software requirement is a warning, not an error.
+
 - **`docspec code repo add <name> <path> [--test-command …]` and `repo list`** register the program repos whose tests the engine runs, and show the exact command it will build. Before this there was no documented way; agents edited `config.yaml` by guesswork.
 - **`test-command` may start with environment variables** (`PYTHONPATH=src python -m pytest -q`). A `{tests}`-style placeholder is refused with a clear message; the engine always appends the test locations itself.
 - **Signing off a test in an unregistered repo** now says the repo is not registered and how to register it, instead of "does not exist yet — write it first".

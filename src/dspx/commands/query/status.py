@@ -16,6 +16,7 @@ from dspx.engine.model import (
     ancestor_normative_fingerprint,
     decision_index,
     project_decision_index,
+    deps_doc_fingerprint,
     deps_fingerprint,
     style_fingerprint,
 )
@@ -98,6 +99,10 @@ def compute_sync(layout: Layout, leaf: Leaf, recorded, by_section: dict, dindex:
     if rec_own != own_now:
         return "stale-own", style_moved          # 自己的源改了 → apply rewrite 重渲染
     if rec_deps is not None and rec_deps != deps_now:
+        rec_deps_doc = recorded.get("deps-doc") if isinstance(recorded, dict) else None
+        if rec_deps_doc is not None and rec_deps_doc == deps_doc_fingerprint(leaf, dindex):
+            # 只有它實現的軟體需求變了：記下差異、不擋定版（文件管文件、軟體管軟體）
+            return "stale-software", style_moved
         return "stale-upstream", style_moved     # realizes 的共享真相改了 → apply rewrite 重渲染
     if rec_norm is not None and rec_norm != norm_now:
         return "stale-norm", style_moved         # 祖先 active normative（規矩）改了 → apply align 逐句核對
@@ -423,6 +428,10 @@ def run(argv: list[str]) -> int:
         print(f"  {r['section']:<28} {r['state']:<16} {r['sync']:<16} [{flags}]{moved}{drift}")
     # B6（engine-record-integrity）：stale-own/upstream 且散文未動（非 drifted）＝F2 刻意保信號
     # 的卡住狀態——補一行診斷指路，別讓 agent 逆向工程 ledger 或 perturb-revert。
+    if any(r["sync"] == "stale-software" for r in rows):
+        print("\n  ℹ stale-software: a software requirement these sections describe has changed since they "
+              "were written. It is recorded (and noted when the document is frozen) but does not hold up "
+              "the document; update the prose when you are ready.")
     if any(r["sync"] in ("stale-own", "stale-upstream") and not r.get("drifted") for r in rows):
         print("\n  ⚠ stale-own/upstream with unchanged prose: the source changed but the prose was "
               "not rewritten — a plain render keeps the signal on purpose. Rewrite the prose then "

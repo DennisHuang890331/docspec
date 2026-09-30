@@ -88,7 +88,7 @@ def _sync_mode_verb(sync: str) -> tuple[str, str] | None:
     synced / uncrystallized 等無工作態回 None。"""
     if sync == "unwritten":
         return "rewrite", "docspec render <article>  (blind-render the section from its aperture)"
-    if sync in ("stale-own", "stale-upstream"):
+    if sync in ("stale-own", "stale-upstream", "stale-software"):
         # ★源料變：散文**確實要改** → 改後 plain render 清；散文**合理不需改**（如 must_cover 長了
         # 但既有散文已涵蓋）→ `--ack-own --reason`（attest + 重戳 own/deps）。plain render 對「散文
         # 未變」的 stale-own **不清、也不報**（保住信號），別誤以為 render 沒反應＝完成；絕不 perturb-revert。

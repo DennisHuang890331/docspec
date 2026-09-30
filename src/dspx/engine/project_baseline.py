@@ -135,10 +135,14 @@ def doc_record_path(layout: Layout, article: str, version: str) -> Path:
     return root(layout) / DOC_DIR / f"{article.replace('/', '__')}@{version}.yaml"
 
 
-def record_doc_version(layout: Layout, article: str, version: str) -> Path | None:
+def record_doc_version(layout: Layout, article: str, version: str, *,
+                       software_divergence: list[str] | None = None) -> Path | None:
     path = doc_record_path(layout, article, version)
     body = {"document": article, "version": version, "frozen-at": _now(),
             "software": software_state(layout), "governance": governance_state(layout)}
+    if software_divergence:
+        # 定版時仍落後於軟體需求的章節（差異記下、不擋定版）
+        body["software-divergence"] = list(software_divergence)
     try:
         _write(path, "document", body)
     except OSError:

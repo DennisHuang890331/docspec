@@ -176,6 +176,13 @@ def run(argv: list[str]) -> int:
 
     # ── 完整性閘：每一節都寫好、沒有待更新（原本 skill 叫 agent 自己看 status）──
     incomplete = _incomplete_sections(layout, schema, leaves, args.article, check.ok)
+    # 文件管文件、軟體管軟體（2026/09/30）：只因軟體需求變了而落後的節不擋定版，記進版本紀錄。
+    software_divergence = [sec for sec, sync in incomplete if sync == "stale-software"]
+    incomplete = [(sec, sync) for sec, sync in incomplete if sync != "stale-software"]
+    if software_divergence:
+        sys.stderr.write(f"docspec: note -- {len(software_divergence)} section(s) describe software "
+                         f"requirements that changed since they were written (recorded with this "
+                         f"version, not blocking): {', '.join(software_divergence)}\n")
     if incomplete and not args.allow_incomplete:
         sys.stderr.write(f"docspec: freeze aborted -- {len(incomplete)} section(s) are not ready "
                          f"(write or update them first, or pass --allow-incomplete):\n")
@@ -266,7 +273,8 @@ def run(argv: list[str]) -> int:
         fh.write(f"| {version} | {when} | {level_label} | {summary} |\n")
 
     from dspx.engine import project_baseline
-    base_path = project_baseline.record_doc_version(layout, args.article, version)
+    base_path = project_baseline.record_doc_version(layout, args.article, version,
+                                                    software_divergence=software_divergence)
 
     print(f"frozen \"{args.article}\" v{version}")
     print(f"  _latest: {latest} (working copy, section markers preserved)")
