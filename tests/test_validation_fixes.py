@@ -202,3 +202,15 @@ def test_brief_notes_outdated_skills_and_rules(tmp_path, monkeypatch, capsys):
     assert ".claude/skills/dspx-test/SKILL.md" in stale and "AGENTS.md (docspec block)" in stale
     assert init_cmd.run(["--tool", "claude", "--agents-md", "--no-tex-hint", "--no-update-check"]) == 0
     assert outdated_installs(tmp_path) == []
+
+
+def test_bad_verification_value_is_refused_when_written(proj, capsys):
+    """實測：驗證方式寫成 "test/inspection" 會被接受，要到 status 才報錯。現在寫入時就擋。"""
+    code("change", "new", "fix", "--why", "x", "--new", "web")
+    assert code("change", "delta", "fix", "--capability", "web", "--purpose", "p", "--op", "add-requirement",
+                "--title", "t", "--statement", "It SHALL x.", "--verification", "test/inspection",
+                "--scenario", "a | b | c") == 1
+    assert "not one of" in capsys.readouterr().err
+    assert code("change", "delta", "fix", "--capability", "web", "--purpose", "p", "--op", "add-requirement",
+                "--title", "t", "--statement", "It SHALL x.", "--verification", "test,inspection",
+                "--scenario", "a | b | c") == 0

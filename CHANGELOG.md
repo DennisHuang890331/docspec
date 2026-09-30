@@ -22,6 +22,7 @@ a minor bump.
 - **A test's sign-off no longer breaks when someone adds another test to the same file.** New sign-offs record a fingerprint of that test plus the file's shared parts (imports, helpers, fixtures), leaving out the other top-level tests; changing the test or anything shared still invalidates it. Older sign-offs keep comparing the whole file. In the run, test roles taking turns on one file caused four rounds of re-signing.
 - **The dspx-test skill lists the lax-test patterns two independent reviews found** (coincidental data, loose room, half a flow, always-true checks, attaching a test to the nearest scenario) and asks the test role to run what it wrote or say it did not.
 - **`docspec brief` notes when the project's skills or AGENTS.md block are older than the installed docspec** and says to run `docspec init --agents-md` to refresh them. In the run, the main agent kept following the old skill and rules after docspec had been fixed.
+- **A verification method that is not test, demonstration, inspection or analysis is refused when the delta is written** (e.g. `test/inspection`), instead of being accepted and reported only later by `change status`.
 - **Design list items can be removed:** `docspec code change design <id> --remove-goal "<text or number>"` (also `--remove-non-goal`, `--remove-risk`, `--remove-open-question`).
 
 ### Changed — freeze, one archive, project baselines, collaboration rules (branch only)

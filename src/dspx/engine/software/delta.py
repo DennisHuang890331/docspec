@@ -49,6 +49,17 @@ def _find_added_req(cap_delta: dict, rid: str) -> dict | None:
     return None
 
 
+def _methods(raw) -> list[str]:
+    """驗證方法：寫入時就擋下不認得的值（例如 "test/inspection"），不要等到 status 才發現。"""
+    out = io.as_list(raw)
+    bad = [m for m in out if m not in sp.VERIFICATION_METHODS]
+    if bad:
+        raise io.SoftwareError(f"verification {', '.join(repr(b) for b in bad)} not one of "
+                               f"{', '.join(sp.VERIFICATION_METHODS)} (several: comma-separated, e.g. "
+                               f"\"test,inspection\")")
+    return out
+
+
 def prepare(spec: dict | None, cap_delta: dict, raw: dict, reserved: set[str] | None = None) -> dict:
     """驗證一筆差異、補基準指紋與編號，回傳正規化後的差異（尚未寫入）。
 
@@ -80,7 +91,7 @@ def prepare(spec: dict | None, cap_delta: dict, raw: dict, reserved: set[str] | 
         if not d.get("scenarios"):
             raise io.SoftwareError("add-requirement needs at least one scenario")
         d["id"] = f"R{sp.next_number(used_r, 'R')}"
-        d["verification"] = io.as_list(d["verification"])
+        d["verification"] = _methods(d["verification"])
         d["scenarios"] = [{"id": f"S{i}", **{k: s.get(k) for k in _SCN_EDIT}}
                           for i, s in enumerate(d["scenarios"], 1)]
         return d
@@ -109,7 +120,7 @@ def prepare(spec: dict | None, cap_delta: dict, raw: dict, reserved: set[str] | 
         if not any(k in d for k in (_REQ_EDIT if op == "modify-requirement" else ("title",))):
             raise io.SoftwareError(f"{op}: nothing to change")
         if "verification" in d:
-            d["verification"] = io.as_list(d["verification"])
+            d["verification"] = _methods(d["verification"])
         d["ref"] = rid
         d["base"] = sp.requirement_head_fp(target_req)
         return d

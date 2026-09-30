@@ -217,6 +217,8 @@ def _edit_own_addition(cap_delta: dict, raw: dict) -> dict | None:
     fields = {k: v for k, v in raw.items() if k not in ("op", "ref", "base") and v not in (None, "", [])}
     if op == "rename-requirement":
         fields = {k: v for k, v in fields.items() if k == "title"}
+    if "verification" in fields:
+        fields["verification"] = dl._methods(fields["verification"])
     if not fields:
         return None
     rid, _, sid = ref.partition("/")
