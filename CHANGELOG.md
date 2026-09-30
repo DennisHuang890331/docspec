@@ -10,6 +10,14 @@ a minor bump.
 
 ## [Unreleased]
 
+### Changed — after the exam-seating validation run (branch only)
+
+- **Read back only when the owner is unclear.** Rulings keep the owner's words; `--read-back`/`--confirmed` are optional and go together.
+- **`docspec info`** records information the owner gives about the current situation (not decisions): their words, topic, source. Documents may realize it (`gov:I-…`); factcheck treats it as a first-hand source; newer information supersedes older.
+- **`docspec brief` is removed.** Current status is `docspec roadmap`. **`docspec handover`** shows the handover note and points to the roadmap and pending questions; `docspec handover write` rewrites the whole note (done, in progress, promises, cautions, next).
+- **Linking reminders, never blocking:** `ruling add` lists active decisions and how to supersede one; a new requirement without `based-on` is a warning; the writing skills ask sections to realize what they restate; freeze records `unlinked-sections`.
+- **Flow dead-ends fixed:** `code spec show/list` find capabilities that exist only in an active change (`--change` for the change's version); `code testplan set` corrects a planned test in place; `code testplan sign` without ids signs only unsigned or changed tests (`--all` for everything); reviewers record document findings with `audit raise`; identity errors name the label in use.
+
 ### Fixed — gaps found by the exam-seating validation run (branch only)
 
 - **Documents and software no longer hold each other up** (ruling: documents govern documents, software governs software; differences are recorded, not enforced).

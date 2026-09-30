@@ -143,6 +143,14 @@ docspec/software/
   - 基線檔封條保護，hook 擋手改。
 - **派工規範**：`docspec init --agents-md` 在根目錄 AGENTS.md 寫入協作規範區塊，語言依專案 config 的主語言。dspx-govern skill 拿掉，它的固定行為寫進規範的「使用者的決定」一節。
 
+## 10.1 實測後修訂（2026/09/30，考場座位實測）
+
+- **使用者的話分兩種紀錄**：決定用 `docspec ruling add`，使用者提供的現況資訊用 `docspec info add`（補回原本文件樹「決定／資訊」的另一半）。兩者都保存原話；講得清楚就直接記，講得不清楚才覆述、等確認。文件可以 `realizes: [gov:I-…]`，事實查核把資訊紀錄當第一手來源；較新的資訊 `--supersedes` 舊的，引用舊資訊的章節會轉為需要更新。
+- **現況看 roadmap，交接看交接單**：`docspec brief` 拿掉。`docspec handover` 顯示交接單並指向 `docspec roadmap` 與待裁定問題；`docspec handover write` 每次整份重寫（這段做了什麼、進行中、答應使用者的事、要注意的事、下一步），舊內容不留。
+- **文件管文件、軟體管軟體**：見第 7 節。
+- **連結提醒（都不擋）**：`ruling add` 列出有效的專案決策，提醒改變了哪一條就寫新版取代；新需求沒標 based-on 時 `change status` 提醒；轉述決定、資訊或需求的章節要 realizes；定版時把沒有任何連結的章節記進版本紀錄（`unlinked-sections`）。
+- **流程卡點修正**：`code spec show／list` 找得到只存在於進行中 change 的能力（`--change` 看套用後版本）；`code testplan set` 原地修正測試的對應情境（編號不變）；`code testplan sign` 不帶編號只簽「還沒簽或簽後改過」的，`--all` 才全部重簽；審查者把文件查核的發現用 `docspec audit raise` 記下（不算修改）。
+
 目前的 skill：
 - 文件：dspx-develop、dspx-apply、dspx-factcheck、dspx-release（只在排版不對時用）、dspx-diagram（輔助）。
 - 軟體：dspx-propose、dspx-test、dspx-implement、dspx-verify。
