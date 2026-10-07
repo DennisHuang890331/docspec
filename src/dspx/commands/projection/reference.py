@@ -1,4 +1,4 @@
-"""docspec reference [topic] — print craft or writing-style reference material.
+"""artispec reference [topic] — print craft or writing-style reference material.
 
 Two independent sources, merged into one topic index:
   1. **Template-pack craft reference** (engine-specific idioms, known traps) — not a *rule* the
@@ -66,7 +66,7 @@ def _load_topics(ref_file: Path) -> dict[str, str]:
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec reference", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec reference", description=HELP)
     parser.add_argument("topic", nargs="?", default=None,
                         help="the topic to print (omit = list all available topics)")
     parser.add_argument("--template", default=None, metavar="DIR",
@@ -76,13 +76,13 @@ def run(argv: list[str]) -> int:
     if args.template is not None:
         pack = Path(args.template)
         if not pack.is_dir():
-            sys.stderr.write(f"docspec: --template directory does not exist: {pack}\n")
+            sys.stderr.write(f"artispec: --template directory does not exist: {pack}\n")
             return 1
     else:
         pack = paths.bundled_typst_template_dir()
         if pack is None:
             sys.stderr.write(
-                "docspec: bundled template pack not found — the install may be incomplete.\n")
+                "artispec: bundled template pack not found — the install may be incomplete.\n")
             return 1
 
     pack_topics = _load_topics(pack / _REFERENCE_FILE)
@@ -108,12 +108,12 @@ def run(argv: list[str]) -> int:
             print(f"  craft (template pack \"{pack.name}\"):")
             for tid, body in pack_topics.items():
                 print(f"    {tid:16}  {_topic_title(body)}")
-        print(f"\nUsage: docspec reference <topic> (e.g. docspec reference {next(iter(topics))})")
+        print(f"\nUsage: artispec reference <topic> (e.g. artispec reference {next(iter(topics))})")
         return 0
 
     if args.topic not in topics:
         sys.stderr.write(
-            f"docspec: no reference topic \"{args.topic}\". Available: {', '.join(topics)}\n")
+            f"artispec: no reference topic \"{args.topic}\". Available: {', '.join(topics)}\n")
         return 2
 
     print(topics[args.topic])

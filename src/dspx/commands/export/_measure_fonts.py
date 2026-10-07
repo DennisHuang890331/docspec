@@ -1,4 +1,4 @@
-"""docspec measure-fonts <pdf> — report the actual rendered font sizes in a PDF.
+"""artispec measure-fonts <pdf> — report the actual rendered font sizes in a PDF.
 
 A diagnostic for the release loop: after a font-size change (a `--format-config`
 knob, or a hand-edit of the template pack) you measure the *rendered* PDF rather
@@ -72,7 +72,7 @@ def _print_page(idx: int, total: int, result) -> None:
 # ── proof 尾附診斷（soft-dep：缺 pdfplumber 只印一行、不擋 proof）──────
 
 def diagnose(pdf_path: Path, pages: str = "1") -> None:
-    """`docspec proof` render 完呼叫：量測已解析 PDF 的字級、尾附版面診斷。
+    """`artispec proof` render 完呼叫：量測已解析 PDF 的字級、尾附版面診斷。
     pdfplumber 缺＝印一行提示後返回（proof 核心＝PNG，診斷是加值、絕不擋）。"""
     if not _have_pdfplumber():
         print(f"\n  (font diagnostics skipped — pdfplumber not installed; {_INSTALL_HINT})")
@@ -98,7 +98,7 @@ def diagnose(pdf_path: Path, pages: str = "1") -> None:
 # ── 主流程（standalone 單元邏輯；proof 走 diagnose()）─────────────────
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec measure-fonts", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec measure-fonts", description=HELP)
     parser.add_argument("pdf", help="path to the PDF to measure")
     parser.add_argument("--pages", default="1",
                         help="comma-separated 1-based page numbers (default 1)")
@@ -106,11 +106,11 @@ def run(argv: list[str]) -> int:
 
     pdf_path = Path(args.pdf)
     if not pdf_path.is_file():
-        sys.stderr.write(f"docspec: PDF not found ({pdf_path}).\n")
+        sys.stderr.write(f"artispec: PDF not found ({pdf_path}).\n")
         return 1
 
     if not _have_pdfplumber():
-        sys.stderr.write(f"docspec: pdfplumber not found — measure-fonts needs it. {_INSTALL_HINT}\n")
+        sys.stderr.write(f"artispec: pdfplumber not found — measure-fonts needs it. {_INSTALL_HINT}\n")
         return 1
 
     import pdfplumber  # type: ignore
@@ -118,7 +118,7 @@ def run(argv: list[str]) -> int:
     try:
         page_nums = [int(p.strip()) - 1 for p in args.pages.split(",") if p.strip()]
     except ValueError:
-        sys.stderr.write(f"docspec: --pages \"{args.pages}\" is not a valid page-number list (comma-separated, 1-based).\n")
+        sys.stderr.write(f"artispec: --pages \"{args.pages}\" is not a valid page-number list (comma-separated, 1-based).\n")
         return 1
 
     with pdfplumber.open(str(pdf_path)) as pdf:

@@ -1,4 +1,4 @@
-"""docspec audit — 審計記錄全指令進出（list / raise / resolve / show），append-only。
+"""artispec audit — 審計記錄全指令進出（list / raise / resolve / show），append-only。
 
 audit 是結構化審計記錄：不手改 audit.yaml，一律走指令、寫時驗證、攻防 log 累積。
 非阻塞：永不擋 publish。
@@ -64,7 +64,7 @@ def _text_arg(inline: str | None, file: str | None) -> str:
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec audit", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec audit", description=HELP)
     sub = parser.add_subparsers(dest="op")
 
     p_raise = sub.add_parser("raise", help="🔴 raise a finding")
@@ -121,9 +121,9 @@ def run(argv: list[str]) -> int:
         bad = [t for t in targets if article_of_target(t, leaves) is None]
         if bad:
             sys.stderr.write(
-                f"docspec: target {bad} does not exist — an audit must hang off a real section. "
+                f"artispec: target {bad} does not exist — an audit must hang off a real section. "
                 f"Use a full section path (e.g. zenoh/query, not query) or a concept id; "
-                f"see docspec status / list.\n")
+                f"see artispec status / list.\n")
             return 1
         try:
             store = route_store(layout, leaves, targets)
@@ -135,7 +135,7 @@ def run(argv: list[str]) -> int:
                               verdict=(args.verdict or "").strip(),
                               faces=faces, fid=_global_next_id(layout, leaves))
         except AuditError as exc:
-            sys.stderr.write(f"docspec: {exc}\n"); return 1
+            sys.stderr.write(f"artispec: {exc}\n"); return 1
         store.save()
         where = "forest" if store.store == "forest" else store.store
         print(f"Raised {f['id']} ({where}, {f['face']}/{f['severity']}, targets={targets})")
@@ -144,17 +144,17 @@ def run(argv: list[str]) -> int:
     if args.op == "resolve":
         store = find_store(layout, leaves, args.id)
         if store is None:
-            sys.stderr.write(f"docspec: finding \"{args.id}\" not found\n"); return 1
+            sys.stderr.write(f"artispec: finding \"{args.id}\" not found\n"); return 1
         note = _text_arg(args.note, args.note_file)
         if args.status in ("rejected", "waived") and not (note or "").strip():
             # SR14：每個審查發現都要被處置；駁回或延後必須寫明理由，否則等於沒處理。
-            sys.stderr.write(f"docspec: resolving a finding as {args.status} needs --note with the "
+            sys.stderr.write(f"artispec: resolving a finding as {args.status} needs --note with the "
                              "reason (what was checked and why no fix is made now)\n")
             return 1
         try:
             f = resolve_finding(store, args.id, status=args.status, actor=args.actor, note=note)
         except AuditError as exc:
-            sys.stderr.write(f"docspec: {exc}\n"); return 1
+            sys.stderr.write(f"artispec: {exc}\n"); return 1
         store.save()
         print(f"{args.id} → {f['status']} ({args.actor}, {store.store})")
         return 0
@@ -162,7 +162,7 @@ def run(argv: list[str]) -> int:
     if args.op == "show":
         store = find_store(layout, leaves, args.id)
         if store is None:
-            sys.stderr.write(f"docspec: {args.id} not found\n"); return 1
+            sys.stderr.write(f"artispec: {args.id} not found\n"); return 1
         f = store.by_id(args.id)
         if args.as_json:
             print(json.dumps(f, ensure_ascii=False, indent=2)); return 0
@@ -251,7 +251,7 @@ def run(argv: list[str]) -> int:
         print(f"  {r['id']:<5} [{r['face']}/{r['severity']}] {r['status']:<8} "
               f"{r.get('_store', ''):<12} → {tgts}")
         print(f"        {first}")
-    print("\n(view a single thread: docspec audit show <id>)")
+    print("\n(view a single thread: artispec audit show <id>)")
     return 0
 
 

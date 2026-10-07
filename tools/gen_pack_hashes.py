@@ -4,8 +4,8 @@ Run this whenever a maintainer intentionally edits a bundled template pack:
   - docspec-typst pack  (template.typ, …)
   - journal-tables.lua  (shared Lua filter)
 
-With no git in this workspace, the baseline is committed into the pack and shipped
-in the wheel; `docspec export` recomputes live hashes and refuses a hand-tampered
+The baseline is tracked with the pack and shipped in the wheel;
+`artispec export` recomputes live hashes and refuses a hand-tampered
 bundled pack unless `--allow`.
 
     uv run --no-editable python tools/gen_pack_hashes.py
@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from dspx import paths
+from dspx.engine import paths
 
 TEMPLATES = Path(__file__).resolve().parent.parent / "src" / "dspx" / "assets" / "templates"
 

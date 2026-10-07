@@ -15,6 +15,7 @@ from dspx.engine import paths
 from dspx.commands import export as export_cmd
 from dspx.commands.export import proof as proof_cmd
 from dspx.engine.layout import Layout
+from dspx.reports import freeze
 
 _HAVE_PANDOC = export_cmd._pandoc_path() is not None
 # 受控 typst ＋ 受控字型皆備才能真 build PDF（皆移出 wheel；未 setup → skip）。
@@ -42,6 +43,7 @@ def _setup(make_project, *, version: str = "1.0.0", article: str = "g"):
     snap = layout.docs_snapshot(article, version)
     snap.parent.mkdir(parents=True, exist_ok=True)
     snap.write_text(_SNAP, encoding="utf-8")
+    freeze.record(home, layout.project_root, snap)
     return home, layout
 
 
@@ -53,9 +55,9 @@ def _export(layout, monkeypatch, home, *, latest: bool = False, article: str = "
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(_SNAP, encoding="utf-8")
         assert export_cmd.run([article, "--format", "pdf", "--latest"]) == 0
-        return layout.docs_export(article, "latest", "pdf")
+        return layout.version_export(article, "latest", "pdf")
     assert export_cmd.run([article, "--format", "pdf"]) == 0
-    return layout.docs_export(article, "1.0.0", "pdf")
+    return layout.version_export(article, "1.0.0", "pdf")
 
 
 # ── 渲圖：頁數對、檔案產出 ────────────────────────────────────────
@@ -68,7 +70,7 @@ def test_proof_renders_pages(make_project, monkeypatch, capsys):
     assert pdf.is_file()
 
     assert proof_cmd.run(["g"]) == 0
-    out_dir = proof_cmd._proof_dir(layout, "g")
+    out_dir = proof_cmd._proof_dir(layout, "g", "1.0.0")
     pngs = sorted(out_dir.glob("page_*.png"))
     assert pngs, "未產出任何 PNG"
     # 每張都是非空 PNG（PNG magic）
@@ -94,7 +96,7 @@ def test_proof_deterministic(make_project, monkeypatch):
     """同 PDF 重渲 → 同 PNG bytes（確定性）；重渲清空舊頁、不累積。"""
     home, layout = _setup(make_project)
     _export(layout, monkeypatch, home)
-    out_dir = proof_cmd._proof_dir(layout, "g")
+    out_dir = proof_cmd._proof_dir(layout, "g", "1.0.0")
 
     assert proof_cmd.run(["g"]) == 0
     first = {p.name: p.read_bytes() for p in sorted(out_dir.glob("page_*.png"))}
@@ -111,8 +113,8 @@ def test_proof_output_never_in_archive(make_project, monkeypatch):
     home, layout = _setup(make_project)
     _export(layout, monkeypatch, home)
     assert proof_cmd.run(["g"]) == 0
-    out_dir = proof_cmd._proof_dir(layout, "g")
-    assert "exports" in out_dir.parts
+    out_dir = proof_cmd._proof_dir(layout, "g", "1.0.0")
+    assert "proof" in out_dir.parts
     assert "archive" not in out_dir.parts
 
 
@@ -122,7 +124,7 @@ def test_proof_latest(make_project, monkeypatch):
     home, layout = _setup(make_project)
     _export(layout, monkeypatch, home, latest=True)
     assert proof_cmd.run(["g", "--latest"]) == 0
-    assert sorted(proof_cmd._proof_dir(layout, "g").glob("page_*.png"))
+    assert sorted(proof_cmd._proof_dir(layout, "g", "latest").glob("page_*.png"))
 
 
 # ── soft-dep 降級（無需外部相依）──────────────────────────────────
@@ -147,7 +149,7 @@ def test_proof_no_pdf_hints_export(make_project, monkeypatch, capsys):
         return
     assert proof_cmd.run(["g"]) == 1
     err = capsys.readouterr().err
-    assert "docspec export" in err
+    assert "artispec export" in err
 
 
 def test_proof_no_snapshot_errors(make_project, monkeypatch):

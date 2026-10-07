@@ -286,7 +286,7 @@ def test_handover_note_is_rewritten_whole_and_points_to_roadmap(gov_project, cap
     assert handover_cmd.run([]) == 0
     out = capsys.readouterr().out
     assert "還沒有交接單" in out or "No handover note yet" in out
-    assert "docspec roadmap" in out and "question list" in out
+    assert "artispec roadmap" in out and "question list" in out
     assert handover_cmd.run(["write", "--done", "主任版初稿", "--in-progress", "寫手改稿中",
                              "--promise", "初稿先給組長看", "--next", "等事實核對"]) == 0
     assert handover_cmd.run(["write", "--next", "交給組長"]) == 0          # 整份重寫：舊內容不留

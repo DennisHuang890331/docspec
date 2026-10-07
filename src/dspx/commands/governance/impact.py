@@ -1,8 +1,8 @@
-"""docspec impact — 影響分析：未處理的可疑標記 ＋ 依賴已取代／撤回治理決策的文件章節。
+"""artispec impact — 影響分析：未處理的可疑標記 ＋ 依賴已取代／撤回治理決策的文件章節。
 
-- `docspec impact`：列出待處理項目（治理紀錄的可疑標記、需改指向接替決策的文件章節）。
-- `docspec impact clear <S-id> --reason "..."`：看過之後附理由清除標記（理由必填）。
-- `docspec trace <id>` 另見 trace 指令。
+- `artispec impact`：列出待處理項目（治理紀錄的可疑標記、需改指向接替決策的文件章節）。
+- `artispec impact clear <S-id> --reason "..."`：看過之後附理由清除標記（理由必填）。
+- `artispec trace <id>` 另見 trace 指令。
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ def open_items(layout, leaves, gov: gv.Governance) -> dict:
 
 
 def run(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="docspec impact", description=HELP)
+    p = argparse.ArgumentParser(prog="artispec impact", description=HELP)
     sub = p.add_subparsers(dest="op")
     c = sub.add_parser("clear", help="clear a suspect flag after review (reason required)")
     c.add_argument("id")
@@ -73,15 +73,17 @@ def run(argv: list[str]) -> int:
             print("（沒有待處理的影響項目）")
             return 0
         if items["suspects"]:
-            print("可疑標記（看過後以 `docspec impact clear <編號> --reason ...` 清除）：")
+            print("可疑標記（看過後以 `artispec impact clear <編號> --reason ...` 清除）：")
             for s in items["suspects"]:
                 print(f"- {s['target-label']}：因為「{s['trigger-label']}」變更（{s['id']}）")
         if items["sections"]:
             print("需要重看的文件章節（審閱內容後，把 realizes 改指向接替的決策）：")
             for r in items["sections"]:
                 succ = f"，接替者 gov:{r['successor']}" if r.get("successor") else ""
+                reason = {"superseded": "已被取代", "withdrawn": "已撤回",
+                          "basis-invalid": "的裁定依據已失效"}[r["status"]]
                 print(f"- {r['title']}（{r['section']}）：依據的決策 gov:{r['decision']} "
-                      f"已{'被取代' if r['status'] == 'superseded' else '撤回'}{succ}")
+                      f"{reason}{succ}")
         return 0
     except gv.GovernanceError as exc:
         return fail(str(exc))

@@ -3,7 +3,7 @@
 目前唯一子動詞 `register-legacy`：把 pre-docspec 歷版登記進凍結區的**第二張白名單**
 （`.freeze.yaml` 頂層 `legacy:`，與 publish 鑄造的 `frozen:` 平行——出處可稽）。
 
-- src 在 archive 外（常態）：引擎自己搬進 `docs/archive/legacy/<name>/` 再登記
+- src 在 archive 外（常態）：引擎自己搬進 `docspec/changes/_versions/_legacy/<name>/snapshot/` 再登記
   （引擎受控路徑＝hook 分層本意：hook 擋 agent 裸 mv 進 archive、引擎指令放行）。
 - src 已在 archive 內（先前手動塞入、V11 全紅的救援場景）：原地登記、不搬動。
 - 防洗白鐵則：任一檔相對路徑已在 frozen∪legacy → 整批拒絕、零寫入；**無 unregister**
@@ -23,15 +23,16 @@ from pathlib import Path
 
 from dspx.reports import freeze
 from dspx.commands._shared import BootstrapError, bootstrap
+from dspx.engine.layout import LayoutError
 
 NAME = "freeze"
 HELP = ("frozen-area operations: `publish register-legacy <src-dir>` registers "
         "pre-docspec legacy versions into the tamper-detection hash net")
 
 _USAGE = (
-    "Usage: docspec publish register-legacy <src-dir> [--into <name>]\n"
+    "Usage: artispec publish register-legacy <src-dir> [--into <name>]\n"
     "  register-legacy  register pre-docspec legacy versions into the frozen area:\n"
-    "                   moves the files into docs/archive/legacy/<name>/ and records\n"
+    "                   moves files into changes/_versions/_legacy/<name>/snapshot/ and records\n"
     "                   their hashes in .freeze.yaml (src-dir already inside an\n"
     "                   archive/ folder -> registered in place, nothing is moved).\n"
     "                   Paths already registered are refused as a whole batch;\n"
@@ -52,11 +53,11 @@ def run(argv: list[str]) -> int:
 
 def _register_legacy(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
-        prog="docspec publish register-legacy",
+        prog="artispec publish register-legacy",
         description="register pre-docspec legacy versions into the frozen-area hash net")
     parser.add_argument("src_dir", help="folder holding the pre-docspec legacy version files")
     parser.add_argument("--into", default=None, metavar="NAME",
-                        help="destination folder name under docs/archive/legacy/ "
+                        help="collection name under changes/_versions/_legacy/ "
                              "(default: the last segment of src-dir)")
     args = parser.parse_args(argv)
 
@@ -67,11 +68,23 @@ def _register_legacy(argv: list[str]) -> int:
 
     src = Path(args.src_dir)
     if not src.is_dir():
-        sys.stderr.write(f"docspec: publish register-legacy: not a directory: {src}\n")
+        sys.stderr.write(f"artispec: publish register-legacy: not a directory: {src}\n")
+        return 1
+    version_home = layout.planning_home / "changes" / "_versions"
+    try:
+        relative = src.resolve().relative_to(version_home.resolve())
+    except ValueError:
+        relative = None
+    if relative is not None and (not relative.parts or relative.parts[0] != "_legacy"):
+        sys.stderr.write("artispec: freeze register-legacy refused -- authored version snapshots cannot "
+                         "be extended or re-registered; import a separate legacy collection.\n")
         return 1
     files = sorted(p for p in src.rglob("*") if p.is_file() and not freeze.is_sync_junk(p.name))
     if not files:
-        sys.stderr.write(f"docspec: publish register-legacy: no files to register under {src}\n")
+        sys.stderr.write(f"artispec: publish register-legacy: no files to register under {src}\n")
+        return 1
+    if src.is_symlink() or any(p.is_symlink() for p in src.rglob("*")):
+        sys.stderr.write("artispec: freeze register-legacy refused -- symbolic links cannot be frozen.\n")
         return 1
 
     root = layout.project_root.resolve()
@@ -87,7 +100,16 @@ def _register_legacy(argv: list[str]) -> int:
         dest_note = src
     else:
         name = args.into or src.resolve().name
-        dest_root = layout.docs_dir / "archive" / "legacy" / name
+        if not name or name in (".", "..") or any(c in name for c in "/\\"):
+            sys.stderr.write("artispec: freeze register-legacy: invalid collection name\n")
+            return 1
+        dest_root = layout.planning_home / "changes" / "_versions" / "_legacy" / name / "snapshot"
+        from dspx.engine.document_versions import _safe
+        try:
+            _safe(layout, dest_root)
+        except (LayoutError, OSError) as exc:
+            sys.stderr.write(f"artispec: freeze register-legacy refused -- {exc}\n")
+            return 1
         targets = {f: dest_root / f.relative_to(src) for f in files}
         dest_note = dest_root
 
@@ -98,7 +120,7 @@ def _register_legacy(argv: list[str]) -> int:
     collisions = sorted(r for r in rels.values() if r in frozen or r in legacy)
     if collisions:
         sys.stderr.write(
-            "docspec: publish register-legacy refused -- path(s) already registered in "
+            "artispec: publish register-legacy refused -- path(s) already registered in "
             ".freeze.yaml (the frozen area is append-only; re-registering would launder a "
             "tampered hash). Nothing was moved or written:\n")
         for c in collisions:
@@ -108,7 +130,7 @@ def _register_legacy(argv: list[str]) -> int:
         clobber = sorted(str(t) for t in targets.values() if t.exists())
         if clobber:
             sys.stderr.write(
-                "docspec: publish register-legacy refused -- destination file(s) already exist "
+                "artispec: publish register-legacy refused -- destination file(s) already exist "
                 "(will not overwrite). Nothing was moved or written:\n")
             for c in clobber:
                 sys.stderr.write(f"  ✗ {c}\n")
@@ -136,7 +158,7 @@ def _register_legacy(argv: list[str]) -> int:
             layout.planning_home, layout.project_root, list(targets.values()))
     except freeze.LegacyCollisionError as exc:
         sys.stderr.write(
-            "docspec: publish register-legacy refused -- path(s) already registered:\n")
+            "artispec: publish register-legacy refused -- path(s) already registered:\n")
         for c in exc.collisions:
             sys.stderr.write(f"  ✗ {c}\n")
         return 1

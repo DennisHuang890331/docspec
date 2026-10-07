@@ -1,6 +1,6 @@
 """軟體 change：一個 change 一個資料夾（照 OpenSpec 的結構，格式為 YAML，一律透過指令寫入）。
 
-    docspec/software/changes/<change>/
+    docspec/changes/<change>/ (legacy software/changes/ remains usable)
     ├─ proposal.yaml        why / what / capabilities{new, modified} / code-areas / depends-on
     ├─ design.yaml          context / goals / non-goals / risks / migration / open-questions / decisions
     ├─ specs/<能力>.yaml    規格差異（delta.py）
@@ -67,18 +67,19 @@ def validate_id(cid: str) -> str | None:
 
 
 def list_active(layout: Layout) -> list[str]:
-    d = io.changes_dir(layout)
-    if not d.is_dir():
-        return []
-    return sorted(p.name for p in d.iterdir()
-                  if p.is_dir() and p.name != io.ARCHIVE_DIR and (p / "proposal.yaml").is_file())
+    names = [p.name for d in io.change_roots(layout) if d.is_dir() for p in d.iterdir()
+             if p.is_dir() and not p.name.startswith("_") and (p / "proposal.yaml").is_file()]
+    if len(names) != len(set(names)):
+        raise io.SoftwareError("duplicate software change ids in shared and legacy locations")
+    return sorted(names)
 
 
 def list_archived(layout: Layout) -> list[str]:
-    d = io.archive_dir(layout)
-    if not d.is_dir():
-        return []
-    return sorted(p.name for p in d.iterdir() if p.is_dir())
+    names = [p.name for base in io.change_roots(layout) if (d := base / io.ARCHIVE_DIR).is_dir()
+             for p in d.iterdir() if p.is_dir() and (p / "proposal.yaml").is_file()]
+    if len(names) != len(set(names)):
+        raise io.SoftwareError("duplicate archived software change folders")
+    return sorted(names)
 
 
 def archived_ids(layout: Layout) -> dict[str, str]:
@@ -86,11 +87,16 @@ def archived_ids(layout: Layout) -> dict[str, str]:
     out = {}
     for name in list_archived(layout):
         m = re.match(r"^\d{4}-\d{2}-\d{2}-(.+)$", name)
-        out[m.group(1) if m else name] = name
+        cid = m.group(1) if m else name
+        if cid in out:
+            raise io.SoftwareError(f'duplicate archived software change id "{cid}"')
+        out[cid] = name
     return out
 
 
 def change_state(layout: Layout, cid: str) -> str | None:
+    from dspx.engine.change_catalog import ensure_unique
+    ensure_unique(layout, cid)
     if (io.change_dir(layout, cid) / "proposal.yaml").is_file():
         return "active"
     if cid in archived_ids(layout):
@@ -100,12 +106,17 @@ def change_state(layout: Layout, cid: str) -> str | None:
 
 def load_change(layout: Layout, cid: str, folder: Path | None = None) -> dict:
     """{id, folder, proposal, design, deltas{能力: delta}, tests, tasks}。"""
-    folder = folder or io.change_dir(layout, cid)
+    io.check_change_id(cid)
+    from dspx.engine.change_catalog import ensure_unique
+    ensure_unique(layout, cid)
+    folder = io.managed_path(layout, folder or io.change_dir(layout, cid))
     if not (folder / "proposal.yaml").is_file():
         raise io.SoftwareError(f"no software change \"{cid}\"")
     out = {"id": cid, "folder": folder, "proposal": io.load(folder / "proposal.yaml", "proposal"),
            "design": io.load(folder / "design.yaml", "design") if (folder / "design.yaml").is_file() else {},
            "deltas": {}, "tests": {"tests": [], "objections": []}, "tasks": {"tasks": []}}
+    if not isinstance(out["proposal"], dict) or out["proposal"].get("id") != cid:
+        raise io.SoftwareError(f"software change id differs from requested id {cid}: {folder}")
     sdir = folder / "specs"
     if sdir.is_dir():
         for p in sorted(sdir.rglob("*.yaml")):
@@ -122,7 +133,7 @@ def load_archived(layout: Layout, cid: str) -> dict:
     name = archived_ids(layout).get(cid)
     if name is None:
         raise io.SoftwareError(f"no archived software change \"{cid}\"")
-    return load_change(layout, cid, io.archive_dir(layout) / name)
+    return load_change(layout, cid, io.archived_change_dir(layout, name))
 
 
 def write_part(layout: Layout, cid: str, part: str, body, capability: str | None = None) -> None:
@@ -141,13 +152,15 @@ def new_change(layout: Layout, cid: str, *, why: str, what: list[str], new_caps:
     reason = validate_id(cid)
     if reason:
         raise io.SoftwareError(reason)
+    from dspx.engine.change_catalog import ensure_available
+    ensure_available(layout, cid)
     if change_state(layout, cid):
         raise io.SoftwareError(f"software change \"{cid}\" already exists ({change_state(layout, cid)})")
     from dspx.commands.change.archive import name_taken_elsewhere
     clash = name_taken_elsewhere(layout, cid, "software")
     if clash:
         raise io.SoftwareError(f"{clash} — change names are shared by documents and software "
-                               f"(one `docspec archive`)")
+                               f"(one `artispec archive`)")
     existing = set(sp.list_capabilities(layout))
     for c in new_caps:
         if c in existing:
@@ -188,7 +201,7 @@ def add_delta(layout: Layout, cid: str, capability: str, raw: dict, purpose: str
     is_new = capability in (caps.get("new") or [])
     if not is_new and capability not in (caps.get("modified") or []):
         raise io.SoftwareError(f"capability \"{capability}\" is not listed in this change's proposal "
-                               f"(add it with `docspec code change set {cid} --modified {capability}`)")
+                               f"(add it with `artispec code change set {cid} --modified {capability}`)")
     cap_delta = ch["deltas"].get(capability) or {"capability": capability, "new": is_new, "deltas": []}
     if is_new:
         if purpose:
@@ -213,10 +226,15 @@ def _edit_own_addition(cap_delta: dict, raw: dict) -> dict | None:
     op = raw.get("op")
     if op not in ("modify-requirement", "rename-requirement", "modify-scenario"):
         return None
+    # Editing an inline addition must obey the same operation contract as a
+    # delta against an existing spec. Never seal unknown fields into a scenario.
+    extra = set(raw) - dl._ALLOWED[op] - {"base", "id"}
+    if extra:
+        raise io.SoftwareError(f"{op}: unknown field(s) {', '.join(sorted(extra))}")
     ref = str(raw.get("ref") or "").strip("/")
-    fields = {k: v for k, v in raw.items() if k not in ("op", "ref", "base") and v not in (None, "", [])}
-    if op == "rename-requirement":
-        fields = {k: v for k, v in fields.items() if k == "title"}
+    editable = (dl._SCN_EDIT if op == "modify-scenario" else
+                ("title",) if op == "rename-requirement" else dl._REQ_EDIT)
+    fields = {k: v for k, v in raw.items() if k in editable and v not in (None, "", [])}
     if "verification" in fields:
         fields["verification"] = dl._methods(fields["verification"])
     if not fields:
@@ -314,6 +332,9 @@ def validate_change(layout: Layout, ch: dict, *, strict: bool = False) -> tuple[
             errs.append(f"{where}: {field} points to nonexistent decision \"{ref}\"")
             return
         st = gv.decision_effective_status(d, gov)
+        invalid = gv.invalid_basis(d, gov)
+        if invalid:
+            errs.append(f"{where}: {field} decision {ref} has invalid ruling basis: {', '.join(invalid)}")
         if st in ("superseded", "withdrawn"):
             errs.append(f"{where}: {field} points to a {st} decision \"{ref}\" "
                         f"(use its successor{': gov:' + str(gv.superseded_by(d, gov)) if gv.superseded_by(d, gov) else ''})")
@@ -358,7 +379,7 @@ def validate_change(layout: Layout, ch: dict, *, strict: bool = False) -> tuple[
     for s in open_suspects(layout, SWC_NS + cid):
         (errs if strict else warns).append(
             f"{where}: affected by a change to {s.get('trigger')} — review the change, then "
-            f"`docspec impact clear {s.get('id')} --reason …` ({s.get('id')})")
+            f"`artispec impact clear {s.get('id')} --reason …` ({s.get('id')})")
 
     # 大小提醒
     lim = size_warning(layout)
@@ -368,7 +389,17 @@ def validate_change(layout: Layout, ch: dict, *, strict: bool = False) -> tuple[
                      f"splitting unrelated work into its own change")
 
     from dspx.engine.software import tasks as tk
-    e2, w2 = tk.validate_tasks_and_tests(layout, ch)
+    # Existing requirements can inherit their basis without repeating it in a delta.
+    relevant = tk._changed_requirements(ch, layout)[0]
+    for task in ch["tasks"].get("tasks") or []:
+        relevant.update(f"{sp.split_ref(r)[0]}/{sp.split_ref(r)[1]}" for r in io.as_list(task.get("implements")))
+    for planned in ch["tests"].get("tests") or []:
+        relevant.update(f"{sp.split_ref(r)[0]}/{sp.split_ref(r)[1]}" for r in io.as_list(planned.get("covers")))
+    for reqref in sorted(relevant):
+        req = tk._requirement_after(layout, ch, reqref) or {}
+        for ref in io.as_list(req.get("based-on")):
+            check_decision(ref, f"requirement {reqref} based-on")
+    e2, w2 = tk.validate_tasks_and_tests(layout, ch, strict=strict)
     if p.get("imported-from") and not strict:
         # 從 OpenSpec 匯入的 change 本來就沒有「任務→需求」「測試→情境」連結：平常只合併成一則提醒，
         # 不讓整個專案的 check 變紅；封存（strict）時照樣逐條擋下。
@@ -378,7 +409,7 @@ def validate_change(layout: Layout, ch: dict, *, strict: bool = False) -> tuple[
             n_req = sum(1 for e in gaps if "no task implements it" in e)
             w2 = w2 + [f"{where}: imported from OpenSpec — {n_req} requirement(s) have no implementing "
                        f"task and {len(gaps) - n_req} scenario(s) have no planned test; link them with "
-                       f"`docspec code task set` / `docspec code testplan add` before archiving"]
+                       f"`artispec code task set` / `artispec code testplan add` before archiving"]
     return errs + e2, warns + w2
 
 

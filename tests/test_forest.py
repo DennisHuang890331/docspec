@@ -337,7 +337,7 @@ def test_develop_forest_map_prints_anchors_and_catalogue_hint(make_project, writ
     out = capsys.readouterr().out
     assert "    anchor: c-a-root — A根  (a)" in out
     assert "    anchor: c-a-anchor — 深錨  (a/deep/anchor)" in out
-    assert "  (full concept catalogue of a document: docspec show <article> --concepts --json)" in out
+    assert "  (full concept catalogue of a document: artispec show <article> --concepts --json)" in out
     # 非 develop skill：forest=None → 無 anchor 行、無目錄指引
     assert instr.run(["apply", "b"]) == 0
     out2 = capsys.readouterr().out
@@ -470,8 +470,8 @@ def test_develop_forest_map_prints_uncrystallized_note_and_cycle_warning(
     assert instr.run(["develop", "t3"]) == 0
     out = capsys.readouterr().out
     assert "[wip] 施工中文件  (root not yet crystallized)" in out
-    assert "  t1 → t2  ⚠ governs cycle — `docspec check` will fail" in out
-    assert "  t2 → t1  ⚠ governs cycle — `docspec check` will fail" in out
+    assert "  t1 → t2  ⚠ governs cycle — `artispec check` will fail" in out
+    assert "  t2 → t1  ⚠ governs cycle — `artispec check` will fail" in out
     # 正常條目/無環邊不帶字樣
     t3_line = next(ln for ln in out.splitlines() if ln.startswith("  [t3]"))
     assert "not yet crystallized" not in t3_line

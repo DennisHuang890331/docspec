@@ -1,6 +1,6 @@
 r"""安裝來源解析（PEP 610 `direct_url.json`）＋更新指令組裝。
 
-version / init / update 三處共用：讀自身 dist（`dspx`）的 `direct_url.json`
+version / init / update 三處共用：讀自身 distribution（`artispec`）的 `direct_url.json`
 （`importlib.metadata`）判斷安裝來源——
   - vcs_info（git 安裝）→ `{"kind": "git", "commit": <sha>, "url": <repo url>}`
   - dir_info（本地目錄安裝）→ `{"kind": "dir", "path": <解出的本地路徑>}`
@@ -12,9 +12,10 @@ from __future__ import annotations
 import json
 from urllib.parse import unquote, urlparse
 
-# docspec 公開 repo（git 安裝的更新來源＋init 更新檢查比對對象）。
+# ArtiSpec 原始碼 repo（git 安裝的更新來源＋init 更新檢查比對對象）。
 GIT_REPO = "DennisHuang890331/docspec"
-GIT_REMOTE = "git+https://github.com/DennisHuang890331/docspec"
+GIT_BRANCH = "dev"
+GIT_REMOTE = f"git+https://github.com/{GIT_REPO}@{GIT_BRANCH}"
 
 
 def _file_url_to_path(url: str) -> str:
@@ -32,7 +33,7 @@ def _file_url_to_path(url: str) -> str:
     return path or url
 
 
-def read_install_source(dist_name: str = "dspx") -> dict | None:
+def read_install_source(dist_name: str = "artispec") -> dict | None:
     """讀自身 dist 的 PEP 610 `direct_url.json`。任何缺失/解析失敗 → None（不拋、不猜）。"""
     try:
         from importlib.metadata import distribution
@@ -58,19 +59,19 @@ def read_install_source(dist_name: str = "dspx") -> dict | None:
 
 
 def git_reinstall_command() -> str:
-    return f"uv tool install --from {GIT_REMOTE} docspec --reinstall --no-cache"
+    return f"uv tool install --from {GIT_REMOTE} artispec --reinstall --no-cache"
 
 
 def update_command(source: dict | None) -> str:
     """依安裝來源回傳一行精確更新指令（git→git 重裝；dir/未知→uv tool upgrade）。"""
     if source and source.get("kind") == "git":
         return git_reinstall_command()
-    return "uv tool upgrade docspec"
+    return "uv tool upgrade artispec"
 
 
 def update_argv(source: dict | None) -> list[str]:
     """update_command 的 argv 版（update --run 的 detached 子行程用）。"""
     if source and source.get("kind") == "git":
-        return ["uv", "tool", "install", "--from", GIT_REMOTE, "docspec",
+        return ["uv", "tool", "install", "--from", GIT_REMOTE, "artispec",
                 "--reinstall", "--no-cache"]
-    return ["uv", "tool", "upgrade", "docspec"]
+    return ["uv", "tool", "upgrade", "artispec"]

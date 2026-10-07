@@ -16,6 +16,8 @@ jobs:
         # doesn't ship silently.
         python-version: ["3.11", "3.12", "3.13"]
     runs-on: ${{ matrix.os }}
+    env:
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
 
@@ -25,7 +27,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       # Runs the engine test suite. The PDF-pipeline tests (export/proof) require the
-      # controlled TinyTeX + fonts installed by `docspec setup` and a pandoc binary;
+      # controlled TinyTeX + fonts installed by `artispec setup` and a pandoc binary;
       # without them they SKIP (not fail), so CI exercises the deterministic engine.
       # `--no-editable` mirrors the documented dev command (and sidesteps the Windows
       # cp950 / non-ASCII-path .pth issue).

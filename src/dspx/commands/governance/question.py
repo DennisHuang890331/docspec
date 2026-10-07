@@ -1,4 +1,4 @@
-"""docspec question — 待裁定問題（需要使用者決定的事）。
+"""artispec question — 待裁定問題（需要使用者決定的事）。
 
 add ＝ agent 提出問題；explain ＝ 使用者表示沒聽懂、待解釋；withdraw ＝ 撤回；list ＝ 清單。
 「已裁定」不手寫：有裁定 answers 它就推導為 answered。
@@ -28,7 +28,7 @@ def _update_status(layout, qid: str, status: str) -> int:
 
 
 def run(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="docspec question", description=HELP)
+    p = argparse.ArgumentParser(prog="artispec question", description=HELP)
     sub = p.add_subparsers(dest="op")
     a = sub.add_parser("add", help="record a question the owner must decide")
     a.add_argument("--title", required=True, help="one line, plain language")

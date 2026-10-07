@@ -1,4 +1,4 @@
-"""docspec status — 章節架構概觀：每節 有沒檔＋可開寫(ready)＋同步/過期。"""
+"""artispec status — 章節架構概觀：每節 有沒檔＋可開寫(ready)＋同步/過期。"""
 
 from __future__ import annotations
 
@@ -92,7 +92,7 @@ def compute_sync(layout: Layout, leaf: Leaf, recorded, by_section: dict, dindex:
     # 優先序 own > upstream > norm > inherited > style：規矩失守比敘事框架移動嚴重、
     # 但仍在「散文必須重寫」（own/upstream）之下——norm 變更常見結局是「散文合法、ack 即清」。
     if isinstance(recorded, dict) and recorded.get("redraft"):
-        # 標髒旗標（docspec stale / redraft）：在 own 比對**前**投影成 stale-own——
+        # 標髒旗標（artispec stale / redraft）：在 own 比對**前**投影成 stale-own——
         # apply（rewrite）的 pickup 集合（stale-own）零改動接手；散文真重寫（render 重算）或
         # render --ack-own 才清旗標。舊帳本無此鍵＝行為不變（零遷移）。
         return "stale-own", style_moved
@@ -211,7 +211,7 @@ def _retired_decisions(layout) -> list[dict]:
 
 
 def _run_retired(layout, prefix: str | None, as_json: bool) -> int:
-    """`docspec status --retired [<prefix>]`：列出/查詢已退場的章節與決策（掃封存區＋活節 history）。"""
+    """`artispec status --retired [<prefix>]`：列出/查詢已退場的章節與決策（掃封存區＋活節 history）。"""
     sections = _retired_sections(layout)
     decisions = _retired_decisions(layout)
     if prefix:
@@ -244,7 +244,7 @@ def _run_retired(layout, prefix: str | None, as_json: bool) -> int:
 
 
 def _run_pending_facts(layout, article: str | None, as_json: bool) -> int:
-    """`docspec status --pending-facts`：掃源料 aperture 的 [TBD]/[待補] 佔位＝「等寫作者補的事實
+    """`artispec status --pending-facts`：掃源料 aperture 的 [TBD]/[待補] 佔位＝「等寫作者補的事實
     清單」（複用 lint V4 `_PLACEHOLDER_RE`；事實正確性是寫作者責任、機械不判對錯，只列缺口給人）。"""
     from dspx.engine.lint import _PLACEHOLDER_RE
     from dspx.engine.model import load_project
@@ -309,7 +309,7 @@ def _run_pending_facts(layout, article: str | None, as_json: bool) -> int:
 def run(argv: list[str]) -> int:
     import sys
 
-    parser = argparse.ArgumentParser(prog="docspec status", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec status", description=HELP)
     parser.add_argument("article", nargs="?", default=None, help="scope output to this article")
     parser.add_argument("--section", default=None, help="report only this leaf section")
     parser.add_argument("--retired", action="store_true",
@@ -341,8 +341,8 @@ def run(argv: list[str]) -> int:
         known = {lf.article for lf in leaves}
         if args.article not in known:
             hint = ("  (that looks like a section path — did you mean "
-                    f"`docspec status --section {args.article}`?)\n") if "/" in args.article else ""
-            sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n{hint}")
+                    f"`artispec status --section {args.article}`?)\n") if "/" in args.article else ""
+            sys.stderr.write(f"artispec: no leaf sections found for article \"{args.article}\"\n{hint}")
             return 1
 
     check_ok = run_check(leaves, schema, layout).ok
@@ -407,12 +407,12 @@ def run(argv: list[str]) -> int:
         return 0
 
     if not rows:
-        print("corpus is empty (no leaf sections yet). A section exists from its first `docspec put <section> concept`.")
+        print("corpus is empty (no leaf sections yet). A section exists from its first `artispec put <section> concept`.")
         return 0
 
     _print_active_changes_overview(layout, schema)
 
-    print(f"check: {'green' if check_ok else 'red (run docspec check first)'}  "
+    print(f"check: {'green' if check_ok else 'red (run artispec check first)'}  "
           f"{len(rows)} leaf section(s)\n")
     for r in rows:
         f = r["files"]
@@ -422,7 +422,7 @@ def run(argv: list[str]) -> int:
             "m" if f["material"] else "-",
             "h" if f["history"] else "-",
         ])
-        drift = " ✎hand-edited(docspec diff)" if r.get("drifted") else ""
+        drift = " ✎hand-edited(artispec diff)" if r.get("drifted") else ""
         moved = ("" if not r.get("styleMoved")
                  else " (" + "+".join(r["styleMoved"]) + " moved)")
         print(f"  {r['section']:<28} {r['state']:<16} {r['sync']:<16} [{flags}]{moved}{drift}")
@@ -439,15 +439,15 @@ def run(argv: list[str]) -> int:
               "confirmation (see the projected verdict verbs).")
     for art in skeleton_stale:
         print(f"\n  ⚠ deliverable skeleton of \"{art}\" is stale: a group.yaml title/order "
-              f"changed since the last render — run docspec render {art}")
+              f"changed since the last render — run artispec render {art}")
     if any(r["sync"] == "deliverable-missing" for r in rows):
         print("\n  ⚠ deliverable-missing: the rendered file was deleted but the ledger still has "
               "records — restore it from git/Drive history, or run "
-              "`docspec render <article> --rebaseline` to rebuild explicitly")
+              "`artispec render <article> --rebaseline` to rebuild explicitly")
     for art in needs_migration_articles:
         print(f"\n  ⚠ needs-migration: the fingerprint ledger of \"{art}\" is an older fingerprint "
               "version (its values are not comparable with the current algorithms, so no per-axis "
-              f"staleness is shown) — migrate once with `docspec render {art} --rebaseline` (prose "
+              f"staleness is shown) — migrate once with `artispec render {art} --rebaseline` (prose "
               "is preserved; pending stale signals are absorbed into the new baseline)")
     if group_rows:
         print("\n  group nodes (concept-less grouping folders; title from group.yaml):")
@@ -456,5 +456,5 @@ def run(argv: list[str]) -> int:
             print(f"    [group] {g['section']}/ — {g['title']}{order}")
     print("\n  flags: c=concept d=decisions m=material h=history")
     print("  (sync is state; the single apply skill routes its own mode from it — "
-          "docspec instructions apply <section> projects the mode + verb)")
+          "artispec instructions apply <section> projects the mode + verb)")
     return 0

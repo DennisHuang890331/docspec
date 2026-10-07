@@ -1,12 +1,12 @@
 """軟體領域（第二期，取代 OpenSpec）：能力規格、軟體 change、任務、測試規劃、證據、封存、基線。
 
 設計依據：docs/dev/phase2-design.md、docs/dev/phase2-detail.md。
-檔案一律是引擎擁有、各自封條的 YAML，只能透過 `docspec code …` 指令寫入。
+檔案一律是引擎擁有、各自封條的 YAML，只能透過 `artispec code …` 指令寫入。
 """
 
 
 def validate_all(layout) -> tuple[list[str], list[str]]:
-    """`docspec check` ⑭：全部能力規格與進行中 change 的格式與引用。回 (errors, warnings)。"""
+    """`artispec check` ⑭：全部能力規格與進行中 change 的格式與引用。回 (errors, warnings)。"""
     from dspx.engine.software import changes as chg
     from dspx.engine.software import io
     from dspx.engine.software import specs as sp

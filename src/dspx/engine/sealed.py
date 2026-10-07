@@ -32,8 +32,8 @@ def dump_sealed(*, kind: str, scope: str, revision: int, list_key: str, items: l
     """密封檔文字（註解頭＋format/kind/scope/revision/integrity＋<list_key>）。冪等。"""
     seal = integrity_of(kind, scope, revision, list_key, items)
     header = (f"# docspec {kind} store — engine-owned; never edit by hand.\n"
-              f"# An integrity seal guards the body; a hand-edit makes the next docspec command\n"
-              f"# fail loud and point you at `docspec store fsck --accept`.\n")
+              f"# An integrity seal guards the body; a hand-edit makes the next artispec command\n"
+              f"# fail loud and point you at `artispec store fsck --accept`.\n")
     doc = {"format": SEALED_FORMAT_VERSION, "kind": kind, "scope": scope,
            "revision": revision, "integrity": seal, list_key: items}
     return header + _yaml_dump(doc)
@@ -73,5 +73,5 @@ def load_sealed(path: Path, *, list_key: str, error_cls, verify: bool = True):
         if raw.get("integrity") != expect:
             raise error_cls(
                 f"integrity seal mismatch: {path} — a hand-edit corrupted the store; "
-                f"run `docspec store fsck --accept` to adopt the external change and re-seal.")
+                f"run `artispec store fsck --accept` to adopt the external change and re-seal.")
     return revision, items

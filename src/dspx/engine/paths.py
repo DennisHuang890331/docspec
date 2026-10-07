@@ -1,12 +1,12 @@
-"""docspec 受控執行期資產的 data_dir 解析。
+"""ArtiSpec 受控執行期資產的 data_dir 解析。
 
 四目錄規範（CLAUDE.md＋已定決策）：
-- data_dir＝platformdirs.user_data_dir("docspec")：
-    Win   %LOCALAPPDATA%\\docspec
-    Linux ~/.local/share/docspec
-    macOS ~/Library/Application Support/docspec
+- data_dir＝platformdirs.user_data_dir("artispec", appauthor=False)：
+    Win   %LOCALAPPDATA%\\artispec
+    Linux ~/.local/share/artispec
+    macOS ~/Library/Application Support/artispec
 - 結構：typst/（受控 Typst binary）、pandoc/（受控 pandoc binary）、
-        fonts/（CJK＋拉丁字型；`docspec setup` 落地）、
+        fonts/（CJK＋拉丁字型；`artispec setup` 落地）、
         tex.lock（setup 寫的版本指紋，供 doctor 比對）、
         cache/（下載暫存）。
 
@@ -29,8 +29,14 @@ from pathlib import Path
 # ── data_dir 與其子路徑 ────────────────────────────────────────────
 
 def data_dir() -> Path:
-    """docspec 的每平台 user data dir（受控 TinyTeX＋字型的家）。"""
+    """ArtiSpec 工具目錄；解析本身不建立或遷移資料。"""
     import platformdirs  # 延後 import：缺相依時錯誤訊息更聚焦在實際用到的指令
+    return Path(platformdirs.user_data_dir("artispec", appauthor=False))
+
+
+def legacy_data_dir() -> Path:
+    """升級前的精確位置；保留原 platformdirs 的 appauthor 預設。"""
+    import platformdirs
     return Path(platformdirs.user_data_dir("docspec"))
 
 
@@ -68,7 +74,7 @@ def pandoc_exe_name() -> str:
 
 
 def typst_dir() -> Path:
-    """受控 typst 夾（data_dir/typst；`docspec setup` 釘版下載的 typst binary 落地處）。"""
+    """受控 typst 夾（data_dir/typst；`artispec setup` 釘版下載的 typst binary 落地處）。"""
     return data_dir() / "typst"
 
 
@@ -77,7 +83,7 @@ def typst_exe_name() -> str:
 
 
 def drawio_dir() -> Path:
-    """受控 draw.io 夾（data_dir/drawio；`docspec setup --with-drawio` 釘版下載的 drawio-desktop
+    """受控 draw.io 夾（data_dir/drawio；`artispec setup --with-drawio` 釘版下載的 drawio-desktop
     可攜版落地處）。draw.io 是**選用**資產（核心 setup 不裝），供 dspx-diagram 的委派 subagent
     把 `.drawio` 渲成 SVG 用。"""
     return data_dir() / "drawio"
@@ -109,7 +115,7 @@ def _os_family() -> str:
 def resolve_drawio() -> str | None:
     """找得到的 draw.io CLI（選用；dspx-diagram subagent 渲圖用）。優先序同其他資產：
       1. DOCSPEC_DRAWIO 環境變數覆寫（指向 draw.io 執行檔／AppImage）。
-      2. data_dir/drawio 的受控可攜版（`docspec setup --with-drawio` 落地）。
+      2. data_dir/drawio 的受控可攜版（`artispec setup --with-drawio` 落地）。
       3. 系統 PATH 後備（`drawio` 或舊式 `draw.io`）。
     找不到 → None（呼叫端降級＝瀏覽器後備或只給 .drawio XML）。
     """
@@ -128,7 +134,7 @@ def resolve_drawio() -> str | None:
 def resolve_typst() -> str | None:
     """找得到的 typst（預設 render 引擎；優先序同 resolve_pandoc＝受控資產優先）：
       1. DOCSPEC_TYPST 環境變數覆寫（指向 typst 執行檔）。
-      2. data_dir/typst/typst(.exe)＝`docspec setup --with-... ` 釘版下載的受控 typst。
+      2. data_dir/typst/typst(.exe)＝`artispec setup --with-... ` 釘版下載的受控 typst。
       3. 系統 PATH 後備（dev）。
     找不到 → None。
     """
@@ -177,9 +183,9 @@ def resolve_xelatex() -> Path | None:
 
     優先序（任務規範）：
       1. 環境變數 DOCSPEC_TINYTEX（覆寫；可指 bin 夾或 xelatex 檔本身）。
-      2. data_dir/tinytex/bin/<plat>/xelatex（Phase B `docspec setup` 落地處）。
+      2. data_dir/tinytex/bin/<plat>/xelatex（Phase B `artispec setup` 落地處）。
       3. dev 後備：/tmp/ttx 或 %TEMP%/ttx 的 TinyTeX。
-    找不到 → None（呼叫端降級報錯、叫跑 `docspec setup`）。
+    找不到 → None（呼叫端降級報錯、叫跑 `artispec setup`）。
     """
     env = os.environ.get("DOCSPEC_TINYTEX")
     if env:
@@ -240,8 +246,8 @@ def resolve_fonts_dir(override: str | Path | None = None) -> Path | None:
       0. override（`--fonts <dir>`）：使用者指定的字型夾。給了就**只用它**——夾不存在或
          缺必要字型 → 拋 AssetError（不靜默退回 data_dir）。
       1. 環境變數 DOCSPEC_FONTS_SRC（dev / CI：指向含字型的夾）。
-      2. data_dir/fonts（`docspec setup` 落地處）——只要存在就用。
-    找不到 → None（呼叫端提示執行 docspec setup）。
+      2. data_dir/fonts（`artispec setup` 落地處）——只要存在就用。
+    找不到 → None（呼叫端提示執行 artispec setup）。
     """
     if override is not None:
         d = Path(override)
@@ -272,7 +278,7 @@ def _bundled_fonts_dir() -> Path | None:
 
     唯一來源＝環境變數 DOCSPEC_FONTS_SRC 指定的夾（dev / CI：指向已備齊字型的夾）。
     （舊的套件隨包字型夾已隨 docspec-cas 模板包一併移除——prod 字型本就排除出 wheel、
-    走 `docspec setup` 下載；本快路只在使用者明確設了 DOCSPEC_FONTS_SRC 時生效。）
+    走 `artispec setup` 下載；本快路只在使用者明確設了 DOCSPEC_FONTS_SRC 時生效。）
     沒設或夾不含字型 → None（setup 退回 pinned URL 下載）。
     """
     env_src = os.environ.get("DOCSPEC_FONTS_SRC")
@@ -343,7 +349,7 @@ def bundled_typst_template_dir() -> Path | None:
 
 def bundled_reference_dir() -> Path | None:
     """套件隨包、與模板包無關的通用參考資料夾（src/dspx/assets/reference/）。
-    現存 `writing.md`（中/英文寫作道地化參考索引，`docspec reference writing-{zh,en}`）；
+    現存 `writing.md`（中/英文寫作道地化參考索引，`artispec reference writing-{zh,en}`）；
     非模板包 escape-hatch gate 範圍（該 gate 只掃 assets/templates/ 下）。"""
     try:
         from importlib.resources import files
@@ -429,7 +435,7 @@ def content_char_stream(text: str) -> list[str]:
 def resolve_pandoc() -> str | None:
     """找得到的 pandoc，優先序（與 resolve_xelatex 同調＝受控資產優先、確定性輸出）：
       1. DOCSPEC_PANDOC 環境變數覆寫（指向 pandoc 執行檔）。
-      2. data_dir/pandoc/pandoc(.exe)＝`docspec setup` 釘版下載的受控 pandoc。
+      2. data_dir/pandoc/pandoc(.exe)＝`artispec setup` 釘版下載的受控 pandoc。
       3. dev/系統後備：pypandoc 自帶 binary → 系統 PATH。
     找不到 → None。
     """

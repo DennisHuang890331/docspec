@@ -102,20 +102,22 @@ def test_s2_full_chain(port, write_leaf, capsys):
                       "--based-on", "RL-claude-2", "--supersedes", "D-claude-1"])
     decision_cmd.run(["activate", "D-claude-2"])
 
-    flags = {s["target"]: s for s in _suspects(capsys)}
+    all_flags = _suspects(capsys)
+    flags = {s["target"]: s for s in all_flags}
     assert "req:task-entry-page/R1" in flags
     assert "task:entry-fix#1" in flags                                # 已完成的任務：標記，不重開
     assert "test:labelvault:tests/browser/test_entry_page.py::test_first_row_visible" in flags
     assert "doc:guide/home" in flags
     assert "req:task-entry-page/R2" not in flags                      # 沒依據這條決策的不受影響
     assert flags["task:entry-fix#1"]["path"] == [
-        "D-claude-1", "based-on", "req:task-entry-page/R1", "implements", "task:entry-fix#1"]
+        "RL-claude-1", "based-on", "D-claude-1", "based-on", "req:task-entry-page/R1",
+        "implements", "task:entry-fix#1"]
 
     from dspx.engine.software import changes as chg
     t = chg.load_archived(port, "entry-fix")["tasks"]["tasks"][0]
     assert t["status"] == "done"                                      # 歷史沒被改
-    for target, s in flags.items():
-        assert impact_cmd.run(["clear", s["id"], "--reason", f"看過 {target}，已依新決策處理"]) == 0
+    for s in all_flags:   # 裁定與決策都變更：同一目標可能各有一個影響來源，逐筆處理。
+        assert impact_cmd.run(["clear", s["id"], "--reason", f"看過 {s['target']}，已依新決策處理"]) == 0
     assert _suspects(capsys) == []
 
 

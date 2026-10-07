@@ -1,4 +1,4 @@
-"""docspec render <article> — 確定性把末節散文骨架同步進 docs/<article>/_latest.md。"""
+"""artispec render <article> — 確定性把末節散文骨架同步進 docs/<article>/_latest.md。"""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ def _guard_ledger_health(layout, article: str, rebaseline: bool) -> int | None:
             backup = ledger.with_name(ledger.name + f".corrupt-{stamp}")
             ledger.rename(backup)
             sys.stderr.write(
-                f"docspec: ledger {ledger} is corrupt ({exc}).\n"
+                f"artispec: ledger {ledger} is corrupt ({exc}).\n"
                 f"  quarantined the corrupt file to: {backup}\n")
             if rebaseline:
                 sys.stderr.write(
@@ -41,7 +41,7 @@ def _guard_ledger_health(layout, article: str, rebaseline: bool) -> int | None:
                 "  refusing to render: continuing with an empty ledger would permanently absorb "
                 "any pending stale/rewrite signals as the new baseline.\n"
                 "  either restore the ledger from git/Drive history, or re-run "
-                f"`docspec render {article} --rebaseline` to rebuild the baseline.\n")
+                f"`artispec render {article} --rebaseline` to rebuild the baseline.\n")
             return 1
     return None
 
@@ -72,14 +72,14 @@ def _render_change(layout, args) -> int:
     正式 docs/ 零寫入；預覽成品與帳本從正式版 seed（★G2）。"""
     from dspx.engine import change as chg
     if chg.change_state(layout, args.change) != chg.STATE_ACTIVE:
-        sys.stderr.write(f"docspec: no active change \"{args.change}\".\n")
+        sys.stderr.write(f"artispec: no active change \"{args.change}\".\n")
         return 1
     change = chg.load_change_at(chg.change_dir(layout, args.change, chg.STATE_ACTIVE),
                                 chg.STATE_ACTIVE)
     union_leaves = chg.load_union(layout, change)
     if not any(lf.article == args.article for lf in union_leaves):
         sys.stderr.write(
-            f"docspec: no leaf sections found for article \"{args.article}\" in the union view "
+            f"artispec: no leaf sections found for article \"{args.article}\" in the union view "
             f"of change \"{args.change}\".\n")
         return 1
     # ★G2：seed preview 成品與帳本從正式版（否則首次 preview render 全 unwritten）。
@@ -101,7 +101,7 @@ def _render_change(layout, args) -> int:
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec render", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec render", description=HELP)
     parser.add_argument("article", help="name of the article to assemble")
     parser.add_argument(
         "--ack", action="append", default=[], metavar="SECTION", dest="ack",
@@ -140,7 +140,7 @@ def run(argv: list[str]) -> int:
     # --ack-own 強制 --reason（裁決入 journal；改變 own/deps 裁決＝事後最需考古的一類）。
     if args.ack_own and not args.reason:
         sys.stderr.write(
-            "docspec: --ack-own requires --reason <text> — you are attesting the prose still "
+            "artispec: --ack-own requires --reason <text> — you are attesting the prose still "
             "implements CHANGED source material; the verdict is journaled, say why.\n")
         return 2
 
@@ -156,7 +156,7 @@ def run(argv: list[str]) -> int:
         return _render_change(layout, args)
 
     if not any(lf.article == args.article for lf in leaves):
-        sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n")
+        sys.stderr.write(f"artispec: no leaf sections found for article \"{args.article}\"\n")
         return 1
 
     # 壞帳本閘（D3）：隔離備份＋拒跑；--rebaseline 才放行重建。
@@ -168,13 +168,13 @@ def run(argv: list[str]) -> int:
     # 重蓋＝吸收待處理信號。故常規 render 拒跑（非零退出、帳本與交付物零改動）、指示顯式一次遷移。
     if ledger_needs_migration(layout, args.article) and not args.rebaseline:
         sys.stderr.write(
-            f"docspec: the fingerprint ledger of \"{args.article}\" is an older fingerprint "
+            f"artispec: the fingerprint ledger of \"{args.article}\" is an older fingerprint "
             "version — its values are not comparable with the current algorithms, so per-axis "
             "staleness would be a false-stale storm.\n"
             "  refusing to render (nothing was changed). Migrate once with "
-            f"`docspec render {args.article} --rebaseline`: every axis is recomputed with the "
+            f"`artispec render {args.article} --rebaseline`: every axis is recomputed with the "
             "current algorithms and the prose is preserved. NOTE: any stale signals pending at "
-            "migration time are absorbed into the new baseline — review `docspec status` "
+            "migration time are absorbed into the new baseline — review `artispec status` "
             "concerns first if that matters.\n")
         return 1
 
@@ -184,18 +184,18 @@ def run(argv: list[str]) -> int:
     prior = read_ledger(layout, args.article)
     if prior and not latest.is_file() and not args.rebaseline:
         sys.stderr.write(
-            f"docspec: deliverable {latest} is missing but its ledger has "
+            f"artispec: deliverable {latest} is missing but its ledger has "
             f"{len(prior)} section record(s) — refusing to render an empty skeleton over the "
             "ledger (the written prose would be silently lost as the new baseline).\n"
             f"  either restore {latest.name} from git/Drive history, or re-run "
-            f"`docspec render {args.article} --rebaseline` to rebuild the skeleton and reset "
+            f"`artispec render {args.article} --rebaseline` to rebuild the skeleton and reset "
             "the baseline.\n")
         return 1
 
     if args.rebaseline:
         # 吸收警語（D7 誠實代價）：rebaseline 把遷移/重建當下未處理的 stale 信號吸收成新基準。
         sys.stderr.write(
-            "docspec: --rebaseline — recomputing every fingerprint axis with the current "
+            "artispec: --rebaseline — recomputing every fingerprint axis with the current "
             "algorithms; prose is preserved, but any pending stale signals (and redraft flags) "
             "are absorbed into the new baseline.\n")
 
@@ -222,10 +222,10 @@ def run(argv: list[str]) -> int:
               "factcheck review over them (non-blocking, but expected).")
     if result.get("ack_own_skipped"):
         sys.stderr.write(
-            "docspec: ⚠ --ack-own skipped for (no ledger entry — an unwritten section is draft's "
+            "artispec: ⚠ --ack-own skipped for (no ledger entry — an unwritten section is draft's "
             f"work, there is nothing to acknowledge): {', '.join(result['ack_own_skipped'])}\n")
     if result.get("ack_refused"):
         sys.stderr.write(
-            "docspec: ⚠ --ack refused for (these are stale-own/upstream — rewrite the prose, "
+            "artispec: ⚠ --ack refused for (these are stale-own/upstream — rewrite the prose, "
             f"don't acknowledge): {', '.join(result['ack_refused'])}\n")
     return 0

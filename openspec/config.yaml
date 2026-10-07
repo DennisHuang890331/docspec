@@ -1,0 +1,54 @@
+schema: spec-driven
+
+context: |
+  Project: docspec, a Python CLI; implementation is under src/dspx/.
+  Work on dev (renamed from claude/software-domain-redesign by the owner on 2026-10-07). Do not modify main or open a PR unless requested. The owner authorized committing reviewed development work and pushing dev, while preserving unfinished validation notes.
+  Communicate and author planning prose in Traditional Chinese, plain language, no tables.
+  docs/dev/system-design.md holds the owner's rulings; later rulings and explicit owner instructions take precedence over older design prose.
+  Architecture and workflow changes need owner approval before implementation.
+  This OpenSpec workspace manages docspec development; it is separate from the outer OpenSpec tool source repository.
+  Fix workflow/tool defects, not deliberate agent misconduct. Preserve accepted risks; the product does not support concurrent writes to managed records or multi-user editing. Development of docspec itself may use agents by difficulty with explicit file ownership, as the owner authorized.
+  Documents and software do not block each other's freeze/archive. Linking reminders remain non-blocking.
+  Do not put real project data in this repository. Use synthetic fixtures for verification.
+
+rules:
+  specs:
+    - Describe observable behavior using SHALL or MUST and WHEN/THEN scenarios.
+    - Cover both rejection of invalid completion and preservation of valid independent work.
+  design:
+    - Distinguish observed defects, proposed repairs, and already approved owner rulings.
+    - State compatibility treatment for existing evidence and archived records.
+  tasks:
+    - Include verification and relevant documentation with each implementation group.
+    - Keep tasks unchecked until implementation and their stated verification are complete.
+
+# Project context (optional)
+# This is shown to AI when creating artifacts.
+# Add your tech stack, conventions, style guides, domain knowledge, etc.
+# Example:
+#   context: |
+#     Tech stack: TypeScript, React, Node.js
+#     We use conventional commits
+#     Domain: e-commerce platform
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing

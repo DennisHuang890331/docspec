@@ -76,7 +76,7 @@ def test_show_not_found_mentions_both_shapes(make_project, write_leaf, monkeypat
     monkeypatch.chdir(home.parent)
     assert show_cmd.run(["no/where"]) == 1
     err = capsys.readouterr().err
-    assert "id or section" in err and "docspec status" in err
+    assert "id or section" in err and "artispec status" in err
 
 
 # ── 4. status: group nodes（list 已併入 status；group 列由 status 補上）─────────────

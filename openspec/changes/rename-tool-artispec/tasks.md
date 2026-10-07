@@ -1,0 +1,4 @@
+- [x] 新增入口及主要品牌說明
+- [x] 更新生成規範與九個 skills 版本
+- [x] 品牌／init／skills 測試及 wheel 兩入口驗證
+- [x] 完整回歸及 strict validation

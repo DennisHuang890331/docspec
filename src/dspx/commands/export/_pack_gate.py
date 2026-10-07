@@ -24,7 +24,7 @@ def _check_pack_integrity(template_dir: Path, is_bundled: bool, allow: bool) -> 
     baseline = paths.read_pack_baseline(template_dir)
     if baseline is None:
         sys.stderr.write(
-            "docspec: ⚠ the bundled template pack has no integrity baseline (.pack-hashes.json) — skipping the tamper gate "
+            "artispec: ⚠ the bundled template pack has no integrity baseline (.pack-hashes.json) — skipping the tamper gate "
             "(normal in a dev source tree; a release wheel should include it).\n")
         return 0
     live = paths.pack_content_hashes(template_dir)
@@ -34,13 +34,13 @@ def _check_pack_integrity(template_dir: Path, is_bundled: bool, allow: bool) -> 
         return 0
     verb = "⚠ (--allow: hand-edited pack explicitly allowed)" if allow else "✗"
     sys.stderr.write(
-        f"docspec: {verb} the bundled template pack was hand-edited ({len(diffs)} file(s) differ from the baseline): "
+        f"artispec: {verb} the bundled template pack was hand-edited ({len(diffs)} file(s) differ from the baseline): "
         f"{', '.join(diffs[:8])}{' …' if len(diffs) > 8 else ''}\n")
     if allow:
         return 0
     sys.stderr.write(
-        "  Make format changes through validated knobs (--format-config; see docspec guide); "
-        "for a real layout change, eject an editable copy of the pack: `docspec template eject` "
+        "  Make format changes through validated knobs (--format-config; see artispec guide); "
+        "for a real layout change, eject an editable copy of the pack: `artispec template eject` "
         "(it records export.template so exports pick it up automatically, gate skipped). "
         "If you edited the bundled pack in a dev source tree on purpose, regenerate the baseline: "
         "`python tools/gen_pack_hashes.py`. To force-use this hand-edited bundled pack, add --allow.\n")

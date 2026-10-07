@@ -1,4 +1,4 @@
-"""docspec export <article> — 把已凍結的定稿快照確定性轉成 PDF（Typst 預設）或發射期刊 .tex。
+"""artispec export <article> — 把已凍結的定稿快照確定性轉成 PDF（Typst 預設）或發射期刊 .tex。
 
 ★薄引擎鐵律：export 只做確定性編排（subprocess pandoc → typst/LaTeX），不碰 PDF 二進位。
 內容 byte-lock：一個字不改、只動呈現。
@@ -36,9 +36,11 @@ from dspx.typeset.format_config import (
     pandoc_highlight_style,
     validate_format_config,
 )
-from dspx.engine.layout import Layout, parse_semver
+from dspx.engine.layout import Layout, LayoutError, parse_semver
+from dspx.engine.document_versions import _safe, verify_selected
 
 from ._assets import (
+    HistoricalAssetError,
     _collect_referenced_assets,
     _copy_assets_into,
     _figure_health_warnings,
@@ -59,7 +61,10 @@ from ._fidelity import (
     _verify_byte_lock,
     _window,
 )
-from ._housekeeping import _prune_old_pdfs, _resolve_input
+from ._housekeeping import (
+    _is_latest_frozen, _preserve_legacy_proof, _preserve_public_outputs, _prune_old_pdfs,
+    _prune_proof_pages, _resolve_input,
+)
 from ._journal_track import (
     _ATX_RE,
     _FRONTMATTER_HEADINGS,
@@ -81,17 +86,24 @@ from ._preprocess import (
 from ._typst_track import _H1_RE, _build_pdf_typst, _split_title_body
 
 NAME = "export"
-HELP = "Deterministically render a frozen snapshot to PDF (bundled template pack; content byte-locked, only presentation changes) → docs/exports/"
+HELP = "Render a frozen snapshot to its version PDF; project only the latest frozen deliverable to docs/exports/"
 
 _INSTALL_HINT = (
     "For pandoc, install the export dependency: uv pip install 'docspec[export]' (or a system pandoc). "
-    "For fonts / typst, run `docspec setup` (one-time)."
+    "For fonts / typst, run `artispec setup` (one-time)."
 )
 
 # 缺排版引擎/字型的統一提示。
 _SETUP_HINT = (
-    "Run `docspec setup` to install the controlled typst binary + OFL fonts (one-time, ~30 MB)."
+    "Run `artispec setup` to install the controlled typst binary + OFL fonts (one-time, ~30 MB)."
 )
+
+
+def _guard_owned_input(layout: Layout, path: Path) -> None:
+    """Project inputs cannot escape through links; explicit external packs remain supported."""
+    absolute = path.absolute()
+    if absolute.is_relative_to(layout.project_root.absolute()):
+        _safe(layout, absolute)
 
 
 # ── --template 內容物路由 / ejected 包 provenance ─────────────────
@@ -103,13 +115,13 @@ def _route_by_template(d: Path) -> str | None:
     明確 --engine 由呼叫端優先處理、不進此函式。
     """
     if not d.is_dir():
-        sys.stderr.write(f"docspec: --template directory does not exist: {d}\n")
+        sys.stderr.write(f"artispec: --template directory does not exist: {d}\n")
         return None
     has_typ = (d / "template.typ").is_file()
     has_tex = (d / "template.tex").is_file()
     if has_typ and has_tex:
         sys.stderr.write(
-            f"docspec: --template {d} contains BOTH template.typ and template.tex — "
+            f"artispec: --template {d} contains BOTH template.typ and template.tex — "
             "pass --engine typst or --engine journal to choose the track.\n")
         return None
     if has_typ:
@@ -117,7 +129,7 @@ def _route_by_template(d: Path) -> str | None:
     if has_tex:
         return "journal"
     sys.stderr.write(
-        f"docspec: --template {d} contains neither template.typ (Typst track) nor "
+        f"artispec: --template {d} contains neither template.typ (Typst track) nor "
         "template.tex (journal track) — nothing to route to.\n")
     return None
 
@@ -136,15 +148,15 @@ def _eject_provenance_notice(pack_dir: Path) -> str | None:
     old = data.get("version")
     from dspx import __version__
     if old and str(old) != __version__:
-        return (f"docspec: ℹ template-pack was ejected from docspec {old}; current is {__version__} "
-                "— re-eject (`docspec template eject --force`) to pick up template fixes.")
+        return (f"artispec: ℹ template-pack was ejected from docspec {old}; current is {__version__} "
+                "— re-eject (`artispec template eject --force`) to pick up template fixes.")
     return None
 
 
 # ── 主流程 ────────────────────────────────────────────────────────
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec export", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec export", description=HELP)
     parser.add_argument("article", help="name of the article to export")
     parser.add_argument("--format", choices=["pdf"], default="pdf",
                         help="output format (pdf only)")
@@ -164,7 +176,7 @@ def run(argv: list[str]) -> int:
                         help="export the working copy _latest (preview, not a final draft) instead of a frozen snapshot")
     parser.add_argument("--template", default=None, metavar="DIR",
                         help="BYO template pack directory, routed by CONTENT: a template.typ selects the Typst track "
-                             "(BYO replacement for the bundled pack, integrity gate skipped — see `docspec template eject`); "
+                             "(BYO replacement for the bundled pack, integrity gate skipped — see `artispec template eject`); "
                              "a template.tex selects the journal track (pandoc LaTeX template honoring the slot contract); "
                              "both present requires an explicit --engine. Overrides the project's export.template config.")
     parser.add_argument("--fonts", default=None, metavar="DIR",
@@ -185,13 +197,12 @@ def run(argv: list[str]) -> int:
                         help="escape hatch: explicitly allow exporting with a hand-edited bundled template pack (by default any detected change is rejected, "
                              "forcing you through knobs or your own --template pack)")
     parser.add_argument("--ack", action="store_true",
-                        help="render fidelity: run the check and print the diff locations, but return 0 (you've already re-checked that page with docspec proof "
+                        help="render fidelity: run the check and print the diff locations, but return 0 (you've already re-checked that page with artispec proof "
                              "= render is faithful / extraction misfire, not real character loss)")
     parser.add_argument("--no-verify", action="store_true",
                         help="skip the post-export render-fidelity verification entirely (for debugging; --ack is the proper \"re-checked, allowed\")")
     parser.add_argument("--keep", action="store_true",
-                        help="keep this article's previously-generated PDFs (by default a successful export removes the article's other "
-                             "PDFs in docs/exports/ — older versions + the _vlatest preview — so only the latest deliverable remains)")
+                        help="compatibility option: version artifacts are always retained; docs contains only the latest frozen deliverable")
     args = parser.parse_args(argv)
 
     try:
@@ -204,7 +215,7 @@ def run(argv: list[str]) -> int:
     from dspx.engine.config import EXPORT_PROFILES
     profile = args.profile or econf.get("profile") or "default"
     if profile not in EXPORT_PROFILES:
-        sys.stderr.write(f"docspec: unknown export profile '{profile}' — valid: {', '.join(EXPORT_PROFILES)}.\n")
+        sys.stderr.write(f"artispec: unknown export profile '{profile}' — valid: {', '.join(EXPORT_PROFILES)}.\n")
         return 1
     # 模板夾：--template 旗標 > 專案 export.template config（非空、相對專案根解析）。
     template_dir: Path | None = None
@@ -212,6 +223,16 @@ def run(argv: list[str]) -> int:
         template_dir = Path(args.template)
     elif econf.get("template"):
         template_dir = layout.project_root / str(econf["template"])
+    try:
+        if template_dir is not None:
+            _guard_owned_input(layout, template_dir)
+            for name in ("template.typ", "template.tex", ".ejected-from.json"):
+                _guard_owned_input(layout, template_dir / name)
+        if args.format_config:
+            _guard_owned_input(layout, Path(args.format_config))
+    except LayoutError as exc:
+        sys.stderr.write(f"artispec: {exc}\n")
+        return 1
     template_override = str(template_dir) if template_dir is not None else None
 
     # render 引擎：--engine 旗標 > --journal 隱含 journal > 依模板夾內容物路由（template.typ→typst BYO、
@@ -229,14 +250,14 @@ def run(argv: list[str]) -> int:
     # latex 軌已退場（docspec-cas LPPL 包已移除）。
     if engine == "latex":
         sys.stderr.write(
-            "docspec: the LaTeX/xelatex track has been retired — "
+            "artispec: the LaTeX/xelatex track has been retired — "
             "use --engine typst (default) or --engine journal for journal submission (.tex emit-only).\n")
         return 1
 
     if engine == "typst" and args.format_config:
         from dspx.typeset.format_config import _TYPST_KNOB_FOLLOWUPS
         sys.stderr.write(
-            "docspec: ⚠ Typst track applies the font-size / leading / margin / first-line-indent / "
+            "artispec: ⚠ Typst track applies the font-size / leading / margin / first-line-indent / "
             "code-highlight knobs; still NOT mapped (house defaults used): "
             f"{', '.join(_TYPST_KNOB_FOLLOWUPS)}.\n")
 
@@ -244,73 +265,119 @@ def run(argv: list[str]) -> int:
     try:
         knobs = _resolve_format(econf, args.format_config)
     except FormatConfigError as exc:
-        sys.stderr.write(f"docspec: invalid format knob — {exc} (no PDF produced)\n")
+        sys.stderr.write(f"artispec: invalid format knob — {exc} (no PDF produced)\n")
         return 1
     highlight_style = pandoc_highlight_style(knobs)
 
-    resolved = _resolve_input(layout, args.article, args.version, args.latest)
+    try:
+        resolved = _resolve_input(layout, args.article, args.version, args.latest)
+    except LayoutError as exc:
+        sys.stderr.write(f"artispec: {exc}\n")
+        return 1
     if resolved is None:
         return 1
     snapshot, label = resolved
+    try:
+        if label != "latest":
+            verify_selected(layout, args.article, label)
+        _safe(layout, snapshot)
+    except (OSError, ValueError, LayoutError) as exc:
+        sys.stderr.write(f"artispec: {exc}\n")
+        return 1
 
     pandoc = _pandoc_path()
     if pandoc is None:
-        sys.stderr.write(f"docspec: pandoc not found — export needs it. {_INSTALL_HINT}\n")
+        sys.stderr.write(f"artispec: pandoc not found — export needs it. {_INSTALL_HINT}\n")
         return 1
 
     title, body_md = _split_title_body(
         snapshot.read_text(encoding="utf-8"), fallback_title=args.article)
+    try:
+        assets = _collect_referenced_assets(
+            layout, args.article, body_md, snapshot=None if args.latest else snapshot)
+    except (ValueError, OSError, LayoutError) as exc:
+        sys.stderr.write(f"artispec: {exc} (no export produced)\n")
+        return 1
 
     # ── journal 軌（BYO LaTeX、emit-only）：與兩條編譯軌分開，產 .tex、**不需字型**/不驗 fidelity ──
     if engine == "journal":
         template = _resolve_journal_template(args.journal, template_override)
         if template is None:
             sys.stderr.write(
-                "docspec: journal template not found — use --journal {ieee,elsevier} or "
+                "artispec: journal template not found — use --journal {ieee,elsevier} or "
                 "--template <dir> containing a template.tex.\n")
             return 1
         # slot 值：專案 export.slots config ＋ --slots 檔覆寫。
         extra_slots = dict(econf.get("slots") or {})
         if args.slots:
             sp = Path(args.slots)
+            try:
+                _guard_owned_input(layout, sp)
+            except LayoutError as exc:
+                sys.stderr.write(f"artispec: {exc}\n")
+                return 1
             if not sp.is_file():
-                sys.stderr.write(f"docspec: --slots file does not exist: {sp}\n")
+                sys.stderr.write(f"artispec: --slots file does not exist: {sp}\n")
                 return 1
             try:
                 data = yaml.safe_load(sp.read_text(encoding="utf-8")) or {}
             except yaml.YAMLError as exc:
-                sys.stderr.write(f"docspec: failed to parse --slots file ({sp}): {exc}\n")
+                sys.stderr.write(f"artispec: failed to parse --slots file ({sp}): {exc}\n")
                 return 1
             if not isinstance(data, dict):
-                sys.stderr.write(f"docspec: the --slots file's top level must be a mapping: {sp}\n")
+                sys.stderr.write(f"artispec: the --slots file's top level must be a mapping: {sp}\n")
                 return 1
             extra_slots.update(data)
         # journal 軌產物落 per-journal 子夾（不與 latest PDF 混、雙 adapter 不互蓋）。
         journal_id = args.journal or (template_dir.name if template_dir is not None else "journal")
-        out = layout.docs_journal_export(args.article, label, journal_id, "tex")
+        projection = layout.docs_journal_export(args.article, label, journal_id, "tex")
+        out = (layout.version_export(args.article, label, "tex").parent
+               / "journals" / projection.parent.name / projection.name)
+        try:
+            _safe(layout, out)
+            _safe(layout, out.parent / "assets")
+            for ref in assets:
+                _safe(layout, out.parent / ref)
+            if _is_latest_frozen(layout, args.article, label):
+                _safe(layout, projection)
+                _safe(layout, projection.parent / "assets")
+                for ref in assets:
+                    _safe(layout, projection.parent / ref)
+        except LayoutError as exc:
+            sys.stderr.write(f"artispec: {exc}\n")
+            return 1
         from dspx.typeset.slots import SlotError
         try:
             _emit_journal(pandoc, template, title, body_md, extra_slots, out)
         except SlotError as exc:
-            sys.stderr.write(f"docspec: invalid slot value — {exc} (no .tex produced)\n")
+            sys.stderr.write(f"artispec: invalid slot value — {exc} (no .tex produced)\n")
             return 1
         except subprocess.CalledProcessError as exc:
-            sys.stderr.write(f"docspec: journal emit failed ({exc}).\n")
+            sys.stderr.write(f"artispec: journal emit failed ({exc}).\n")
             return 1
         except Exception as exc:  # noqa: BLE001
-            sys.stderr.write(f"docspec: journal emit failed ({exc}).\n")
+            sys.stderr.write(f"artispec: journal emit failed ({exc}).\n")
             return 1
         print(f"Emitted (journal track, not compiled): {out}")
         # 把 .tex 引用的圖 copy 到它旁邊（`docs/exports/assets/`），否則使用者拿 .tex 去 Overleaf
         # 會缺圖編不出（圖原本只住 corpus/<section>/assets/）。
-        j_assets = _collect_referenced_assets(layout, args.article, body_md)
+        j_assets = assets
         if j_assets:
             adir = out.parent / "assets"
-            adir.mkdir(parents=True, exist_ok=True)
-            for ref, src in j_assets.items():
-                if src.is_file():
-                    shutil.copy2(src, adir / Path(ref).name)
+            _copy_assets_into(out.parent, j_assets, layout=layout)
             print(f"  Copied {len(j_assets)} referenced image asset(s) next to the .tex → {adir}")
+        try:
+            if _is_latest_frozen(layout, args.article, label):
+                previous_outputs = _preserve_public_outputs(layout, args.article, label)
+                projection.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(out, projection)
+                if j_assets:
+                    _copy_assets_into(projection.parent, j_assets, layout=layout)
+                for previous in previous_outputs:
+                    previous.unlink()
+        except (OSError, ValueError, LayoutError) as exc:
+            sys.stderr.write(f"artispec: latest journal projection failed ({exc}).\n")
+            return 1
         print("  Compile it with the journal's toolchain (Overleaf / its real .cls). docspec does not compile the journal track.")
         return 0
 
@@ -319,18 +386,25 @@ def run(argv: list[str]) -> int:
     try:
         fonts_src = paths.resolve_fonts_dir(args.fonts)
     except paths.AssetError as exc:
-        sys.stderr.write(f"docspec: {exc}\n")
+        sys.stderr.write(f"artispec: {exc}\n")
         return 1
     if fonts_src is None:
         sys.stderr.write(
-            f"docspec: controlled fonts not found (data_dir/fonts) — PDF export needs them. {_SETUP_HINT}\n")
+            f"artispec: controlled fonts not found (data_dir/fonts) — PDF export needs them. {_SETUP_HINT}\n")
         return 1
 
-    out = layout.docs_export(args.article, label, "pdf")
+    out = layout.version_export(args.article, label, "pdf")
+    try:
+        _safe(layout, out)
+        if _is_latest_frozen(layout, args.article, label):
+            _safe(layout, layout.docs_export(args.article, label, "pdf"))
+            _safe(layout, layout.docs_exports_dir / "_proof" / args.article)
+    except LayoutError as exc:
+        sys.stderr.write(f"artispec: {exc}\n")
+        return 1
     # 被引用的圖片資產（兩條編譯軌共用）：copy 進 build dir 才渲得出嵌圖。
-    assets = _collect_referenced_assets(layout, args.article, body_md)
     for w in _figure_health_warnings(body_md, assets):
-        sys.stderr.write(f"docspec: ⚠ {w}\n")
+        sys.stderr.write(f"artispec: ⚠ {w}\n")
 
     try:
         if engine == "typst":
@@ -338,15 +412,15 @@ def run(argv: list[str]) -> int:
             typst = paths.resolve_typst()
             if typst is None:
                 sys.stderr.write(
-                    "docspec: typst not found — the Typst track needs it. Install the controlled typst "
-                    "(`docspec setup --with-typst`), or point DOCSPEC_TYPST at a typst binary.\n")
+                    "artispec: typst not found — the Typst track needs it. Install the controlled typst "
+                    "(`artispec setup --with-typst`), or point DOCSPEC_TYPST at a typst binary.\n")
                 return 1
             # BYO Typst 包（--template 或 config export.template 含 template.typ）＝合法替換、跳 hash 閘；
             # 否則用 bundled docspec-typst 包（走 hash 閘）。
             if template_dir is not None:
                 if not (template_dir / "template.typ").is_file():
                     sys.stderr.write(
-                        f"docspec: --template {template_dir} has no template.typ (Typst track).\n")
+                        f"artispec: --template {template_dir} has no template.typ (Typst track).\n")
                     return 1
                 typst_template = template_dir
                 is_bundled = False
@@ -357,7 +431,7 @@ def run(argv: list[str]) -> int:
                 typst_template = paths.bundled_typst_template_dir()
                 is_bundled = True
                 if typst_template is None or not (typst_template / "template.typ").is_file():
-                    sys.stderr.write("docspec: bundled Typst template not found (assets/templates/docspec-typst/) — the install may be incomplete.\n")
+                    sys.stderr.write("artispec: bundled Typst template not found (assets/templates/docspec-typst/) — the install may be incomplete.\n")
                     return 1
             if _check_pack_integrity(typst_template, is_bundled=is_bundled, allow=args.allow) != 0:
                 return 1
@@ -373,13 +447,13 @@ def run(argv: list[str]) -> int:
                              format_vars=compile_typst_vars(knobs), assets=assets,
                              lang=_lang, region=_region, profile=profile)
         else:
-            sys.stderr.write(f"docspec: unknown engine '{engine}' — valid engines: typst, journal.\n")
+            sys.stderr.write(f"artispec: unknown engine '{engine}' — valid engines: typst, journal.\n")
             return 1
     except subprocess.CalledProcessError as exc:
-        sys.stderr.write(f"docspec: PDF conversion failed ({exc}) — skipped. {_INSTALL_HINT}\n")
+        sys.stderr.write(f"artispec: PDF conversion failed ({exc}) — skipped. {_INSTALL_HINT}\n")
         return 1
     except Exception as exc:  # noqa: BLE001 — 任何轉檔例外都降級、不 crash
-        sys.stderr.write(f"docspec: PDF conversion failed ({exc}) — skipped. {_INSTALL_HINT}\n")
+        sys.stderr.write(f"artispec: PDF conversion failed ({exc}) — skipped. {_INSTALL_HINT}\n")
         return 1
 
     # runtime 渲染忠實度：產出 PDF 後抽文字、與源「定稿全文」位置化精確 diff。
@@ -392,13 +466,24 @@ def run(argv: list[str]) -> int:
         if _verify_byte_lock(out, f"{title}\n{verify_body}", args.article, ack=args.ack) != 0:
             return 1
 
-    # 預設只留 latest：成功 export+verify 後清同篇舊版 PDF（`--keep` 保留；`--latest` 預覽不清，
-    # 預覽不該抹掉已發行匯出；失敗已在上方 early-return、到不了這裡）。
-    if not args.keep and not args.latest:
-        pruned = _prune_old_pdfs(layout, args.article, out)
-        if pruned:
-            print(f"  Pruned {len(pruned)} older PDF export(s) (use --keep to retain): "
-                  f"{', '.join(p.name for p in pruned)}")
+    # Per-version artifacts remain available. Publish only the highest frozen
+    # version after conversion and fidelity checks have both succeeded.
+    try:
+        if _is_latest_frozen(layout, args.article, label):
+            projection = layout.docs_export(args.article, label, "pdf")
+            pruned = _preserve_public_outputs(layout, args.article, label)
+            _preserve_legacy_proof(layout, args.article)
+            projection.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(out, projection)
+            for previous in pruned:
+                previous.unlink()
+            _prune_proof_pages(layout.docs_exports_dir / "_proof" / args.article, layout=layout)
+            if pruned:
+                print(f"  Preserved and cleared {len(pruned)} older public export(s): "
+                      f"{', '.join(p.name for p in pruned)}")
+    except (OSError, ValueError, LayoutError) as exc:
+        sys.stderr.write(f"artispec: latest deliverable projection failed ({exc}).\n")
+        return 1
 
     print(f"Exported: {out}")
     return 0

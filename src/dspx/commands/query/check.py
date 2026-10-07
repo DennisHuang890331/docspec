@@ -1,4 +1,4 @@
-"""docspec check — 硬閘：id 唯一 / 死引用 / 循環。全綠吐 id 索引。
+"""artispec check — 硬閘：id 唯一 / 死引用 / 循環。全綠吐 id 索引。
 
 article 引數只縮**綠路的索引輸出**（74 leaf/224 id 森林的 dump 之痛）；
 check 本體永遠驗整個專案——errors/warnings/exit code 不受 scope 影響
@@ -12,34 +12,86 @@ import json
 import sys
 
 from dspx.check import run_check
-from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
+from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
+from dspx.engine.document_context import add_context_arguments, load_context
+from dspx.engine.model import ModelError
 
 NAME = "check"
 HELP = "structural hard gate: id uniqueness / dead references / cycles (exit 1 on failure)"
 
 
+def _coverage(context, result, diagnostics):
+    """Explain checks already performed; do not refresh or judge prose meaning."""
+    articles = []
+    for article in sorted({leaf.article for leaf in context.leaves}):
+        latest = context.layout.docs_latest(article)
+        exists = latest.is_file()
+        reasons = [row for row in diagnostics if row.get("article") == article]
+        if not exists and not reasons:
+            reasons = [{"code": "prose-missing", "article": article, "state": "missing",
+                        "message": f'prose missing for "{article}"; references cannot be scanned.'}]
+        readiness = ("deferred" if reasons or not exists else
+                     "current" if article in context.preview_articles else "not-assessed")
+        articles.append({"article": article,
+                         "references": {"status": "performed" if exists else "not-performed",
+                                        "path": context.relative(latest)},
+                         "current_prose": {"status": readiness, "reasons": reasons}})
+    return {"version": 1,
+            "structure": {"scope": "project", "status": "passed" if result.ok else "failed"},
+            "prose": {"check": "asset-references-and-anchors", "articles": articles,
+                      "semantic_review": "not-performed"},
+            "software": {"status": "issues" if result.software_errors else "passed"},
+            "delivery_review": "not-performed"}
+
+
+def _print_coverage(coverage):
+    print(f"coverage: project structure {coverage['structure']['status']}; "
+          f"software {coverage['software']['status']}.")
+    print("  asset-references-and-anchors: performed means scanned, not a prose acceptance.")
+    for article in coverage["prose"]["articles"]:
+        references, prose = article["references"], article["current_prose"]
+        print(f"  {article['article']}: references {references['status']} "
+              f"({references['path']}); current prose {prose['status']}.")
+        for reason in prose["reasons"]:
+            print(f"    {reason['message']}")
+    print("  Official prose synchronization is not-assessed here; use `artispec status` for it.")
+    print(f"  semantic review: {coverage['prose']['semantic_review']}; "
+          f"delivery review: {coverage['delivery_review']}. Check success does not mean delivery complete.")
+
+
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec check", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec check", description=HELP)
     parser.add_argument("article", nargs="?", default=None,
                         help="scope the green-path index listing to this article "
                              "(check itself always validates the whole project)")
     parser.add_argument("--json", action="store_true", dest="as_json", help="output as JSON")
+    add_context_arguments(parser)
     args = parser.parse_args(argv)
 
     try:
         layout, config = bootstrap()
+        context = load_context(layout, config, args.change)
+        layout, config, leaves = context.layout, context.config, context.leaves
         schema = load_engine_schema(config)
-        leaves = load_model(layout)
     except BootstrapError as exc:
         return exc.exit_code
+    except (ModelError, OSError, ValueError) as exc:
+        sys.stderr.write(f"artispec: check: {exc}\n")
+        return 1
 
     if args.article:
         known = {lf.article for lf in leaves}
         if args.article not in known:
-            sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n")
+            sys.stderr.write(f"artispec: no leaf sections found for article \"{args.article}\"\n")
             return 1
 
-    result = run_check(leaves, schema, layout)
+    try:
+        result = run_check(leaves, schema, layout)
+        diagnostics = context.preview_diagnostics({leaf.article for leaf in leaves})
+        coverage = _coverage(context, result, diagnostics)
+    except (ModelError, OSError, ValueError) as exc:
+        sys.stderr.write(f"artispec: check: {exc}\n")
+        return 1
 
     def _in_scope(section: str) -> bool:
         if not args.article:
@@ -48,10 +100,12 @@ def run(argv: list[str]) -> int:
 
     if args.as_json:
         payload = {
+            **context.metadata(diagnostics),
             "ok": result.ok,
             "errors": result.errors,
             "warnings": result.warnings,
             "software_errors": result.software_errors,
+            "coverage": coverage,
             "index": {
                 "ids": {k: {"section": v.section, "kind": v.kind, "status": v.status}
                         for k, v in result.index.ids.items() if _in_scope(v.section)},
@@ -62,6 +116,9 @@ def run(argv: list[str]) -> int:
             payload["scope"] = args.article
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0 if result.ok and not result.software_errors else 1
+
+    context.print_context(diagnostics)
+    _print_coverage(coverage)
 
     def _print_warnings() -> None:
         if result.warnings:
@@ -74,7 +131,7 @@ def run(argv: list[str]) -> int:
         if not result.software_errors:
             return 0
         print(f"software ({len(result.software_errors)} issue(s); they do not hold up documents — "
-              f"`docspec code change status <change>` for detail):")
+              f"`artispec code change status <change>` for detail):")
         for err in result.software_errors:
             print(f"  ✗ {err}")
         return 1

@@ -52,7 +52,7 @@ def _extract_pandoc_binary(archive: Path, exe_name: str, target: Path) -> bool:
                 member = next((n for n in zf.namelist()
                                if not n.endswith("/") and Path(n).name == exe_name), None)
                 if member is None:
-                    sys.stderr.write(f"docspec: {exe_name} not found in {archive.name}.\n")
+                    sys.stderr.write(f"artispec: {exe_name} not found in {archive.name}.\n")
                     return False
                 with zf.open(member) as src, open(target, "wb") as out:
                     shutil.copyfileobj(src, out)
@@ -61,7 +61,7 @@ def _extract_pandoc_binary(archive: Path, exe_name: str, target: Path) -> bool:
                 member = next((m for m in tf.getmembers()
                                if m.isfile() and Path(m.name).name == exe_name), None)
                 if member is None:
-                    sys.stderr.write(f"docspec: {exe_name} not found in {archive.name}.\n")
+                    sys.stderr.write(f"artispec: {exe_name} not found in {archive.name}.\n")
                     return False
                 src = tf.extractfile(member)
                 if src is None:
@@ -69,7 +69,7 @@ def _extract_pandoc_binary(archive: Path, exe_name: str, target: Path) -> bool:
                 with src, open(target, "wb") as out:
                     shutil.copyfileobj(src, out)
     except (zipfile.BadZipFile, tarfile.TarError, OSError) as exc:
-        sys.stderr.write(f"docspec: failed to extract pandoc ({archive.name}): {exc}\n")
+        sys.stderr.write(f"artispec: failed to extract pandoc ({archive.name}): {exc}\n")
         return False
     if os.name != "nt":
         target.chmod(0o755)  # tar/zip extractfile 不保留執行位元
@@ -84,7 +84,7 @@ def _ensure_pandoc(*, force: bool, no_download: bool) -> bool:
     pkey = _pkg._pandoc_platform_key()
     if pkey is None:
         sys.stderr.write(
-            f"docspec: the pandoc manifest does not cover this platform ({platform.system()}/{platform.machine()}).\n")
+            f"artispec: the pandoc manifest does not cover this platform ({platform.system()}/{platform.machine()}).\n")
         return False
 
     exe_name = paths.pandoc_exe_name()
@@ -94,7 +94,7 @@ def _ensure_pandoc(*, force: bool, no_download: bool) -> bool:
         return True
 
     if no_download:
-        sys.stderr.write("docspec: --no-download given and no pandoc in data_dir — aborting.\n")
+        sys.stderr.write("artispec: --no-download given and no pandoc in data_dir — aborting.\n")
         return False
 
     manifest = _pkg._PANDOC_MANIFEST

@@ -1,4 +1,4 @@
-r"""docspec template — 管理 export 模板包。
+r"""artispec template — 管理 export 模板包。
 
 子指令：
   eject  把 bundled `docspec-typst` 包複製到專案 `docspec/template-pack/`（可編輯的 BYO 包），
@@ -34,7 +34,7 @@ _PROVENANCE_FILE = ".ejected-from.json"
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec template", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec template", description=HELP)
     sub = parser.add_subparsers(dest="subcommand")
     ej = sub.add_parser(
         "eject", help="copy the bundled docspec-typst pack into docspec/template-pack/ for editing")
@@ -57,14 +57,14 @@ def _eject(force: bool) -> int:
     src = paths.bundled_typst_template_dir()
     if src is None or not (src / "template.typ").is_file():
         sys.stderr.write(
-            "docspec: bundled Typst template pack not found (assets/templates/docspec-typst/) — "
+            "artispec: bundled Typst template pack not found (assets/templates/docspec-typst/) — "
             "the install may be incomplete.\n")
         return 1
 
     dest = layout.planning_home / "template-pack"
     if dest.exists() and not force:
         sys.stderr.write(
-            f"docspec: {dest} already exists — nothing overwritten. Use --force to overwrite "
+            f"artispec: {dest} already exists — nothing overwritten. Use --force to overwrite "
             "(you will lose local edits to that pack).\n")
         return 1
     if dest.exists():
@@ -87,7 +87,7 @@ def _eject(force: bool) -> int:
     print(f"  Recorded export.template: {_EJECT_REL} in {CONFIG_FILE_NAME} "
           "(exports now use this editable pack on the Typst track, skipping the integrity gate).")
     print("  Edit template.typ to change the layout; after upgrading docspec, re-eject with "
-          "`docspec template eject --force` to pick up template fixes.")
+          "`artispec template eject --force` to pick up template fixes.")
     return 0
 
 

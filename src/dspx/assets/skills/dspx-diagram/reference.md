@@ -41,7 +41,7 @@ Rules that keep `validate.py` and the renderer happy:
   self-closing edge cells do not render.
 - Multi-line labels use `&#xa;` (not literal `\n`); escape `&amp; &lt; &gt; &quot;` in attributes;
   never put `--` inside an XML comment.
-- CJK labels: just type the characters (the docspec fonts cover CJK); for the browser fallback,
+- CJK labels: just type the characters (the ArtiSpec fonts cover CJK); for the browser fallback,
   `encode_drawio_url.py` already percent-encodes them.
 
 ### Common shapes
@@ -116,7 +116,7 @@ the "floating endpoint" warning — that's expected on lifelines, not a defect t
 The CLI is named `drawio` (Homebrew cask, Linux packages) or, on older installs, `draw.io`; on macOS
 the bundle binary is `/Applications/draw.io.app/Contents/MacOS/draw.io`; on Windows
 `"C:\Program Files\draw.io\draw.io.exe"`. Resolve which one prints `--version` and use it verbatim. A
-**docspec-managed** draw.io (from `docspec setup --with-drawio`) lives under docspec's `data_dir/drawio/`
+**ArtiSpec-managed** draw.io (from `artispec setup --with-drawio`) lives under the existing `data_dir/drawio/`
 (Windows `draw.io.exe`, macOS `draw.io.app/Contents/MacOS/draw.io`, Linux `drawio.AppImage`); if nothing
 is on PATH, look there or point `DOCSPEC_DRAWIO` at it. If draw.io is absent entirely, fall back to
 `scripts/encode_drawio_url.py` (browser) or hand back the XML.
@@ -139,5 +139,5 @@ as Node, not as the app. Clear the inherited `ELECTRON_RUN_AS_NODE` env var befo
 Windows PowerShell) and retry. This is almost always the cause — NOT the draw.io version: a managed
 draw.io reporting v24.x still accepts `-x -f` fine once the env var is cleared. Only after clearing it
 and STILL getting `bad option` should you suspect a genuinely stale system install — then prefer the
-docspec-managed binary (`docspec setup --with-drawio`, which pins the release) and point
+ArtiSpec-managed binary (`artispec setup --with-drawio`, which pins the release) and point
 `DOCSPEC_DRAWIO` at it.

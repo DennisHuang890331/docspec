@@ -10,7 +10,7 @@
   - **按需生成**：沒待辦＝無檔；load 回 []。view 永遠可算。
 - 完成分流（兩條路，見 `roadmap-archive` 相關 requirement）：
   (a) 晉升為 change（`change new --from-roadmap`）→ 收攏為 id/title/promoted-to、change
-      archive 交易時 prune 出 roadmap.yaml；(b) 小工作無需開單 → `docspec roadmap done <id>
+      archive 交易時 prune 出 roadmap.yaml；(b) 小工作無需開單 → `artispec roadmap done <id>
       --note "..."`（`mark_done`）把該 entry 移出 roadmap.yaml、append 一行進
       同層的 `roadmap-archive.yaml`（append-only，僅供人事後查閱、非引擎讀取）。
 - 這層只「忠實載入＋結構驗證」；語義與「做不做」一律不判（→ derive / audit）。
@@ -110,7 +110,7 @@ def validate_roadmap(entries: list[dict]) -> list[str]:
 
     target 形式＝`forest` literal 或一個字串 id（section id / section 路徑）。
     optional 欄（priority/note/promoted-to/from-audit/waits-on）optional，不查形式。
-    `status`/`done-to` 已刪——出現即報錯、指向分流機制（`docspec roadmap done` 或晉升為 change）。
+    `status`/`done-to` 已刪——出現即報錯、指向分流機制（`artispec roadmap done` 或晉升為 change）。
     **collapsed entry（含 promoted-to）豁免 kind/target 必填**——晉升後 entry 收攏為
     id/title/promoted-to 三欄（搬家不複製），kind/target 已隨內容搬走；殘留 kind/target 之類
     「實質內容」不是 check 的事（那是 lint Vr2 軟提醒）。
@@ -132,7 +132,7 @@ def validate_roadmap(entries: list[dict]) -> list[str]:
             if field in e:
                 errs.append(
                     f"{where}: \"{field}\" field is no longer used -- presence in roadmap.yaml "
-                    "always means backlog; route completion instead: `docspec roadmap done "
+                    "always means backlog; route completion instead: `artispec roadmap done "
                     f"{rid or '<id>'} --note \"...\"` for small direct work, or promote to a "
                     "change (`change new --from-roadmap`) whose archive prunes the entry")
         if e.get("promoted-to"):
@@ -182,7 +182,7 @@ def _append_archive(path: Path, record: dict) -> None:
 
 
 def mark_done(layout: Layout, leaves: list, rid: str, note: str) -> dict:
-    """`docspec roadmap done <id> --note "..."`：把 entry 移出 roadmap.yaml、append 一行進
+    """`artispec roadmap done <id> --note "..."`：把 entry 移出 roadmap.yaml、append 一行進
     同層 roadmap-archive.yaml（append-only，{id, title, note, date}）。找遍 forest + 各 doc
     article 的 roadmap.yaml；找不到該 id → RoadmapError。"""
     from dspx.engine.sealed import load_sealed
@@ -248,7 +248,7 @@ def next_roadmap_id(layout: Layout, leaves: list) -> str:
 def add_entry(layout: Layout, leaves: list, *, kind: str, title: str, target: str,
               what: str = "", priority: str = "", depends_on: list | None = None,
               from_audit: str = "") -> dict:
-    """`docspec roadmap add`＝roadmap 的唯一引擎寫入門（甲案；取代 agent 手編 roadmap.yaml）。
+    """`artispec roadmap add`＝roadmap 的唯一引擎寫入門（甲案；取代 agent 手編 roadmap.yaml）。
     驗欄位 → 路由（target=forest→forest 檔、target=section→該篇 doc 檔）→ 生 id → append + 密封 save。"""
     if kind not in KINDS:
         raise RoadmapError(f"kind \"{kind}\" not in {KINDS}")

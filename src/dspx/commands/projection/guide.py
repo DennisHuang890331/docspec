@@ -1,9 +1,9 @@
-"""docspec guide — projects the single agent contract from the schema, live.
+"""artispec guide — projects the single agent contract from the schema, live.
 
 Workflow (loop + author skills + boundaries + filing rules) + every artifact's
 meaning / required fields / format / read-write aperture. All from schema.yaml
 (workflow block + artifacts + filing-rules) — never written to a file, never drifts.
-This solves docspec onboarding with docspec's own philosophy: rules live in the
+This solves artispec onboarding with docspec's own philosophy: rules live in the
 schema and get projected, not duplicated in drifting prose.
 """
 
@@ -87,7 +87,7 @@ def _print_project_file(pf: dict) -> None:
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec guide", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec guide", description=HELP)
     parser.add_argument("artifact", nargs="?", default=None,
                         help="print only this artifact's / project-file's contract")
     parser.add_argument("--json", action="store_true", dest="as_json", help="JSON output")
@@ -112,7 +112,7 @@ def run(argv: list[str]) -> int:
     wf = schema.workflow or {}
     wf_skills = [s for s in (wf.get("skills") or []) if isinstance(s, dict)]
 
-    # single-item drill-down: docspec guide <id>
+    # single-item drill-down: artispec guide <id>
     if args.artifact:
         a = next((x for x in artifacts if x["id"] == args.artifact), None)
         if a:
@@ -122,23 +122,23 @@ def run(argv: list[str]) -> int:
         if pf:
             _print_project_file(pf)
             return 0
-        # workflow-skill drill-down: docspec guide apply (etc.) — projects that skill's contract
+        # workflow-skill drill-down: artispec guide apply (etc.) — projects that skill's contract
         wsk = next((s for s in wf_skills if s.get("id") == args.artifact), None)
         if wsk:
             print(f"● {wsk.get('id')} — {str(wsk.get('summary', '')).strip()}")
             for st in wsk.get("steps", []):
                 print(f"  - {st}")
             if wsk.get("transaction"):
-                print(f"  ⮑ commit: docspec {wsk['transaction']}")
+                print(f"  ⮑ commit: artispec {wsk['transaction']}")
             return 0
         ids = ([x["id"] for x in artifacts] + [str(p.get("id")) for p in project_files]
                + [str(s.get("id")) for s in wf_skills])
         sys.stderr.write(
-            f"docspec guide: unknown artifact '{args.artifact}'. Valid: {', '.join(ids)}\n")
+            f"artispec guide: unknown artifact '{args.artifact}'. Valid: {', '.join(ids)}\n")
         return 2
 
     wf = schema.workflow or {}
-    print(f"docspec contract (schema: {schema.name})\n")
+    print(f"artispec contract (schema: {schema.name})\n")
 
     # table of contents (so the agent doesn't read only the head and miss scope)
     toc = ["Workflow (loop)", "Author skills", "Boundaries"]
@@ -165,7 +165,7 @@ def run(argv: list[str]) -> int:
                 for st in s.get("steps", []):
                     print(f"      - {st}")
                 if s.get("transaction"):
-                    print(f"      ⮑ commit: docspec {s['transaction']}")
+                    print(f"      ⮑ commit: artispec {s['transaction']}")
             else:  # back-compat: a plain string skill line
                 print(f"  • {s}")
         print()

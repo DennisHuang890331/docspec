@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 
 from dspx.engine import governance as gv
@@ -77,8 +78,15 @@ def build_graph(layout: Layout, leaves: list | None = None,
             t = str(t)
             if t.startswith(gv.GOV_NAMESPACE):
                 g.add(DOC_NS + leaf.section, "realizes", gv.strip_ns(t))
-            elif t.startswith("req:"):
+            elif t.startswith(("req:", "draft-req:")):
                 g.add(DOC_NS + leaf.section, "realizes", t)
+                if t.startswith("draft-req:"):
+                    from dspx.engine.software.links import resolve_requirement_source
+                    source = resolve_requirement_source(layout, t)
+                    for basis in source["based-on"]:
+                        g.add(t, "based-on", gv.strip_ns(basis))
+                    if source["state"] == "formal":
+                        g.add(t, "realizes", source["source-ref"])
     for w in gov.work:
         for ref in gv._as_list(w.get("refs")):
             if ref.startswith("swc:"):
@@ -91,6 +99,42 @@ def build_graph(layout: Layout, leaves: list | None = None,
 def _open_suspect_keys(gov: gv.Governance) -> set[tuple[str, str]]:
     return {(str(s.get("trigger")), str(s.get("target"))) for s in gov.suspects
             if s.get("status") == "open"}
+
+
+def _affected_paths(layout: Layout, graph: TraceGraph, trigger: str):
+    """Follow recorded dependencies, including scenario coverage and change membership.
+
+    A visited set bounds cycles. These are review flags, never edits to the referenced
+    task or archived change. Supersession/answer edges are not dependency edges.
+    """
+    from dspx.engine.software.specs import split_ref
+
+    queue = deque([(trigger, [trigger])])
+    seen = {trigger}
+    dependency_types = {"based-on", "refs", "modifies", "implements", "covers", "depends-on", "realizes"}
+    while queue:
+        current, path = queue.popleft()
+        dependents = [(node, etype) for node, etype in graph.dependents(current)
+                      if etype in dependency_types]
+        if current.startswith("req:") and split_ref(current)[1] and split_ref(current)[2] is None:
+            from dspx.engine.software.links import requirement_downstream
+            dependents.extend(requirement_downstream(layout, current, graph))
+            dependents.extend((node, etype) for node, etype, dst in graph.edges
+                              if etype == "covers" and dst.startswith(current + "/"))
+        if current.startswith("swc:"):
+            cid = current[len("swc:"):]
+            dependents.extend((node, "contains") for node, _, _ in graph.edges
+                              if node.startswith((f"task:{cid}#", f"test:{cid}/")))
+        for node, etype in dependents:
+            if node in seen:
+                continue
+            seen.add(node)
+            next_path = [*path, etype, node]
+            queue.append((node, next_path))
+            # Direct governance-to-document staleness has its own existing view.
+            if node.startswith(DOC_NS) and not current.startswith(("req:", "draft-req:")):
+                continue
+            yield node, next_path
 
 
 def flag_after_change(layout: Layout, changed_id: str, tool: str | None = None,
@@ -128,30 +172,15 @@ def flag_after_change(layout: Layout, changed_id: str, tool: str | None = None,
         tool = "user"
     created: list[str] = []
     for trig in triggers:
-        for node, etype in graph.dependents(trig):
-            if node.startswith(DOC_NS) or etype not in ("based-on", "refs"):
-                continue
+        for node, path in _affected_paths(layout, graph, trig):
             if node == changed_id or (trig, node) in existing:
                 continue
             sid = gv.next_id(layout, "suspect", tool)
             gv.write_record(layout, "suspect", {
-                "id": sid, "trigger": trig, "target": node, "path": [trig, etype, node],
+                "id": sid, "trigger": trig, "target": node, "path": path,
                 "status": "open", "created-at": gv.today()})
             existing.add((trig, node))
             created.append(sid)
-            if node.startswith("req:"):
-                # 軟體需求：再往下標到測試、任務（已完成的只標需重看，不重開）與 realizes 它的文件章節
-                from dspx.engine.software.links import requirement_downstream
-                for sub, sub_type in requirement_downstream(layout, node, graph):
-                    if (trig, sub) in existing:
-                        continue
-                    sid = gv.next_id(layout, "suspect", tool)
-                    gv.write_record(layout, "suspect", {
-                        "id": sid, "trigger": trig, "target": sub,
-                        "path": [trig, etype, node, sub_type, sub],
-                        "status": "open", "created-at": gv.today()})
-                    existing.add((trig, sub))
-                    created.append(sid)
     return created
 
 
@@ -162,7 +191,9 @@ def doc_sections_needing_review(layout: Layout, leaves: list,
     out = []
     for d in gov.decisions:
         st = gv.decision_effective_status(d, gov)
-        if st not in ("superseded", "withdrawn"):
+        if st == "active" and gv.invalid_basis(d, gov):
+            st = "basis-invalid"
+        if st not in ("superseded", "withdrawn", "basis-invalid"):
             continue
         ref = gv.GOV_NAMESPACE + str(d["id"])
         succ = gv.superseded_by(d, gov)

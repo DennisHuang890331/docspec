@@ -1,4 +1,4 @@
-"""docspec store tidy — 確定性、冪等的 corpus 遷移指令（contract-slimming；★store-only）。
+"""artispec store tidy — 確定性、冪等的 corpus 遷移指令（contract-slimming；★store-only）。
 
 三個機械動作，依序執行（`--dry-run` 先看完整清單、零寫入）——全部對 `corpus/<article>.yaml`
 store 記錄操作，不再碰散檔：
@@ -9,7 +9,7 @@ store 記錄操作，不再碰散檔：
      編號起頭（判定＝lint `_TITLE_ARABIC_PREFIX_RE`，與 V20 同源）→ 剝除**完整**層級前綴
      （`6.1 概觀`→`概觀`）。附錄字母式（`A.`／`附錄 A`）v1 不動（D7）。整值只是編號的 title 不動。
   3. **記錄 path 改名為交付語言 title slug**（最後跑）：leaf／有 authored title 的 group，其路徑
-     末段 ≠（剝章號後）title 的檔名安全 slug → **逐項呼叫 `docspec mv` 交易原語**（marker／
+     末段 ≠（剝章號後）title 的檔名安全 slug → **逐項呼叫 `artispec mv` 交易原語**（marker／
      audit／roadmap 同步重寫、自驗 check、失敗零半套）。article root 明確排除。同層 slug 撞名＝
      兩者都拒改、報告衝突。每做完一項即重載模型重算剩餘清單。
 
@@ -19,7 +19,7 @@ store 記錄操作，不再碰散檔：
 紅 check 政策：mv 以 check 自驗、要求起跑綠。check 紅時 tidy 照做動作 1–2（就地改 store），
 **整批改名跳過**並列出本會執行的清單，提示先修 check 再重跑。
 
-實跑有變更後收尾印「逐篇 `docspec render <article> --rebaseline`」提示（own 軸輸入變了；
+實跑有變更後收尾印「逐篇 `artispec render <article> --rebaseline`」提示（own 軸輸入變了；
 rebaseline 吸收、散文保留）——tidy 自己**永不** render、永不寫帳本。冪等：跑第二次＝零動作。
 """
 
@@ -244,7 +244,7 @@ def _apply_inplace_edits(layout, leaves, dry: bool, tag: str) -> tuple[int, set[
 # ── 主流程 ──────────────────────────────────────────────────────────────────
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec store tidy", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec store tidy", description=HELP)
     parser.add_argument(
         "--dry-run", action="store_true", dest="dry_run",
         help="print the complete action list (field strips / prefix strips / renames, "
@@ -271,7 +271,7 @@ def run(argv: list[str]) -> int:
     if dry:
         valid, conflicts, skips = _compute_renames(layout)
         for old, new in valid:
-            print(f"{tag}: rename: {old} -> {new} (via `docspec mv`; markers/audit/roadmap "
+            print(f"{tag}: rename: {old} -> {new} (via `artispec mv`; markers/audit/roadmap "
                   "rewritten in the same transaction)")
         actions += len(valid)
         articles.update(old.split("/", 1)[0] for old, _ in valid)
@@ -282,9 +282,9 @@ def run(argv: list[str]) -> int:
         if valid:
             pre = mv_cmd._check_result(layout, schema)
             if not pre.ok:
-                print(f"{tag}: SKIPPED all record renames — `docspec check` is not green, and "
+                print(f"{tag}: SKIPPED all record renames — `artispec check` is not green, and "
                       "renames run through the mv transaction which self-verifies with check. "
-                      "Fix the check errors, then re-run `docspec store tidy`. Would have renamed:")
+                      "Fix the check errors, then re-run `artispec store tidy`. Would have renamed:")
                 for old, new in valid:
                     print(f"{tag}:   {old} -> {new}")
                 valid = []
@@ -298,7 +298,7 @@ def run(argv: list[str]) -> int:
                 actions += 1
                 articles.add(old.split("/", 1)[0])
             else:
-                sys.stderr.write(f"docspec: tidy — rename {old} -> {new} failed (mv aborted "
+                sys.stderr.write(f"artispec: tidy — rename {old} -> {new} failed (mv aborted "
                                  "with no partial effect); continuing with the rest.\n")
                 failed.add((old, new))
                 hard_fail = True
@@ -307,7 +307,7 @@ def run(argv: list[str]) -> int:
 
     for olds, new, reason in conflicts:
         print(f"{tag}: rename conflict (kept original): {', '.join(olds)} -> {new} — {reason}; "
-              "fix the title(s), then re-run `docspec store tidy`")
+              "fix the title(s), then re-run `artispec store tidy`")
     for section, reason in skips:
         print(f"{tag}: rename skipped: {section} — {reason}")
 
@@ -319,7 +319,7 @@ def run(argv: list[str]) -> int:
     else:
         print(f"{tag}: {actions} action(s) applied.")
         for art in sorted(articles):
-            print(f"  reminder: run `docspec render {art} --rebaseline` — the own-axis input "
+            print(f"  reminder: run `artispec render {art} --rebaseline` — the own-axis input "
                   "of its sections changed; rebaseline absorbs it (prose preserved). "
                   "tidy never renders or writes ledgers itself.")
     return 1 if hard_fail else 0

@@ -1,4 +1,4 @@
-"""docspec show <id> — payload 下鑽（正向內容）＋反向關係查詢（改動影響預覽）。
+"""artispec show <id> — payload 下鑽（正向內容）＋反向關係查詢（改動影響預覽）。
 
 - 無旗標＝正向下鑽：回某 id/section 的內容，讓 agent 免開原始檔（省 token）。
   - decision → statement / rationale / rejected / status / supersede 連結
@@ -144,9 +144,9 @@ def _addr_hint(leaves: list, arg: str) -> str:
             return (f"\"{a}\" is the concept id of section {lf.section} — pass either form.")
         if any(str(e.get("id")) == a for e in lf.decisions):
             return (f"\"{a}\" is a decision id owned by {lf.section} — try "
-                    f"`docspec show {a} --realized-by`, or address the section \"{lf.section}\".")
+                    f"`artispec show {a} --realized-by`, or address the section \"{lf.section}\".")
     return ("give a leaf section path (has '/', e.g. guide/intro) or a concept id "
-            "(docspec status shows sections; docspec show <id> shows an id's payload).")
+            "(artispec status shows sections; artispec show <id> shows an id's payload).")
 
 
 # ── 分類視圖（整篇/子樹橫看某一分類）──────────────────────────────────────────
@@ -304,7 +304,7 @@ def _unrendered_note(unrendered: list[str], what: str) -> str | None:
         return None
     return (f"note: {len(unrendered)} article(s) not yet rendered "
             f"({', '.join(unrendered)}) — {what} from them cannot be determined; "
-            "run docspec render <article>")
+            "run artispec render <article>")
 
 
 def _impact_payload(leaves, layout, section: str) -> dict | None:
@@ -502,7 +502,7 @@ def _print_referenced_by(payload: dict) -> None:
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec show", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec show", description=HELP)
     parser.add_argument("id", help="a section path OR an id (concept/decision/retirement) — "
                                    "every view auto-detects which and accepts both forms")
     parser.add_argument("--json", action="store_true", dest="as_json", help="output as JSON")
@@ -540,8 +540,8 @@ def run(argv: list[str]) -> int:
         scoped = _scope_leaves(leaves, args.id)
         if scoped is None:
             sys.stderr.write(
-                f"docspec: no sections found for \"{args.id}\" (give an article name or a section "
-                "subtree path; docspec status lists articles/sections).\n")
+                f"artispec: no sections found for \"{args.id}\" (give an article name or a section "
+                "subtree path; artispec status lists articles/sections).\n")
             return 1
         if args.decisions:
             payload = _decisions_view(scoped, args.all_status)
@@ -563,7 +563,7 @@ def run(argv: list[str]) -> int:
         section = _resolve_to_section(leaves, args.id)
         payload = _impact_payload(leaves, layout, section) if section else None
         if payload is None:
-            sys.stderr.write(f"docspec: --impact could not resolve \"{args.id}\" to a leaf section. "
+            sys.stderr.write(f"artispec: --impact could not resolve \"{args.id}\" to a leaf section. "
                              + _addr_hint(leaves, args.id) + "\n")
             return 1
         if args.as_json:
@@ -588,7 +588,7 @@ def run(argv: list[str]) -> int:
             if section is None and "/" in args.id:
                 section = _resolve_to_section(leaves, args.id)
                 if section is None:
-                    sys.stderr.write(f"docspec: --realized-by could not resolve \"{args.id}\". "
+                    sys.stderr.write(f"artispec: --realized-by could not resolve \"{args.id}\". "
                                      + _addr_hint(leaves, args.id) + "\n")
                     return 1
         if section is not None:
@@ -608,7 +608,7 @@ def run(argv: list[str]) -> int:
         section = _resolve_to_section(leaves, args.id)
         payload = _referenced_by_payload(leaves, layout, section) if section else None
         if payload is None:
-            sys.stderr.write(f"docspec: --referenced-by could not resolve \"{args.id}\" to a leaf "
+            sys.stderr.write(f"artispec: --referenced-by could not resolve \"{args.id}\" to a leaf "
                              "section. " + _addr_hint(leaves, args.id) + "\n")
             return 1
         if args.as_json:
@@ -623,8 +623,8 @@ def run(argv: list[str]) -> int:
         found = _find_section(leaves, layout, args.id)
     if found is None:
         sys.stderr.write(
-            f"docspec: id or section \"{args.id}\" not found (use docspec status to see sections; "
-            "docspec show <id> --realized-by / <section> --referenced-by / --impact for "
+            f"artispec: id or section \"{args.id}\" not found (use artispec status to see sections; "
+            "artispec show <id> --realized-by / <section> --referenced-by / --impact for "
             "back-references)\n")
         return 1
 

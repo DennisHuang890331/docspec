@@ -31,7 +31,15 @@ def test_instructions_apply_projects_authoring_three_blocks(make_project, write_
     out = capsys.readouterr().out
     # 1) 寫作原則（含 zero-inference 行內鐵律，雙載）
     assert "── Writing principles ──" in out
-    assert "Inverted pyramid" in out and "Lead with the payload" in out
+    # 現行文件規範由任務／讀者／文類決定，不再強制通用倒金字塔。
+    assert "Task and audience first" in out
+    assert "existing project conventions and explicit audience requirements" in out
+    assert "before engineering-team defaults" in out
+    for kind in ("how-to", "reference", "tutorial", "explain"):
+        assert kind in out
+    for content in ("preconditions", "actions", "expected results", "failure handling", "limits", "recorded sources"):
+        assert content in out
+    assert "do not impose a fixed argument chain on task steps" in out
     assert "IMPORTANT — zero-inference:" in out and "[TBD]" in out
     # 2) verdict verbs：白名單逐項（ack-own 結構化白名單、EXHAUSTIVE）＋brief-envelope 欄規則
     assert "── Verdict verbs ──" in out
@@ -39,7 +47,7 @@ def test_instructions_apply_projects_authoring_three_blocks(make_project, write_
     assert "Brief-envelope handling" in out and "ack-or-rewrite" in out
     # 3) dispatch exclusions：逐條（punctuation→edit --punct、V18、grep banned openers）
     assert "── Dispatch exclusions ──" in out
-    assert "docspec edit --punct" in out and "V18" in out
+    assert "artispec edit --punct" in out and "V18" in out
     assert "SEMANTIC work only" in out and "grep" in out
 
     # 只投 apply：develop/factcheck 不帶這三塊
@@ -54,7 +62,14 @@ def test_instructions_apply_projects_authoring_three_blocks(make_project, write_
     data = json.loads(capsys.readouterr().out)
     auth = data["authoring"]
     assert auth["principles"] and auth["zero_inference"]
+    # 三區塊仍共用 schema 來源，文字與 JSON 不另維護另一套規則。
+    flattened = " ".join(out.split())
+    assert all(" ".join(principle.split()) in flattened for principle in auth["principles"])
+    assert "material / outline / decisions" in auth["zero_inference"]
+    assert "never fabricate" in auth["zero_inference"]
     assert auth["verdict_verbs"]["whitelist"] and auth["verdict_verbs"]["brief_envelope"]
+    assert "HUMAN's semantic ruling" in auth["verdict_verbs"]["intro"]
+    assert "get explicit consent" in auth["verdict_verbs"]["intro"]
     assert auth["dispatch_exclusions"]["items"]
     # develop --json：無 authoring（None）
     assert instr_cmd.run(["develop", "a/x", "--json"]) == 0
@@ -154,7 +169,7 @@ def test_instructions_glossary_block_is_lean(make_project, write_leaf, monkeypat
     assert "風險估測系統" in out
     assert "module" in out
     assert "安全監控系統" in out         # aliases_forbidden
-    assert "docspec show" in out         # 下鑽提示
+    assert "artispec show" in out         # 下鑽提示
 
 
 def test_instructions_backstage_projections_warn_against_narration(make_project, write_leaf, monkeypatch, capsys):
@@ -434,7 +449,7 @@ def test_publish_gate_and_staleness(make_project, write_leaf, monkeypatch):
         latest.read_text(encoding="utf-8").replace("## 1. X\n", "## 1. X\n\n內文。\n"),
         encoding="utf-8")                       # 模擬 draft 寫散文
     assert publish_cmd.run(["g"]) == 0
-    assert (docs / "archive" / "v1.0.0.md").is_file()
+    assert (home / "changes" / "_versions" / "g" / "1.0.0" / "snapshot" / "document.md").is_file()
     meta = yaml.safe_load(latest.read_text("utf-8").split("---")[1])
     assert meta["version"] == "1.0.0"
     # 指紋帳本現存隱藏 sidecar（ISSUE-3），不在 _latest frontmatter
@@ -486,9 +501,9 @@ def test_publish_refuses_noop_bump(make_project, write_leaf, monkeypatch):
     docs = _render_and_draft(home, monkeypatch, write_leaf, "內文。")
     assert publish_cmd.run(["g"]) == 0           # v1.0.0
     assert publish_cmd.run(["g"]) == 1           # 無改動 → no-op 拒
-    assert not (docs / "archive" / "v1.0.1.md").is_file()
+    assert not (home / "changes" / "_versions" / "g" / "1.0.1" / "snapshot" / "document.md").is_file()
     assert publish_cmd.run(["g", "--allow-noop"]) == 0   # 強制放行
-    assert (docs / "archive" / "v1.0.1.md").is_file()
+    assert (home / "changes" / "_versions" / "g" / "1.0.1" / "snapshot" / "document.md").is_file()
 
 
 def test_publish_english_changelog(make_project, write_leaf, monkeypatch):
@@ -608,5 +623,5 @@ def test_publish_dry_run_noop_gate_and_allow_noop(make_project, write_leaf, monk
     assert "no-op: skipped (--allow-noop)" in out
     assert "dry-run verdict: GO" in out
     # dry-run 全程不動檔：仍只有 v1.0.0
-    assert (docs / "archive" / "v1.0.0.md").is_file()
-    assert not (docs / "archive" / "v1.0.1.md").exists()
+    assert (home / "changes" / "_versions" / "g" / "1.0.0" / "snapshot" / "document.md").is_file()
+    assert not (home / "changes" / "_versions" / "g" / "1.0.1" / "snapshot" / "document.md").exists()

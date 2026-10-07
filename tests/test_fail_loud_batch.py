@@ -206,7 +206,7 @@ def test_group_title_change_raises_skeleton_stale_signal(make_project, write_lea
     assert status_cmd.run(["--json"]) == 0
     assert json.loads(capsys.readouterr().out)["skeletonStale"] == ["a"]
     assert status_cmd.run([]) == 0
-    assert "docspec render a" in capsys.readouterr().out
+    assert "artispec render a" in capsys.readouterr().out
 
     # render 後信號清掉
     assert render_cmd.run(["a"]) == 0
@@ -235,7 +235,7 @@ def test_truncated_yaml_friendly_error(make_project, write_leaf, monkeypatch, ca
     rc = cli.main([command])
     err = capsys.readouterr().err
     assert rc == 1                               # 非零離開碼
-    assert "docspec:" in err and relpath in err  # 一行友善錯誤、含路徑
+    assert "artispec:" in err and relpath in err  # 一行友善錯誤、含路徑
     assert "Traceback" not in err
 
 

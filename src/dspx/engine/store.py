@@ -10,7 +10,7 @@
 - **canonical serializer 冪等**：`load→dump→load` 不動點、`dump(dump(x)) == dump(x)`。
   這是「landing 換一節、旁節 byte 不變」的地基。
 - **integrity 封條**：內容 payload（format/article/revision/sections 的 **schema 無關** json
-  canonical）的 sha256 寫進 `integrity:`；loader 驗、不符 fail-loud 指路 `docspec store fsck`。
+  canonical）的 sha256 寫進 `integrity:`；loader 驗、不符 fail-loud 指路 `artispec store fsck`。
   刻意與寫入 schema 的鍵序解耦（換 schema 不假報 integrity 不符）。
 - **多行字串一律 literal block**（自訂 representer）：PyYAML 預設把含 `\n` 的字串引號化＋
   轉義＝git diff 不可讀，必須覆寫。
@@ -32,8 +32,8 @@ from dspx.engine.model import Leaf, ModelError, _normalize_newlines
 STORE_FORMAT_VERSION = 1
 
 STORE_HEADER = ("# docspec article store — engine-owned single-file corpus for this article.\n"
-                "# Never edit by hand: an integrity seal guards the body; the next docspec command\n"
-                "# will fail loud and point you at `docspec store fsck`. Use get/put.\n")
+                "# Never edit by hand: an integrity seal guards the body; the next artispec command\n"
+                "# will fail loud and point you at `artispec store fsck`. Use get/put.\n")
 
 # 記錄頂層鍵的 canonical 序（group 節點另有自己的鍵，見 _record_key_order）。
 _LEAF_RECORD_ORDER = ("path", "kind", "concept", "decisions", "history", "material")
@@ -346,7 +346,7 @@ def article_from_dict(data: dict, path: Path, *, verify: bool = True) -> Article
         if stored != expect:
             raise StoreError(
                 f"{path}: integrity seal mismatch — the store file was edited outside the engine "
-                f"(expected {expect}, found {stored!r}). Run `docspec store fsck --accept` to adopt "
+                f"(expected {expect}, found {stored!r}). Run `artispec store fsck --accept` to adopt "
                 "the external change, or restore the file from git/Drive history.")
     return article
 
@@ -381,7 +381,7 @@ def store_path(layout: Layout, article: str) -> Path:
     """一篇的 store 檔路徑（dossier-layout）：`corpus/<article>/article.yaml`。
 
     fallback：新位不存在而**舊扁平位存在** → 回舊位（讀寫都留在舊位＝不隱式半遷移；
-    `docspec store migrate-layout` 一次收編）。新專案/已遷專案一律新位。"""
+    `artispec store migrate-layout` 一次收編）。新專案/已遷專案一律新位。"""
     new = layout.article_store(article)
     if not new.is_file():
         old = legacy_store_path(layout, article)
@@ -414,7 +414,7 @@ def backend_of(layout: Layout, article: str) -> str:
         raise StoreError(
             f"article {article!r} has BOTH a store file (corpus/{article}.yaml) and a scattered "
             "leaf-folder tree — the engine cannot tell which is the truth. Remove one: keep the "
-            f"store and delete corpus/{article}/, or `docspec store dump {article}` then delete "
+            f"store and delete corpus/{article}/, or `artispec store dump {article}` then delete "
             "the store file.")
     if has_store:
         return "store"
@@ -432,6 +432,9 @@ _CONFLICT_STORE_RE = _re.compile(r".* \(\d+\)$")
 def store_articles(layout: Layout) -> list[str]:
     """corpus/ 下所有文章名（依名排序）：dossier 案卷夾（`corpus/<夾>/article.yaml`）∪
     前一代扁平檔（`corpus/<article>.yaml`，fallback 期）。`_` 前綴隱形；Drive 衝突副本/暫存隱形。"""
+    selected = getattr(layout, "query_articles", None)
+    if callable(selected):
+        return selected()
     if not layout.corpus_dir.is_dir():
         return []
     names: set[str] = set()
@@ -566,6 +569,9 @@ _ARTICLE_CACHE: dict[str, tuple] = {}
 
 def cached_article(layout: Layout, article: str) -> Article | None:
     """該篇 store 的（快取）Article；無 store → None。group 讀端用（verify=False，主載入已驗）。"""
+    selected = getattr(layout, "query_article", None)
+    if callable(selected):
+        return selected(article)
     p = store_path(layout, article)
     if not p.is_file():
         return None

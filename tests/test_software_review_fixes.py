@@ -122,7 +122,7 @@ def test_b1_seal_message_points_to_the_right_fix(proj):
     p.write_text(p.read_text(encoding="utf-8").replace("not-started", "done"), encoding="utf-8")
     with pytest.raises(io.SoftwareError) as exc:
         chg.load_change(proj, "f")
-    assert "fsck" not in str(exc.value) and "docspec code" in str(exc.value)
+    assert "fsck" not in str(exc.value) and "artispec code" in str(exc.value)
 
 
 def test_b2_gaps_template_round_trip(proj, capsys, tmp_path):

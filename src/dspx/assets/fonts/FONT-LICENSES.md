@@ -1,7 +1,7 @@
-# 字型授權與來源（docspec export 字型）
+# 字型授權與來源（artispec export 字型）
 
-`docspec setup` 從以下 OFL/開放來源下載字型到 `data_dir/fonts/`（每來源的 zip
-sha256 釘在 `src/dspx/commands/setup.py` 的 `_FONT_MANIFEST`，下載後 byte 級驗證）。
+`artispec setup` 從以下 OFL/開放來源下載字型到 `data_dir/fonts/`（每來源的 zip
+sha256 釘在 `src/dspx/commands/maintenance/setup/_fonts.py` 的 `_FONT_MANIFEST`，下載後 byte 級驗證）。
 本檔記錄來源與授權；實際 OFL 全文隨各上游 zip 內 LICENSE 一併取得。
 
 | 字型 | 版本 | 授權 | 來源 |

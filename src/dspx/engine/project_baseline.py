@@ -2,10 +2,10 @@
 
 回答「文件第三版描述的是哪個規格、哪個 commit」這類問題：
 
-- 甲、文件定版時自動記下：`docspec freeze` 每凍結一個文件版本，就寫一筆
+- 甲、文件定版時自動記下：`artispec freeze` 每凍結一個文件版本，就寫一筆
   `docspec/baselines/documents/<文件>@<版本>.yaml`：當下每份軟體規格的內容指紋、各程式 repo 的 commit、
   進行中的軟體 change、有效的專案決策。
-- 乙、交付時一次釘住整個專案：`docspec baseline <名稱>` 寫 `docspec/baselines/<名稱>.yaml`：
+- 乙、交付時一次釘住整個專案：`artispec baseline <名稱>` 寫 `docspec/baselines/<名稱>.yaml`：
   所有文件目前的定版版本（以及工作版本是否有尚未定版的修改）、軟體規格、各 repo 的 commit、
   有效決策、進行中的 change（文件與軟體）。
 
@@ -82,7 +82,7 @@ def software_state(layout: Layout) -> dict:
         try:
             out["specs"] = {cap: swio.fingerprint(spec) for cap, spec in sp.load_all(layout).items()}
         except swio.SoftwareError:
-            out["specs"] = "unreadable (see docspec check)"
+            out["specs"] = "unreadable (see artispec check)"
         for name, path in swc.repos(layout).items():
             repos[name] = ev._git(path, "rev-parse", "HEAD") if path.is_dir() else None
         dirty = {name: bool(ev._git(path, "status", "--porcelain")) for name, path in swc.repos(layout).items()
@@ -103,7 +103,7 @@ def governance_state(layout: Layout) -> dict:
     try:
         gov = gv.load_governance(layout)
     except gv.GovernanceError:
-        return {"decisions": "unreadable (see docspec check)"}
+        return {"decisions": "unreadable (see artispec check)"}
     return {"decisions": sorted(str(d["id"]) for d in gov.decisions
                                 if gv.decision_effective_status(d, gov) == "active")}
 
@@ -126,7 +126,8 @@ def _has_unfrozen_edits(layout: Layout, article: str, version: str | None) -> bo
         return True
     _meta, body = parse_frontmatter(latest.read_text(encoding="utf-8"))
     clean = strip_anchor_bindings(strip_markers(body)).strip() + "\n"
-    return clean != snap.read_text(encoding="utf-8").strip() + "\n"
+    from dspx.engine.document_versions import identical_to_snapshot
+    return not identical_to_snapshot(layout, article, version, clean)
 
 
 # ── 甲：文件定版時自動記下 ───────────────────────────────────────────────────
@@ -211,7 +212,7 @@ def create(layout: Layout, leaves: list, name: str, *, note: str, tool: str) -> 
 def load(layout: Layout, name: str) -> dict:
     path = project_path(layout, name)
     if not path.is_file():
-        raise BaselineError(f"no baseline \"{name}\" (see `docspec baseline list`)")
+        raise BaselineError(f"no baseline \"{name}\" (see `artispec baseline list`)")
     return _load(path, "project")
 
 

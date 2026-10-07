@@ -23,6 +23,9 @@ GLOSSARY_INDEX_FIELDS = ("id", "canonical", "bucket", "code", "aliases_forbidden
 
 
 def glossary_path(layout: Layout) -> Path:
+    selected = getattr(layout, "query_glossary_path", None)
+    if callable(selected):
+        return selected()
     return layout.planning_home / "glossary.yaml"
 
 
@@ -39,7 +42,7 @@ def load_glossary(layout: Layout) -> list[dict]:
 def validate_glossary(terms: list[dict]) -> list[str]:
     """check 用：每條 id 唯一、canonical 必填、bucket 合法。
 
-    definition/english 是 optional 下鑽欄（`docspec show <id>` 才回）——不加硬 invariant。
+    definition/english 是 optional 下鑽欄（`artispec show <id>` 才回）——不加硬 invariant。
 
     另擋**自打架別名**：同一條 term 的 alias 若是自己 canonical 的子字串（且≠canonical），
     在遮蔽式 Vg1 比對下永遠測不到（正名一出現就把別名遮掉）、在純子字串比對下對每次正確

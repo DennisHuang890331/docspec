@@ -1,7 +1,7 @@
-"""docspec handover — 交接單：一份、每次整份重寫（2026/09/30 裁定，取代 `docspec brief`）。
+"""artispec handover — 交接單：一份、每次整份重寫（2026/09/30 裁定，取代 `docspec brief`）。
 
-- `docspec handover`：印出目前的交接單，並指向現況（`docspec roadmap`）與待裁定的問題。
-- `docspec handover write`：整份重寫交接單。舊的內容不保留——做完的事不需要留。
+- `artispec handover`：印出目前的交接單，並指向現況（`artispec roadmap`）與待裁定的問題。
+- `artispec handover write`：整份重寫交接單。舊的內容不保留——做完的事不需要留。
 
 現況由 roadmap 與各項紀錄推導，不寫進交接單；交接單只記系統推導不出來的事。
 """
@@ -21,19 +21,19 @@ from dspx.engine.config import lang_subtag
 NAME = "handover"
 HELP = ("governance: the handover note — one note, rewritten in full at every handover (what was "
         "done, what is in progress, promises to the owner, cautions, next); current status is "
-        "`docspec roadmap`")
+        "`artispec roadmap`")
 
 _TITLES = {
     "zh": {"title": "交接單", "none": "（還沒有交接單。結束一段工作、上下文快滿或換 agent 之前，用 "
-           "`docspec handover write` 寫一份。）",
+           "`artispec handover write` 寫一份。）",
            "done": "這段做了什麼", "in-progress": "進行中（派了誰、在等誰）",
            "promises": "答應使用者的事", "cautions": "要注意的事", "next": "下一步",
-           "status": "現況看 `docspec roadmap`", "pending": "待使用者裁定的問題：{n} 個（`docspec question list`）"},
+           "status": "現況看 `artispec roadmap`", "pending": "待使用者裁定的問題：{n} 個（`artispec question list`）"},
     "en": {"title": "Handover note", "none": "(No handover note yet. Before you end a stretch of work, run "
-           "out of context or hand over, write one with `docspec handover write`.)",
+           "out of context or hand over, write one with `artispec handover write`.)",
            "done": "Done in this stretch", "in-progress": "In progress (who was assigned what, waiting on whom)",
            "promises": "Promised to the owner", "cautions": "Watch out for", "next": "Next",
-           "status": "Current status: `docspec roadmap`", "pending": "Questions awaiting the owner: {n} (`docspec question list`)"},
+           "status": "Current status: `artispec roadmap`", "pending": "Questions awaiting the owner: {n} (`artispec question list`)"},
 }
 
 
@@ -46,7 +46,7 @@ def _lang(layout) -> str:
 
 
 def run(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="docspec handover", description=HELP)
+    p = argparse.ArgumentParser(prog="artispec handover", description=HELP)
     sub = p.add_subparsers(dest="op")
     w = sub.add_parser("write", help="rewrite the whole handover note (the old note is replaced)")
     for flag, hlp in (("done", "what was done in this stretch"),
@@ -81,15 +81,27 @@ def run(argv: list[str]) -> int:
             print(f"handover note rewritten: {path.relative_to(layout.project_root)}")
             return 0
         note = ho.load(layout)
+        freshness = ho.freshness(layout, note)
         pending = 0
+        pending_error = None
         if gv.has_governance(layout):
-            gov = gv.load_governance(layout)
-            pending = sum(1 for q in gov.questions
-                          if gv.question_effective_status(q, gov) in ("open", "needs-explanation"))
+            try:
+                gov = gv.load_governance(layout)
+                pending = sum(1 for q in gov.questions
+                              if gv.question_effective_status(q, gov) in ("open", "needs-explanation"))
+            except (gv.GovernanceError, OSError, UnicodeError) as exc:
+                pending = None
+                pending_error = str(exc)
+                freshness = {**freshness, "status": "unknown",
+                             "changes-available": False, "changes": [],
+                             "changes-reason": "治理紀錄無法讀取，無法列出完整變動 (change details unavailable)",
+                             "reason": f"治理紀錄無法讀取，無法確認交接新鮮度 (freshness unknown): {exc}"}
         if args.as_json:
-            emit_json({"note": note, "pending-questions": pending})
+            emit_json({"note": note, "pending-questions": pending, "freshness": freshness,
+                       **({"pending-questions-error": pending_error} if pending_error else {})})
             return 0
-        t = _TITLES[_lang(layout)]
+        language = _lang(layout)
+        t = _TITLES[language]
         if note is None:
             print(t["none"])
         else:
@@ -101,6 +113,18 @@ def run(argv: list[str]) -> int:
                     for it in items:
                         print(f"- {it}")
         print(f"\n{t['status']}")
+        if pending_error or (note is not None and freshness["status"] != "current"):
+            print(f"\n⚠ {freshness['reason']}；`artispec roadmap` 查現況，"
+                  "`artispec handover write` 重寫交接 (check status, then rewrite).")
+        if note is not None:
+            if freshness["changes-available"]:
+                labels = {"added": "新增", "modified": "修改", "removed": "刪除"}
+                for change in freshness["changes"]:
+                    kind = change["kind"]
+                    label = f"{labels[kind]} ({kind})" if language == "zh" else kind
+                    print(f"  - {label}: {change['path']}")
+            else:
+                print(f"\n{freshness['changes-reason']}")
         if pending:
             print(t["pending"].format(n=pending))
         _print_outdated(layout.project_root)
@@ -119,5 +143,5 @@ def _print_outdated(project_root) -> None:
     if stale:
         shown = ", ".join(stale[:4]) + (f" (+{len(stale) - 4} more)" if len(stale) > 4 else "")
         sys.stderr.write(f"\nnote: this project's skills / rules are older than the installed docspec "
-                         f"({shown}). Run `docspec init --agents-md` to refresh them "
+                         f"({shown}). Run `artispec init --agents-md` to refresh them "
                          f"(project settings and content are kept).\n")

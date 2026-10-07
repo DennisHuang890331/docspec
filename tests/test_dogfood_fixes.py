@@ -50,7 +50,7 @@ def test_publish_writes_changelog(make_project, write_leaf, monkeypatch):
     render_cmd.run(["g"])
     _draft(home, "g")
     assert publish_cmd.run(["g", "--note", "首次發行"]) == 0
-    changelog = home.parent / "docs" / "g" / "changelog.md"
+    changelog = Layout(home).docs_changelog("g")
     assert changelog.is_file()
     text = changelog.read_text(encoding="utf-8")
     # 精瘦 markdown 表：表頭 + 一列（版本/日期/級別/說明）
@@ -71,16 +71,16 @@ def test_publish_semver_bump_levels(make_project, write_leaf, monkeypatch):
 
     # 內容不變、只驗版號 bump 算術 → 後續 publish 用 --allow-noop 跳過 no-op 守門（C2）
     assert publish_cmd.run(["g", "--note", "init"]) == 0          # 預設 patch、無前版 → 1.0.0
-    assert (archive / "v1.0.0.md").is_file()
+    assert Layout(home).version_snapshot("g", "1.0.0").is_file()
     assert publish_cmd.run(["g", "--level", "minor", "--note", "m", "--allow-noop"]) == 0
-    assert (archive / "v1.1.0.md").is_file()
+    assert Layout(home).version_snapshot("g", "1.1.0").is_file()
     assert publish_cmd.run(["g", "--level", "patch", "--note", "p", "--allow-noop"]) == 0
-    assert (archive / "v1.1.1.md").is_file()
+    assert Layout(home).version_snapshot("g", "1.1.1").is_file()
     assert publish_cmd.run(["g", "--level", "major", "--note", "M", "--allow-noop"]) == 0
-    assert (archive / "v2.0.0.md").is_file()
+    assert Layout(home).version_snapshot("g", "2.0.0").is_file()
 
     # changelog：四列、各標對的級別
-    text = (home.parent / "docs" / "g" / "changelog.md").read_text(encoding="utf-8")
+    text = (Layout(home).docs_changelog("g")).read_text(encoding="utf-8")
     rows = [ln for ln in text.splitlines() if ln.startswith("| ") and "---" not in ln]
     assert "| 版本 | 日期 | 級別 | 說明 |" in rows[0]
     cells = [r.split("|")[1].strip() for r in rows[1:]]
@@ -95,7 +95,7 @@ def test_publish_changelog_row_is_lean_one_line(make_project, write_leaf, monkey
     render_cmd.run(["g"])
     _draft(home, "g")
     assert publish_cmd.run(["g", "--note", "第一行\n第二行   多空白"]) == 0
-    text = (home.parent / "docs" / "g" / "changelog.md").read_text(encoding="utf-8")
+    text = (Layout(home).docs_changelog("g")).read_text(encoding="utf-8")
     row = [ln for ln in text.splitlines() if ln.startswith("| 1.0.0 |")][0]
     assert "\n" not in row
     assert "第一行 第二行 多空白" in row

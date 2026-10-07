@@ -1,7 +1,7 @@
-r"""docspec version — 一併印 程式版 + 安裝來源 + typst/pandoc 版 + 選配 TinyTeX 版。
+r"""artispec version — 一併印 程式版 + 安裝來源 + typst/pandoc 版 + 選配 TinyTeX 版。
 
 讓「程式↔引擎」版本與安裝來源錯位一眼可見（離線、唯讀）。
-`docspec --version` 與 `docspec version` 走同一份 report（cli.py 委派此處）。
+`artispec --version` 與 `artispec version` 走同一份 report（cli.py 委派此處）。
 安裝來源＝讀自身 dist 的 PEP 610 `direct_url.json`（git@commit／directory build snapshot）；
 typst＝現行預設 render 引擎（取代已退場為選配的 TinyTeX 主位）。
 """
@@ -21,7 +21,7 @@ def _tinytex_version() -> str:
     """tex.lock 記的 TinyTeX tag（setup 落地）；無 → 提示尚未 setup。"""
     lock = paths.read_tex_lock()
     if lock is None:
-        return "(not installed; run `docspec setup`)"
+        return "(not installed; run `artispec setup`)"
     tag = lock.get("tinytex_tag")
     return str(tag) if tag else "(no tag in tex.lock)"
 
@@ -29,7 +29,7 @@ def _tinytex_version() -> str:
 def _tool_version(exe: str | None) -> str:
     """一個 CLI 工具（typst/pandoc）自報版本首行的版本號（離線、本機）；缺/查不到 → 提示。"""
     if exe is None:
-        return "(not installed; run `docspec setup`)"
+        return "(not installed; run `artispec setup`)"
     try:
         out = subprocess.run([exe, "--version"], capture_output=True,
                              text=True, timeout=10)
@@ -67,7 +67,7 @@ def _install_source_line() -> str | None:
 
 def report() -> str:
     """版本對齊＋安裝來源報告（cli.py --version 與 version 子指令共用）。"""
-    lines = [f"docspec {__version__}"]
+    lines = [f"ArtiSpec {__version__}"]
     src = _install_source_line()
     if src is not None:
         lines.append(f"  {src}")
@@ -81,7 +81,7 @@ def report() -> str:
 
 def run(argv: list[str]) -> int:
     import argparse
-    parser = argparse.ArgumentParser(prog="docspec version", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec version", description=HELP)
     parser.parse_args(argv)  # no options; honors -h/--help (and rejects unknown args)
     print(report())
     return 0

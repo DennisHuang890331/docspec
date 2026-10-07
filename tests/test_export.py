@@ -14,6 +14,7 @@ import pytest
 from dspx.engine import paths
 from dspx.commands import export as export_cmd
 from dspx.engine.layout import Layout
+from dspx.reports import freeze
 
 _HAVE_PANDOC = export_cmd._pandoc_path() is not None
 # 受控 typst ＋ 受控字型（data_dir/fonts）皆備才跑真 PDF build（預設 Typst 軌）。
@@ -47,6 +48,7 @@ def _setup(make_project, body: str = _SNAP, *, version: str = "1.0.0", article: 
     snap = layout.docs_snapshot(article, version)
     snap.parent.mkdir(parents=True, exist_ok=True)
     snap.write_text(body, encoding="utf-8")
+    freeze.record(home, layout.project_root, snap)
     return home, layout
 
 
@@ -112,7 +114,7 @@ def test_export_degrades_when_fonts_missing(make_project, monkeypatch, capsys):
     assert export_cmd.run(["g", "--format", "pdf"]) == 1
     assert not layout.docs_export("g", "1.0.0", "pdf").is_file()
     err = capsys.readouterr().err
-    assert "fonts" in err and "docspec setup" in err
+    assert "fonts" in err and "artispec setup" in err
 
 
 def test_export_degrades_when_pandoc_missing(make_project, monkeypatch, capsys):
@@ -288,7 +290,7 @@ def test_export_latest_preview(make_project, monkeypatch):
     latest.write_text(_SNAP, encoding="utf-8")
     monkeypatch.chdir(home.parent)
     assert export_cmd.run(["g", "--format", "pdf", "--latest"]) == 0
-    assert layout.docs_export("g", "latest", "pdf").is_file()
+    assert layout.version_export("g", "latest", "pdf").is_file()
 
 
 # ── 圖片資產：export 把被引用的 assets/<file> copy 進 build dir（嵌圖才渲得出）──────
@@ -305,6 +307,11 @@ def _setup_with_asset(make_project, write_leaf):
     snap = layout.docs_snapshot("art", "1.0.0")
     snap.parent.mkdir(parents=True, exist_ok=True)
     snap.write_text("# 標題\n\n內文。\n\n![圖](assets/diagram.svg)\n", encoding="utf-8")
+    historical_assets = snap.parent / "assets"
+    historical_assets.mkdir()
+    (historical_assets / "diagram.svg").write_bytes((adir / "diagram.svg").read_bytes())
+    freeze.record(home, layout.project_root, snap)
+    freeze.record(home, layout.project_root, historical_assets / "diagram.svg")
     return home, layout
 
 

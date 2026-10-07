@@ -24,15 +24,15 @@ def bootstrap() -> tuple[Layout, dict]:
         home = find_planning_home()
     except LayoutError as exc:
         sys.stderr.write(
-            f"docspec: no docspec project found — {exc}\n"
-            "Run `docspec init` in the target directory to create one "
+            f"artispec: no docspec project found — {exc}\n"
+            "Run `artispec init` in the target directory to create one "
             "(config.yaml + corpus/ + skills).\n"
         )
         raise BootstrapError(1) from exc
     try:
         config = load_config(home)
     except ConfigError as exc:
-        sys.stderr.write(f"docspec: {exc}\n")
+        sys.stderr.write(f"artispec: {exc}\n")
         raise BootstrapError(1) from exc
     layout = Layout(home, config.get("docs_layout", "flat"))
     return layout, config
@@ -43,7 +43,7 @@ def load_engine_schema(config: dict) -> Schema:
     try:
         return load_schema(config.get("schema"))
     except SchemaError as exc:
-        sys.stderr.write(f"docspec: {exc}\n")
+        sys.stderr.write(f"artispec: {exc}\n")
         raise BootstrapError(1) from exc
 
 
@@ -52,5 +52,5 @@ def load_model(layout: Layout) -> list[Leaf]:
     try:
         return load_project(layout)
     except ModelError as exc:
-        sys.stderr.write(f"docspec: {exc}\n")
+        sys.stderr.write(f"artispec: {exc}\n")
         raise BootstrapError(1) from exc

@@ -84,13 +84,13 @@ def test_init_agents_md_block_preserves_user_content_and_updates_in_place(tmp_pa
     assert init_cmd.run(["--tool", "codex", "--agents-md"]) == 0
     text = agents_md.read_text(encoding="utf-8")
     assert text.startswith("# My project\n\nRun `make test` before committing.\n\n")
-    assert text.count(init_cmd._AGENTS_MD_BEGIN) == 1 and "docspec get" in text
+    assert text.count(init_cmd._AGENTS_MD_BEGIN) == 1 and "artispec get" in text
     # 區塊內手改會被覆寫回去；區塊外（前後）的使用者內容都保留；重跑不重複
-    agents_md.write_text(text.replace("docspec get", "STALE") + "\n## Footer\n", encoding="utf-8")
+    agents_md.write_text(text.replace("artispec get", "STALE") + "\n## Footer\n", encoding="utf-8")
     assert init_cmd.run(["--tool", "codex", "--agents-md"]) == 0
     text = agents_md.read_text(encoding="utf-8")
     assert text.count(init_cmd._AGENTS_MD_BEGIN) == 1
-    assert "STALE" not in text and "docspec get" in text
+    assert "STALE" not in text and "artispec get" in text
     assert text.startswith("# My project") and text.rstrip().endswith("## Footer")
 
 
@@ -118,14 +118,15 @@ def test_init_bad_tool(tmp_path, monkeypatch):
 
 def test_build_writing_guide_seeds_zh_naturalness():
     guide = init_cmd.build_writing_guide("zh-TW")
-    assert "docspec reference writing-zh" in guide
-    assert "動詞當家" in guide and "被字句" in guide and "禁報幕" in guide
-    assert "docspec reference writing-en" not in guide.split("## Project conventions")[1]
+    assert "artispec reference writing-zh" in guide
+    assert "動詞當家" in guide and "被字句" in guide and "省去空泛報幕" in guide
+    assert "適用範圍" in guide and "前置條件" in guide and "導覽保留" in guide
+    assert "artispec reference writing-en" not in guide.split("## Project conventions")[1]
 
 
 def test_build_writing_guide_seeds_en_naturalness():
     guide = init_cmd.build_writing_guide("en")
-    assert "docspec reference writing-en" in guide
+    assert "artispec reference writing-en" in guide
     assert "Verb-centric" in guide and "Active voice" in guide and "AI-ism" in guide
     assert "動詞當家" not in guide
 
@@ -146,7 +147,7 @@ def test_backbone_rule8_crossref_by_anchor_not_handtyped_number():
 
 def test_build_writing_guide_unknown_lang_keeps_placeholder():
     guide = init_cmd.build_writing_guide("fr")
-    assert "docspec ships no bundled reference for this language yet" in guide
+    assert "ArtiSpec ships no bundled reference for this language yet" in guide
     assert "動詞當家" not in guide and "Verb-centric" not in guide
 
 
@@ -158,7 +159,7 @@ def test_init_default_lang_seeds_zh(tmp_path, monkeypatch):
     assert init_cmd.run([]) == 0
     guide = (proj / "docspec" / "writing-guide.md").read_text(encoding="utf-8")
     assert "動詞當家" in guide
-    assert "docspec reference writing-zh" in guide
+    assert "artispec reference writing-zh" in guide
 
 
 def test_init_lang_en_seeds_en(tmp_path, monkeypatch):
@@ -168,7 +169,7 @@ def test_init_lang_en_seeds_en(tmp_path, monkeypatch):
     assert init_cmd.run(["--lang", "en"]) == 0
     guide = (proj / "docspec" / "writing-guide.md").read_text(encoding="utf-8")
     assert "Verb-centric" in guide
-    assert "docspec reference writing-en" in guide
+    assert "artispec reference writing-en" in guide
 
 
 def test_init_scaffolds_gitattributes_lf_pin(tmp_path, monkeypatch):
@@ -197,19 +198,19 @@ def test_init_agents_md_dispatch_rules_follow_project_language(tmp_path, monkeyp
     monkeypatch.chdir(zh)
     assert init_cmd.run(["--tool", "codex", "--agents-md", "--lang", "zh-TW"]) == 0
     text = (zh / "AGENTS.md").read_text(encoding="utf-8")
-    assert "## docspec 協作規範" in text and "docspec handover" in text
-    assert "docspec ruling add" in text and "docspec freeze" in text
+    assert "## ArtiSpec 協作規範" in text and "artispec handover" in text
+    assert "artispec ruling add" in text and "artispec freeze" in text
     assert "testplan sign" in text and "不用表格" not in text     # 個人偏好不進預設
     en = tmp_path / "en"
     en.mkdir()
     monkeypatch.chdir(en)
     assert init_cmd.run(["--tool", "codex", "--agents-md", "--lang", "en"]) == 0
     text = (en / "AGENTS.md").read_text(encoding="utf-8")
-    assert "## docspec collaboration rules" in text and "docspec ruling add" in text
+    assert "## ArtiSpec collaboration rules" in text and "artispec ruling add" in text
     # 既有專案：依 config.yaml 的語言，不看 --lang 預設值
     monkeypatch.chdir(zh)
     assert init_cmd.run(["--tool", "codex", "--agents-md"]) == 0
-    assert "## docspec 協作規範" in (zh / "AGENTS.md").read_text(encoding="utf-8")
+    assert "## ArtiSpec 協作規範" in (zh / "AGENTS.md").read_text(encoding="utf-8")
 
 
 def test_agents_md_names_the_language_and_the_restate_rule():
@@ -217,8 +218,8 @@ def test_agents_md_names_the_language_and_the_restate_rule():
     from dspx.commands.maintenance.init import agents_md_block
     zh = agents_md_block("zh-TW")
     assert "繁體中文（zh-TW）" in zh and "{lang_name}" not in zh
-    assert "docspec info add" in zh and "講得不清楚" in zh and "衝突" in zh
+    assert "artispec info add" in zh and "講得不清楚" in zh and "衝突" in zh
     assert "不算機械式工作" in zh and "不回報「全部完成」" in zh
     assert "简体中文" in agents_md_block("zh-CN")
     en = agents_md_block("en")
-    assert "English" in en and "docspec info add" in en and "never report" in en
+    assert "English" in en and "artispec info add" in en and "never report" in en

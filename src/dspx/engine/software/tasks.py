@@ -25,6 +25,7 @@ tasks.yaml（任務；完成欄位只由引擎寫入）
 
 from __future__ import annotations
 
+from dspx.engine import actors
 from dspx.engine.layout import Layout
 from dspx.engine.software import delta as dl
 from dspx.engine.software import io
@@ -33,9 +34,9 @@ from dspx.engine.software import specs as sp
 TEST_LEVELS = ("unit", "integration", "browser", "real-model", "e2e")
 TASK_STATUSES = ("not-started", "in-progress", "done", "done-waived", "needs-rerun")
 ENGINE_TASK_FIELDS = ("status", "completed-at", "evidence", "waived-by")
-TASK_FIELDS = ("id", "title", "implements", "files", "verify", "depends-on", "created-by",
+TASK_FIELDS = ("id", "title", "implements", "files", "verify", "depends-on", "created-by", "created-by-instance",
                *ENGINE_TASK_FIELDS)
-TEST_FIELDS = ("id", "location", "covers", "level", "written-by", "created-at", "note", "signed")
+TEST_FIELDS = ("id", "location", "covers", "level", "written-by", "written-by-instance", "created-at", "note", "signed")
 STATUS_LABEL = {"not-started": "未開始", "in-progress": "進行中", "done": "完成",
                 "done-waived": "完成（含豁免）", "needs-rerun": "需重跑證據",
                 "imported-done": "匯入時已完成（無證據）"}
@@ -130,7 +131,8 @@ def _next(items: list[dict], prefix: str = "") -> str:
 
 
 def add_test(tests: dict, *, location: str, covers: list[str], level: str, tool: str,
-             note: str | None, today: str) -> dict:
+             note: str | None, today: str, instance: str | None = None) -> dict:
+    actors.validate_instance(instance)
     if level not in TEST_LEVELS:
         raise io.SoftwareError(f"--level must be one of {', '.join(TEST_LEVELS)}")
     if not covers:
@@ -143,12 +145,14 @@ def add_test(tests: dict, *, location: str, covers: list[str], level: str, tool:
            "covers": covers, "level": level, "written-by": tool, "created-at": today}
     if note:
         rec["note"] = note
+    if instance is not None:
+        rec["written-by-instance"] = instance
     tests["tests"].append(rec)
     return rec
 
 
 def sign_tests(layout: Layout, ch: dict, test_ids: list[str], *, tool: str, now: str,
-               fingerprint) -> list[dict]:
+               fingerprint, instance: str | None = None) -> list[dict]:
     """測試角色簽收：記下測試檔目前的內容指紋。只能由撰寫者（或使用者）簽；檔案必須已存在。"""
     tests = ch["tests"].get("tests") or []
     chosen = [t for t in tests if not test_ids or str(t.get("id")) in test_ids]
@@ -157,37 +161,38 @@ def sign_tests(layout: Layout, ch: dict, test_ids: list[str], *, tool: str, now:
         raise io.SoftwareError(f"no planned test(s) {', '.join(sorted(missing))}")
     if not chosen:
         raise io.SoftwareError("nothing to sign: the change has no planned tests")
-    implementers = {t.get("created-by") for t in ch["tasks"].get("tasks") or []} - {None, "user"}
+    # Preflight authors and independence before modifying any chosen signoffs.
     for t in chosen:
-        if tool != "user" and tool != t.get("written-by"):
-            raise io.SoftwareError(f"test {t['id']} was written by {t.get('written-by')}; only its author "
-                                   f"(the test role) or the owner signs it off (you are \"{tool}\" — "
-                                   f"set DOCSPEC_AGENT to the test role's label)")
-        if tool in implementers and tool != "user":
-            raise io.SoftwareError(f"{tool} created implementation tasks in this change; the test role "
-                                   f"must be a different agent")
+        actors.require_author(t, tool, instance)
+    actors.require_independent(ch, tool, instance)
+    for t in chosen:
         fp = fingerprint(t["location"])
         if fp == "unknown-repo":
             raise io.SoftwareError(
                 f"test {t['id']}: repo \"{location_file(t['location'])[0]}\" is not registered — add it with "
-                f"`docspec code repo add <name> <path>` (writes docspec/software/config.yaml)")
+                f"`artispec code repo add <name> <path>` (writes docspec/software/config.yaml)")
         if fp == "missing":
             raise io.SoftwareError(f"test {t['id']}: {t['location']} does not exist yet — write it first")
         missing = name_missing(layout, t["location"])
         if missing:
             raise io.SoftwareError(
                 f"test {t['id']}: {location_file(t['location'])[1]} has no test named \"{missing}\" — "
-                f"fix the planned location (`docspec code testplan remove` then `testplan add`) or the test name")
+                f"fix the planned location (`artispec code testplan remove` then `testplan add`) or the test name")
         t["signed"] = {"by": tool, "at": now, "fingerprint": fp}
+        if instance is not None:
+            t["signed"]["by-instance"] = instance
         own = test_fingerprint(layout, t["location"])
         if own:
             t["signed"]["test-fingerprint"] = own
+        from dspx.engine.software.scope import test_scope
+        t["signed"]["scenario-fingerprint"] = test_scope(layout, ch, t)
     return chosen
 
 
 def add_task(tasks: dict, *, title: str, implements: list[str], files: list[str],
              methods: list[str], tests: list[str], allow_skips: bool, depends_on: list[str],
-             tool: str | None = None) -> dict:
+             tool: str | None = None, instance: str | None = None) -> dict:
+    actors.validate_instance(instance)
     if not title.strip():
         raise io.SoftwareError("task needs --title")
     for m in methods:
@@ -195,8 +200,6 @@ def add_task(tasks: dict, *, title: str, implements: list[str], files: list[str]
             raise io.SoftwareError(f"--verify \"{m}\" not in {sp.VERIFICATION_METHODS}")
     if not methods:
         raise io.SoftwareError("task needs --verify (test / demonstration / inspection / analysis)")
-    if "test" in methods and not tests:
-        raise io.SoftwareError("a task verified by test needs --tests (planned test ids, e.g. T1,T2)")
     rec = {"id": _next(tasks.setdefault("tasks", [])), "title": title.strip()}
     if implements:
         rec["implements"] = implements
@@ -212,6 +215,8 @@ def add_task(tasks: dict, *, title: str, implements: list[str], files: list[str]
         rec["depends-on"] = depends_on
     if tool:
         rec["created-by"] = tool
+        if instance is not None:
+            rec["created-by-instance"] = instance
     rec["status"] = "not-started"
     tasks["tasks"].append(rec)
     return rec
@@ -248,15 +253,13 @@ def set_task(ch: dict, task_id: str, changes: dict) -> dict:
             v["allow-skips"] = True
         else:
             v.pop("allow-skips", None)
-    if "test" in io.as_list(v.get("methods")) and not v.get("tests"):
-        raise io.SoftwareError(f"task {task_id}: a task verified by test needs tests (planned test ids)")
     return t
 
 
 def gaps(layout: Layout, ch: dict) -> dict:
     """還缺的連結：沒有任務實作的需求、沒有規劃測試的情境、還沒填驗證方法或檔案的任務。"""
     tasks = ch["tasks"].get("tasks") or []
-    changed_reqs, changed_scns = _changed_requirements(ch)
+    changed_reqs, changed_scns = _changed_requirements(ch, layout)
     implemented = {f"{sp.split_ref(x)[0]}/{sp.split_ref(x)[1]}" for t in tasks
                    for x in io.as_list(t.get("implements"))}
     covered = {c for t in ch["tests"].get("tests") or [] for c in io.as_list(t.get("covers"))}
@@ -268,24 +271,35 @@ def gaps(layout: Layout, ch: dict) -> dict:
             need_test.append(ref)
     return {"requirements-without-task": sorted(r for r in changed_reqs if r not in implemented),
             "scenarios-without-test": need_test,
+            "tasks-without-tests": [str(t["id"]) for t in tasks
+                                    if "test" in io.as_list((t.get("verify") or {}).get("methods"))
+                                    and not io.as_list((t.get("verify") or {}).get("tests"))],
+            "tests-without-task": [str(t["id"]) for t in ch["tests"].get("tests") or []
+                                   if not any(str(t["id"]) in io.as_list((x.get("verify") or {}).get("tests"))
+                                              for x in tasks)],
             "tasks-to-complete": [t for t in tasks if t.get("status") != "imported-done"
                                   and (not io.as_list((t.get("verify") or {}).get("methods"))
                                        or not io.as_list(t.get("files")))]}
 
 
-def add_objection(tests: dict, *, test_id: str, reason: str, tool: str, today: str) -> dict:
+def add_objection(tests: dict, *, test_id: str, reason: str, tool: str, today: str,
+                  instance: str | None = None) -> dict:
+    actors.validate_instance(instance)
     if not any(str(t.get("id")) == test_id for t in tests.get("tests") or []):
         raise io.SoftwareError(f"no planned test \"{test_id}\"")
     if not reason.strip():
         raise io.SoftwareError("an objection needs --reason")
     rec = {"id": _next(tests.setdefault("objections", []), "O"), "test": test_id, "by": tool,
            "reason": reason.strip(), "at": today, "resolution": "open"}
+    if instance is not None:
+        rec["by-instance"] = instance
     tests["objections"].append(rec)
     return rec
 
 
 def respond_objection(tests: dict, *, oid: str, resolution: str, response: str, tool: str,
-                      today: str) -> dict:
+                      today: str, instance: str | None = None) -> dict:
+    actors.validate_instance(instance)
     if resolution not in ("test-fixed", "rejected"):
         raise io.SoftwareError("--resolution must be test-fixed or rejected")
     if not response.strip():
@@ -294,18 +308,24 @@ def respond_objection(tests: dict, *, oid: str, resolution: str, response: str, 
         if str(o.get("id")) == oid:
             if o.get("resolution") != "open":
                 raise io.SoftwareError(f"objection {oid} is already {o.get('resolution')}")
-            if o.get("by") == tool and tool != "user":
+            test = next((t for t in tests.get("tests") or [] if str(t.get("id")) == str(o.get("test"))), None)
+            if test is None:
+                raise io.SoftwareError(f"objection {oid} refers to a missing planned test")
+            if actors.same_actor(o.get("by"), o.get("by-instance"), tool, instance) and tool != "user":
                 raise io.SoftwareError(f"objection {oid} was raised by {tool}; the test role (a "
                                        f"different agent) must answer it")
+            actors.require_author(test, tool, instance)
             o.update({"resolution": resolution, "response": response.strip(),
                       "responded-by": tool, "responded-at": today})
+            if instance is not None:
+                o["responded-by-instance"] = instance
             return o
     raise io.SoftwareError(f"no objection \"{oid}\"")
 
 
 # ── 引用檢查 ─────────────────────────────────────────────────────────────
 
-def _changed_requirements(ch: dict) -> tuple[set[str], set[str]]:
+def _changed_requirements(ch: dict, layout: Layout | None = None) -> tuple[set[str], set[str]]:
     """(新增或修改的需求 cap/R, 新增或修改的情境 cap/R/S)。移除的不算。"""
     reqs, scns = set(), set()
     for cap, cd in ch["deltas"].items():
@@ -316,6 +336,9 @@ def _changed_requirements(ch: dict) -> tuple[set[str], set[str]]:
                 scns |= {f"{cap}/{d.get('id')}/{s.get('id')}" for s in d.get("scenarios") or []}
             elif op in ("modify-requirement", "rename-requirement"):
                 reqs.add(f"{cap}/{d.get('ref')}")
+                if layout is not None and op == "modify-requirement" and {"statement", "verification"} & set(d):
+                    req = _requirement_after(layout, ch, f"{cap}/{d.get('ref')}") or {}
+                    scns |= {f"{cap}/{d.get('ref')}/{s.get('id')}" for s in req.get("scenarios") or []}
             elif op == "add-scenario":
                 reqs.add(f"{cap}/{d.get('ref')}")
                 scns.add(f"{cap}/{d.get('ref')}/{d.get('id')}")
@@ -329,29 +352,21 @@ def _requirement_after(layout: Layout, ch: dict, ref: str) -> dict | None:
     """這個 change 套用後的需求（新增的從差異取；否則現行規格，再疊上修改）。"""
     cap, rid, _ = sp.split_ref(ref)
     cd = ch["deltas"].get(cap)
-    if cd:
-        for d in cd.get("deltas") or []:
-            if d.get("op") == "add-requirement" and str(d.get("id")) == rid:
-                return d
-    req = sp.find_requirement(sp.load_spec(layout, cap), rid)
-    if req is None:
-        return None
-    out = dict(req)
-    for d in (cd or {}).get("deltas") or []:
-        if d.get("op") == "modify-requirement" and d.get("ref") == rid:
-            out.update({k: d[k] for k in ("title", "statement", "verification", "based-on") if k in d})
-    return out
+    current = sp.load_spec(layout, cap)
+    if not cd:
+        return sp.find_requirement(current, rid)
+    after, _conflicts, renames = dl.apply(current, cd)
+    renamed = renames.get(f"{cap}/{rid}", f"{cap}/{rid}")
+    return sp.find_requirement(after, renamed.split("/")[-1])
 
 
 def _scenario_exists(layout: Layout, ch: dict, ref: str) -> bool:
     cap, rid, sid = sp.split_ref(ref)
-    if ref in _changed_requirements(ch)[1]:
-        return True
-    req = sp.find_requirement(sp.load_spec(layout, cap), rid)
+    req = _requirement_after(layout, ch, f"{cap}/{rid}")
     return sp.find_scenario(req, sid) is not None
 
 
-def validate_tasks_and_tests(layout: Layout, ch: dict) -> tuple[list[str], list[str]]:
+def validate_tasks_and_tests(layout: Layout, ch: dict, *, strict: bool = True) -> tuple[list[str], list[str]]:
     errs: list[str] = []
     warns: list[str] = []
     where = f"software change {ch['id']}"
@@ -359,7 +374,8 @@ def validate_tasks_and_tests(layout: Layout, ch: dict) -> tuple[list[str], list[
     tasks = ch["tasks"].get("tasks") or []
     test_ids = {str(t.get("id")) for t in tests}
     task_ids = {str(t.get("id")) for t in tasks}
-    changed_reqs, changed_scns = _changed_requirements(ch)
+    changed_reqs, changed_scns = _changed_requirements(ch, layout)
+    pending = errs if strict else warns
 
     test_files: set[tuple[str, str]] = set()
     for t in tests:
@@ -367,11 +383,15 @@ def validate_tasks_and_tests(layout: Layout, ch: dict) -> tuple[list[str], list[
         for k in t:
             if k not in TEST_FIELDS:
                 errs.append(f"{tw}: unknown field \"{k}\"")
+        try:
+            actors.validate_instance(t.get("written-by-instance"))
+        except io.SoftwareError as exc:
+            errs.append(f"{tw}: {exc}")
         repo, path = location_file(t.get("location") or "")
         if not path:
             errs.append(f"{tw}: missing location")
         elif not repo_known(layout, repo):
-            errs.append(f"{tw}: repo \"{repo}\" is not registered — add it with `docspec code repo add <name> <path>`")
+            errs.append(f"{tw}: repo \"{repo}\" is not registered — add it with `artispec code repo add <name> <path>`")
         else:
             test_files.add((repo, path))
         for c in io.as_list(t.get("covers")):
@@ -385,10 +405,16 @@ def validate_tasks_and_tests(layout: Layout, ch: dict) -> tuple[list[str], list[
         for k in t:
             if k not in TASK_FIELDS:
                 errs.append(f"{tw}: unknown field \"{k}\"")
+        try:
+            actors.validate_instance(t.get("created-by-instance"))
+        except io.SoftwareError as exc:
+            errs.append(f"{tw}: {exc}")
         if t.get("status") not in TASK_STATUSES and t.get("status") != "imported-done":
             errs.append(f"{tw}: bad status \"{t.get('status')}\"")
         v = t.get("verify") or {}
         methods = io.as_list(v.get("methods"))
+        if "test" in methods and not io.as_list(v.get("tests")):
+            pending.append(f"{tw}: pending test planning — verify.tests has no planned tests")
         for x in io.as_list(v.get("tests")):
             if x not in test_ids:
                 errs.append(f"{tw}: verify.tests points to unplanned test \"{x}\"")
@@ -409,28 +435,49 @@ def validate_tasks_and_tests(layout: Layout, ch: dict) -> tuple[list[str], list[
                             f"not the implementer")
         if "test" in methods and not io.as_list(t.get("files")) and t.get("status") != "imported-done":
             warns.append(f"{tw}: declares no files, so later code changes will not send it back to "
-                         f"\"needs re-run\" (`docspec code task set … --files`)")
+                         f"\"needs re-run\" (`artispec code task set … --files`)")
         for dep in io.as_list(t.get("depends-on")):
             if dep not in task_ids:
                 errs.append(f"{tw}: depends-on unknown task \"{dep}\"")
     errs += _task_cycles(tasks, where)
 
-    for ref in sorted(changed_reqs):
+    for ref in sorted(changed_reqs | implemented):
         if ref not in implemented:
             errs.append(f"{where}: requirement {ref} is added or modified but no task implements it")
             continue
         req = _requirement_after(layout, ch, ref) or {}
         for m in io.as_list(req.get("verification")):
-            if m != "test" and m not in method_cover.get(ref, set()):
-                errs.append(f"{where}: requirement {ref} is verified by {m} but no implementing "
+            if m not in method_cover.get(ref, set()):
+                # A current owner waiver can replace the required verification
+                # method, but cannot manufacture scenario/test/task links.
+                from dspx.engine.software import evidence as ev
+                evs = ev.load_all(layout)
+                waived = any(
+                    ev.derive(layout, ch, t, ev.for_task(evs, ch["id"], t["id"]))[0] == "done-waived"
+                    for t in tasks if any(f"{sp.split_ref(x)[0]}/{sp.split_ref(x)[1]}" == ref
+                                          for x in io.as_list(t.get("implements"))))
+                if waived:
+                    continue
+                (pending if m == "test" else errs).append(f"{where}: requirement {ref} is verified by {m} but no implementing "
                             f"task verifies by {m}")
     covered = {c for t in tests for c in io.as_list(t.get("covers"))}
     for ref in sorted(changed_scns):
         cap, rid, _sid = sp.split_ref(ref)
         req = _requirement_after(layout, ch, f"{cap}/{rid}") or {}
         if "test" in io.as_list(req.get("verification")) and ref not in covered:
-            errs.append(f"{where}: scenario {ref} is added or modified but no planned test covers it "
-                        f"(the test role adds one with `docspec code testplan add`)")
+            pending.append(f"{where}: scenario {ref} is added or modified but no planned test covers it "
+                        f"(the test role adds one with `artispec code testplan add`)")
+    for test in tests:
+        for ref in io.as_list(test.get("covers")):
+            if ref not in changed_scns:
+                continue
+            cap, rid, _ = sp.split_ref(ref)
+            implementers = [t for t in tasks if any(
+                sp.split_ref(x)[:2] == (cap, rid) for x in io.as_list(t.get("implements")))]
+            if not any(str(test["id"]) in io.as_list((t.get("verify") or {}).get("tests"))
+                       for t in implementers):
+                pending.append(f"{where}: scenario {ref}: planned test {test['id']} has no implementing task link "
+                               f"(pending test planning: `artispec code task set … --tests`)")
     for o in ch["tests"].get("objections") or []:
         if o.get("resolution") == "open":
             warns.append(f"{where}: objection {o.get('id')} on test {o.get('test')} is open")
@@ -464,11 +511,13 @@ def render_md(layout: Layout, ch: dict) -> str:
     lines = ["## Test plan"]
     for t in ch["tests"].get("tests") or []:
         lines.append(f"- {t.get('id')} [{t.get('level')}] `{t.get('location')}` covers "
-                     f"{', '.join(io.as_list(t.get('covers')))} (by {t.get('written-by')})")
+                     f"{', '.join(io.as_list(t.get('covers')))} "
+                     f"(by {actors.label(t.get('written-by'), t.get('written-by-instance'))})")
     if not ch["tests"].get("tests"):
         lines.append("- (none yet)")
     for o in ch["tests"].get("objections") or []:
-        lines.append(f"- objection {o.get('id')} on {o.get('test')} by {o.get('by')}: {o.get('reason')} "
+        lines.append(f"- objection {o.get('id')} on {o.get('test')} "
+                     f"by {actors.label(o.get('by'), o.get('by-instance'))}: {o.get('reason')} "
                      f"→ {o.get('resolution')}" + (f": {o.get('response')}" if o.get("response") else ""))
     lines += ["", "## Tasks"]
     for t in ch["tasks"].get("tasks") or []:
@@ -478,6 +527,8 @@ def render_md(layout: Layout, ch: dict) -> str:
         extra = f"verify: {', '.join(io.as_list(v.get('methods')))}"
         if v.get("tests"):
             extra += f" ({', '.join(io.as_list(v.get('tests')))})"
+        elif "test" in io.as_list(v.get("methods")):
+            extra += " (pending test planning／待測試規劃)"
         lines.append(f"- [{box}] {t.get('id')}. {t.get('title')} — {STATUS_LABEL.get(st, st)}; {extra}")
         if t.get("implements"):
             lines.append(f"    - implements: {', '.join(io.as_list(t['implements']))}")

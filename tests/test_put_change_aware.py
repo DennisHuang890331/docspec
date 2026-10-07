@@ -252,9 +252,9 @@ def test_put_change_not_targeting_section_errors(
     assert "does not target" in capsys.readouterr().err
 
 
-# ── 4.3：get 預設 staging／--official 對照；abandon 後 official 零殘留（C-1）──
+# ── 4.3：get 預設 official／明確 --change；abandon 後 official 零殘留（C-1）──
 
-def test_get_default_staging_official_flag(make_project, write_leaf, monkeypatch, tmp_path, capsys):
+def test_get_default_official_explicit_change_and_official_alias(make_project, write_leaf, monkeypatch, tmp_path, capsys):
     home = _project(make_project, write_leaf)
     _render_baseline(home, monkeypatch)
     change_cmd.run(["new", "chg-x", "--publish", "advisory"])
@@ -262,9 +262,12 @@ def test_get_default_staging_official_flag(make_project, write_leaf, monkeypatch
     src = _concept_src(tmp_path, "c.yaml", "REVISED-IN-STAGING")
     assert put_cmd.run(["g/intro", "concept", src]) == 0
 
-    # 預設 → staging 版（所見即所編）
+    # 預設 → official；讀草稿必須明確選 change。
     capsys.readouterr()
     assert get_cmd.run(["g/intro", "concept"]) == 0
+    assert "REVISED-IN-STAGING" not in capsys.readouterr().out
+
+    assert get_cmd.run(["g/intro", "concept", "--change", "chg-x"]) == 0
     assert "REVISED-IN-STAGING" in capsys.readouterr().out
 
     # --official → 凍結基準（未含 staging 編輯）

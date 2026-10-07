@@ -5,7 +5,7 @@
 #   - requires is always [] (writing is a loop; inside the loop there are zero dependencies, always writable)
 #   - the real graph = the aperture read/write contract + the RelationKinds reference graph
 #
-# This file is the data-model authority (projected via `docspec guide`); early drafts live in openspec/explore-sessions/history/ (for tracing).
+# This file is the data-model authority (projected via `artispec guide`); early drafts live in openspec/explore-sessions/history/ (for tracing).
 name: section-driven
 version: 1
 description: >
@@ -50,52 +50,62 @@ workflow:
     New = drill into an empty tree; revise = re-drill the affected subtree; same flow. docs/<article>/_latest is the projected deliverable.
   skills:
     - id: develop
-      summary: Developmental editor. Think, then crystallize into concept/decisions/material via docspec put (a section EXISTS from its first put — there is no scaffold step); a superseded decision stays marked in its decisions.yaml, a whole obsolete section retires via docspec retire.
+      summary: Developmental editor. Think, then crystallize into concept/decisions/material via artispec put (a section EXISTS from its first put — there is no scaffold step); a superseded decision stays marked in its decisions.yaml, a whole obsolete section retires via artispec retire.
       steps:
-        - Read the forest map + roadmap first (docspec instructions develop <section>).
+        - Read the forest map + roadmap first (artispec instructions develop <section>).
         - >-
-          Name sections (created at their first `docspec put <section> concept`) with the chapter name
+          Organize each section by its task, audience and existing kind: how-to for operations,
+          reference for lookup, tutorial for learning, explain for reasons and trade-offs.
+          Reuse project writing conventions and recorded requirements; engineering-team defaults
+          do not override a deliverable's audience. Retain useful preconditions, results, scope,
+          navigation and limits without requiring a fixed argument chain or mandatory chapters.
+        - >-
+          Name sections (created at their first `artispec put <section> concept`) with the chapter name
           in the DELIVERABLE language — the section path is what a human sees (a Chinese document gets
           適用範圍, not an English slug). NEVER prefix a chapter number (1-適用範圍): ordering's only
           source of truth is the order field (concept / group.yaml) and the outline NUMBER is derived
           by render from order + tree position (concept.title carries the BARE name — no 6./11、
           prefix). A numbered name is a second, drifting source that every reorder would force a rename
-          to fix. Renames/moves are safe — they go through `docspec mv` (atomic: rewrites the
+          to fix. Renames/moves are safe — they go through `artispec mv` (atomic: rewrites the
           path-keyed prose markers + audit/roadmap targets, self-checks, rolls back on failure) — but
           don't create a numbered name that needs one. Applies to NEW sections; existing slug-named
-          trees stay legal (migrate them with `docspec tidy`, which renames to the delivery-language
+          trees stay legal (migrate them with `artispec tidy`, which renames to the delivery-language
           title via mv). To INSERT a section between order: 2 and order: 3, give it order: 2.5 (order
           is a number, not an integer) — render derives the outline number, so no sibling's order is
           touched; reserve integer re-spacing for a genuine large restructure.
         - >-
           Think BEFORE crystallizing — in your working context, not in a scratch file. Durable
-          discussion has ONE home: a change container's notes.md (open `docspec change new` the moment
+          cross-section discussion has ONE home: a change container's notes.md (open `artispec change new` the moment
           the work touches a normative ruling or spans sections — work that AUTHORS normative
           decisions runs inside a change, first authoring included: the document's initial decision
-          batch is a change and its notes.md is the human-decision record). Genuine throwaway
-          reasoning needs no file.
+          batch is a change). notes.md holds change rationale and references to existing governance
+          records, not another copy of the owner's words. Genuine throwaway reasoning needs no file.
         - >-
-          Per-decision human confirmation (three-role doctrine: the human is the only source of
-          decisions — you draft, record, compare and render; you never rule). Present each normative
-          decision to the human INDIVIDUALLY and put it only after the human confirms it — batch
-          nodding a group of decisions is not confirmation. At the moment of confirmation, record
-          the human's ruling (gist or verbatim words) into the governing change's notes.md — that
-          file is the durable record of WHAT the human decided, distinct from the crystallized
-          decision text (put --change stamps decided-in mechanically, so every decision traces to
-          its change). NEVER put a normative decision that has no human confirmation behind it.
+          Owner authority for each decision (three-role doctrine: the human is the only source of
+          decisions — you draft, record, compare and render; you never rule). Reuse each clear
+          choice and authorization the owner already supplied, citing its source; do not require
+          another confirmation or discard a clear choice because several choices were supplied
+          together. Ask only for missing choices that affect the design; read back unclear content
+          and wait for confirmation before recording it. Preserve the owner's original words in
+          project governance: use `artispec ruling add` for owner rulings and `artispec info add`
+          for supplied facts. Reference those records from notes.md rather than duplicating them.
+          Crystallized section decisions remain distinct from the original records (put --change
+          stamps decided-in mechanically, so every decision traces to its change). NEVER put a
+          normative decision that has no actual owner choice behind it. Additional notes are
+          advisory; they do not replace governance authority or add a completion condition.
           (Honest boundary: the engine cannot observe the conversation — this is doctrine enforced
-          by projection + notes.md/journal audit + human review, not a mechanical gate.)
+          by projection + governance references/journal audit + human review, not a mechanical gate.)
         - >-
           Value crystallization self-check: for every value you are about to write (a threshold,
           cap, cycle, tolerance), ask "will another section or document OBEY or RESTATE this?" —
           if yes it is a NORMATIVE VALUE and must be raised as a decision carrying the value in its
-          statement (with the human's per-decision confirmation), so a realizes edge can attach and
+          statement (with the owner's actual choice recorded), so a realizes edge can attach and
           staleness can propagate; prose and material only REFERENCE such a value, never act as its
           source of truth (a bare number in prose has no edge — the real corpus drifted silently on
           exactly this).
         - >-
           Crystallize via four-question triage → scope→concept / rulings→decisions / facts→material /
-          rejected→recorded; write each part with docspec put <section> <artifact> (the single write
+          rejected→recorded; write each part with artispec put <section> <artifact> (the single write
           gate — the first concept put creates the section and stamps id/order). The leaf contract is
           CONCEPT-REQUIRED, the rest ON-DEMAND: build decisions
           ONLY when this section owns a normative ruling of its own — no ruling ⇒ no decisions (never a
@@ -117,11 +127,11 @@ workflow:
         redraft → rewrite; stale-inherited/style/norm/drifted → align) — never an operator routing table.
       steps:
         - >-
-          Pick the mode first (docspec status / docspec change status): inside a change the target
+          Pick the mode first (artispec status / artispec change status): inside a change the target
           action decides (create/revise/redraft → rewrite, align/review → align); outside a change the
           staleness type decides (stale-own/stale-upstream/unwritten/redraft → rewrite, stale-inherited/
           stale-style/stale-norm/drifted → align). The engine routes; you do not read a who-picks-it-up
-          table. docspec instructions apply <section> projects the current mode + clear-with verb, the
+          table. artispec instructions apply <section> projects the current mode + clear-with verb, the
           writing principles, the verdict-verb whitelist, and the dispatch-exclusion list — anchor to it.
         - >-
           rewrite mode — render only stale-own / stale-upstream / not-yet-written sections (a
@@ -130,21 +140,26 @@ workflow:
           honor the brief as a hard contract, lead with the payload, and mark any missing fact/rationale
           [TBD] rather than fabricate it.
         - >-
+          Document errors and required sources determine whether document work is ready;
+          software_errors are reported separately and do not block apply or document freeze.
+          An aggregate check exit code can still be nonzero for software. Check coverage does
+          not establish semantic acceptance or delivery completion.
+        - >-
           align mode — route each check (deterministic → engine lint/check; judgment → a clean-context
           subagent); touch only docs/_latest, never the outline or decisions. Before an align edit,
-          docspec show <section> --impact previews which other documents the change ripples to.
+          artispec show <section> --impact previews which other documents the change ripples to.
         - >-
           Clear a staleness verdict with the matching verb — NEVER fabricate an edit (nor a
-          perturb-render-revert dance) to force a re-stamp. Prose changed → plain docspec render.
+          perturb-render-revert dance) to force a re-stamp. Prose changed → plain artispec render.
           stale-norm (an ancestor's active normative ruling changed) → re-check the prose
           sentence by sentence against the new ruling first: conforming with no change needed →
-          render --ack <section>; violating → rewrite (escalate via docspec stale).
+          render --ack <section>; violating → rewrite (escalate via artispec stale).
           stale-inherited / stale-style with prose legitimately unchanged → render --ack <section>
           (refused on stale-own/upstream). stale-own / stale-upstream where the source change is
           structural wiring / metadata ONLY (realizes/governed-by re-wiring, order changes,
           sources: path moves, decided-in corrections, title renumbering) →
           render --ack-own <section> --reason <text>; a content-bearing change (must_cover,
-          breadth, a decision statement) → docspec stale <section> (or docspec stale <article> for a whole re-projection) + rewrite mode, never ack-own.
+          breadth, a decision statement) → artispec stale <section> (or artispec stale <article> for a whole re-projection) + rewrite mode, never ack-own.
           Every verdict is journaled — give a real --reason; after an ack-own a factcheck
           follow-up is expected (you attested the prose still implements CHANGED source).
       transaction: render
@@ -157,35 +172,35 @@ workflow:
           that quantity is crystallized as a decision; when it is NOT, the finding recommends
           crystallization (raise it as a decision + attach realizes edges) as the structural fix —
           the human ratifies; you never restructure on your own.
-        - Audit the outline for MECE gaps/overlaps; detect deliverable-vs-source drift (docspec diff).
-        - Route findings via docspec audit raise (non-blocking).
+        - Audit the outline for MECE gaps/overlaps; detect deliverable-vs-source drift (artispec diff).
+        - Route findings via artispec audit raise (non-blocking).
       transaction: audit
     - id: publish
       summary: Release gate — the only irreversible boundary; gates green → freeze a read-only snapshot + bump version.
       steps:
         - Run only on the human's explicit trigger.
-        - check + lint + cleanliness all green → freeze the archive snapshot, write the semver changelog row.
+        - Document check errors, lint and cleanliness must pass → freeze the snapshot and write the semver changelog row; separately reported software_errors do not block document freeze, even when aggregate check exits nonzero.
       transaction: publish
     - id: release
       summary: Typesetting gate after publish — interactive layout of a frozen snapshot into a delivered PDF.
       steps:
-        - docspec export (snapshot → PDF, content byte-locked) → docspec proof (PDF → page PNGs).
+        - artispec export (snapshot → PDF, content byte-locked) → artispec proof (PDF → page PNGs).
         - You + the human read the pages; adjust the format layer via validated knobs first; re-export until right.
         - Content never moves; a layout problem fixable only by changing content → raise an audit finding upstream.
       transaction: export
   boundaries:
     - publish is the only irreversible boundary; the human always pulls the trigger.
     - release touches the format layer only (template-pack params), never content — content's one source is the frozen snapshot md (export byte-lock guards it); a layout problem fixable only by changing content → raise an audit finding upstream, the human re-edits → re-publishes → re-releases; the agent never self-fixes content.
-    - Completeness gates sit at advancement (docspec freeze), not at write time — half-formed work is free inside the loop, it just stays "developing" (status surfaces it; put never blocks on it).
+    - Completeness gates sit at advancement (artispec freeze), not at write time — half-formed work is free inside the loop, it just stays "developing" (status surfaces it; put never blocks on it).
     - Semantic judgment → audit (factcheck), never an engine gate (audit itself can hallucinate).
-    - Mechanical text edits are ENGINE transactions, never hand-typed occurrence-by-occurrence — a rename/move goes through `docspec mv` (atomic; rewrites the path-keyed prose markers + audit/roadmap targets, self-checks, rolls back on failure), punctuation width through `docspec edit --punct`, corpus hygiene / empty-shell + verbatim-brief + title-number cleanup through `docspec tidy`, a project-wide term substitution through `docspec edit --term` (prose-span only; identifiers/code/URLs byte-exact). Hand-editing these — or an ad-hoc find-replace script — is the drift/corruption class the real corpus died on (a 22-script replace run that poisoned `OCC_LIMIT_*` identifier codes); use the command or a script that calls it, never a blind sweep.
-    - Pin line endings at the repo level — a .gitattributes with `*.md` / `*.yaml` / `*.yml` as `text eol=lf` (docspec init scaffolds it for new projects; EXISTING projects should add it themselves). The engine normalizes CRLF when fingerprinting and writes LF, but the repo pin is the third defense layer against git autocrlf rewriting checkouts.
-    - corpus/_archive/ = retired sections (decision history): engine-invisible in active work (status/check/apply never see it); query with docspec retired, drill with docspec show <id>. It is history — never touch it in current work (unlocked, by convention, like OpenSpec's changes/archive).
-    - Work that touches a NORMATIVE ruling or spans sections runs inside a CHANGE (docspec change new … --publish advisory|release-bound) — a staging draft branch: edits land in changes/<id>/staging/, official corpus/docs stay byte-frozen, render --change previews the union view, and `docspec change status` DERIVES per-target acceptance. Open it mid-develop (the moment you realize you're superseding a decision / rippling across documents), not as an upfront ceremony; the enlistment line is "touches a ruling?", not section count. The human's one gate is `docspec change archive` (running it = acceptance; "reject" = keep editing until the derivation goes green; abandon a dead end with --abandon, official never moved). NEVER hand-check off a task and NEVER author a progress/status/checkbox file — completeness is always derived; "tasks" names the derived view only.
-    - Engine commands (docspec put/render/check/status/stale/normalize/tidy/mv/rename-term/change …) are the agent's internal machinery — run them autonomously, never ask the human "should I run docspec X?", never narrate command invocations. The human interface is intent-in / deliverable-out (they read docs/, not corpus/ or the engine). This is a runtime-conversation discipline the engine cannot observe — it is doctrine and reviewer vigilance, NOT a mechanical gate; the projection must not claim enforcement it does not have.
+    - Mechanical text edits are ENGINE transactions, never hand-typed occurrence-by-occurrence — a rename/move goes through `artispec mv` (atomic; rewrites the path-keyed prose markers + audit/roadmap targets, self-checks, rolls back on failure), punctuation width through `artispec edit --punct`, corpus hygiene / empty-shell + verbatim-brief + title-number cleanup through `artispec tidy`, a project-wide term substitution through `artispec edit --term` (prose-span only; identifiers/code/URLs byte-exact). Hand-editing these — or an ad-hoc find-replace script — is the drift/corruption class the real corpus died on (a 22-script replace run that poisoned `OCC_LIMIT_*` identifier codes); use the command or a script that calls it, never a blind sweep.
+    - Pin line endings at the repo level — a .gitattributes with `*.md` / `*.yaml` / `*.yml` as `text eol=lf` (artispec init scaffolds it for new projects; EXISTING projects should add it themselves). The engine normalizes CRLF when fingerprinting and writes LF, but the repo pin is the third defense layer against git autocrlf rewriting checkouts.
+    - corpus/_archive/ = retired sections (decision history): engine-invisible in active work (status/check/apply never see it); query with artispec retired, drill with artispec show <id>. It is history — never touch it in current work (unlocked, by convention, like OpenSpec's changes/archive).
+    - Work that touches a NORMATIVE ruling or spans sections runs inside a CHANGE (artispec change new … --publish advisory|release-bound) — a staging draft branch: edits land in changes/<id>/staging/, official corpus/docs stay byte-frozen, render --change previews the union view, and `artispec change status` DERIVES per-target acceptance. Open it mid-develop (the moment you realize you're superseding a decision / rippling across documents), not as an upfront ceremony; the enlistment line is "touches a ruling?", not section count. The human's one gate is `artispec change archive` (running it = acceptance; "reject" = keep editing until the derivation goes green; abandon a dead end with --abandon, official never moved). NEVER hand-check off a task and NEVER author a progress/status/checkbox file — completeness is always derived; "tasks" names the derived view only.
+    - Engine commands (artispec put/render/check/status/stale/normalize/tidy/mv/rename-term/change …) are the agent's internal machinery — run them autonomously, never ask the human "should I run artispec X?", never narrate command invocations. The human interface is intent-in / deliverable-out (they read docs/, not corpus/ or the engine). This is a runtime-conversation discipline the engine cannot observe — it is doctrine and reviewer vigilance, NOT a mechanical gate; the projection must not claim enforcement it does not have.
     - Contradictory inherited writing requirements converging on ONE section (a tree-parent brief vs a cross-tree governor brief, or two sibling governors) → STOP and surface both sources verbatim to the human; never pick a winner yourself (no precedence order is defined — it is a semantic call). check/lint back you up with a WARN when the aperture ancestor set supplies one brief field from two sources with divergent values, but the stop-and-ask is yours.
   # Migration onboarding: how an EXISTING project (pre-docspec freezeed versions + an existing
-  # version history) enters docspec. The recipe lives here and is projected by `docspec guide` —
+  # version history) enters docspec. The recipe lives here and is projected by `artispec guide` —
   # never restated in drifting prose (guide omits the block when a schema lacks this key).
   migration:
     summary: >-
@@ -195,24 +210,23 @@ workflow:
     steps:
       - >-
         Register the pre-docspec legacy versions into the freeze hash net:
-        docspec freeze register-legacy <dir> [--into <name>]. The engine moves them under
-        docs/archive/legacy/<name>/ (a source already inside an archive/ folder is registered
-        in place) and records their hashes in the `legacy:` table of .freeze.yaml — the same
+        artispec freeze register-legacy <dir> [--into <name>]. The engine moves them under
+        changes/_versions/_legacy/<name>/snapshot/ (an unregistered legacy source already inside
+        the old docs archive is registered in place) and records their hashes in the `legacy:` table of .freeze.yaml — the same
         tamper/deletion protection as published snapshots. Already-registered paths are refused
         as a whole batch, and there is no unregister (the frozen area is append-only;
         re-registering would launder a tampered hash).
       - >-
-        Pre-seed the existing revision history into the article's changelog file (flat layout:
-        docs/revision_history/<slug>.md; per-article: docs/<article>/changelog.md) so the
+        Pre-seed the existing revision history into changes/_versions/<article>/history.md so the
         pre-docspec lineage stays visible in one table — publish keeps the seeded rows and
         appends each new release below them.
       - >-
-        Seed the version chain on the FIRST publish: docspec freeze <article> --set-version
+        Seed the version chain on the FIRST publish: artispec freeze <article> --set-version
         <one step after the highest pre-docspec version> (e.g. history ended at 2.5.1 →
         --set-version 2.5.2). First publish only — once any version exists the flag is refused
         (it cannot rewrite history); later releases bump normally with --level.
 
-# Authoring authority — the writing rules `docspec instructions apply <section>` projects so the
+# Authoring authority — the writing rules `artispec instructions apply <section>` projects so the
 # redesigned apply skill can ANCHOR to them instead of restating them (iron law 2: rules live in the
 # schema and get projected, never duplicated in drifting skill prose). These are TECHNICAL / EXPOSITORY
 # defaults; the active writing-guide profile OVERRIDES them per genre (fiction relaxes zero-inference,
@@ -222,16 +236,16 @@ workflow:
 authoring:
   principles:
     - "Lead with the payload — every paragraph opens on the fact or decision; no preamble, no runway."
-    - "Inverted pyramid — the section's first sentence is its conclusion; detail descends from there."
-    - "Density over length — one idea per paragraph, 4–5 sentences max; active voice; no recaps of earlier sections, no previews of later ones."
-    - "Structure over prose — any data that is ≥3 items across ≥2 dimensions, and ALL rules / logic / state, goes in a table or list, never prose (obey the section's brief.layout). Structure suppresses flowery filler."
-    - "Honor the section's kind — reference = a lookup terminal (tables/definitions, no narrative arc), how-to = ordered task steps, tutorial = a learning walkthrough, explain = discursive prose; kind shapes form only, never adds content."
-    - "No scaffolding metadiscourse — never narrate this section's own brief (its scope / exclusions / verifiability / downstream-governance) nor, at document level, the document's own layout (a prose table of contents, 「先以…再以…最後…」, 各章環環相扣, 本規範把…整合成一份…). State the substance directly; the role shows THROUGH the content, it is never declared."
-    - "No cross-section references — you are blind to siblings, so ban 'as above' / 'the next section' / 'in summary' / 如前一節所述; you will hallucinate a neighbour you cannot see. Invoke a ruling owned elsewhere by the MECHANISM or RESPONSIBILITY it governs ('the safety board's veto'), NEVER a section number or id."
+    - "Task and audience first — use existing project conventions and explicit audience requirements before engineering-team defaults; state useful preconditions, actions, expected results, failure handling and limits from recorded sources."
+    - "Density over length — one idea per paragraph; active verbs and connected paragraphs; do not impose a fixed argument chain on task steps."
+    - "Choose readable form — steps for sequences, lists for parallel items, tables for comparisons or lookup, prose for explanations and trade-offs (honor brief.layout); do not force every rule into a table."
+    - "Honor kind — how-to = preconditions and ordered task steps with expected results, reference = fields/interfaces/limits for lookup, tutorial = learning steps, explain = reasons and trade-offs; kind shapes form, never adds facts or mandatory sections."
+    - "Useful scope and navigation are allowed when they help the reader act. Avoid empty introductions or reciting the brief; governance provenance and test diaries belong in source records. Keep support conditions and unverified limits that affect use; verification reports still name version/method/result/coverage."
+    - "Render independently — do not guess unseen sibling prose or invent neighbour content. Stable anchors to known concept ids may provide navigation; never hand-type drifting chapter numbers or rely on vague 'as above'. Invoke a realized ruling by its actual responsibility or mechanism."
     - "No metaphors / nicknames ('the brain', 'the gatekeeper', 'the front line') and no first-person colloquialism ('we', 'let's') — state responsibilities plainly."
     - "Images: embed only the assets in your aperture, with plain ![caption](assets/<file>); never invent an asset path, never hand-write a figure number ('Figure 3' — the backend numbers figures), never reference a figure in another section. A diagram is a drawio PNG authored by a delegated dspx-diagram subagent — never inline TikZ / {=latex} / mermaid."
     - "Cross-reference by anchor — write <!--@<target-concept-id>--><!--@--> inline where the §number belongs; render injects the live §N between the two invisible comments and re-derives it every render. NEVER hand-type a chapter number (it drifts on any reorder — the real corpus lost 94–107 cross-refs to exactly this). External-standard clause citations (ISO 13849-1 §4.2) stay literal — the anchor is for internal references only."
-    - "Punctuation width → docspec edit --punct (deterministic: half→full only where prose is CJK on both sides; code / identifiers / protocol tokens / URLs stay byte-exact). Write punctuation correctly as you compose, but NEVER run a hand-rolled full-text width sweep or a blind regex; lint V18 flags any residual and points back at edit --punct."
+    - "Punctuation width → artispec edit --punct (deterministic: half→full only where prose is CJK on both sides; code / identifiers / protocol tokens / URLs stay byte-exact). Write punctuation correctly as you compose, but NEVER run a hand-rolled full-text width sweep or a blind regex; lint V18 flags any residual and points back at edit --punct."
   zero_inference: >-
     A fact OR rationale absent from material / outline / decisions is written `[TBD]` and you move on —
     never fabricate it. Fabricating a number, a name, or a causal claim is the one unforgivable failure:
@@ -252,10 +266,10 @@ authoring:
       the verdict. (Honest boundary: the engine cannot observe the conversation — this is doctrine
       enforced by projection + journal audit + human review, not a mechanical gate.)
     whitelist:
-      - "prose changed → docspec render <article> (plain re-stamp)."
-      - "stale-inherited / stale-style / stale-norm, prose reviewed against the moved brief / ruling / doctrine and legitimately unchanged → docspec render <article> --ack <section> (refused if the section is actually stale-own / stale-upstream — that means its own source changed and the prose genuinely needs rewriting)."
-      - "stale-own / stale-upstream whose source change is STRUCTURAL WIRING / METADATA ONLY — a realizes / governed-by edge re-wired, an order change, a sources: path move, a decided-in correction, a title renumbering → docspec render <article> --ack-own <section> --reason <text>. This whitelist is EXHAUSTIVE; if the change is not on it, it is not an ack-own case. An ack-own attests the prose still implements CHANGED source, so a factcheck follow-up over the acked sections is expected (non-blocking)."
-      - "a content-bearing change (must_cover, breadth, or a decision statement moved) → the prose DOES need rewriting: escalate to rewrite mode via docspec stale <section> --reason (whole article: docspec stale <article> --reason). NEVER ack-own a content change."
+      - "prose changed → artispec render <article> (plain re-stamp)."
+      - "stale-inherited / stale-style / stale-norm, prose reviewed against the moved brief / ruling / doctrine and legitimately unchanged → artispec render <article> --ack <section> (refused if the section is actually stale-own / stale-upstream — that means its own source changed and the prose genuinely needs rewriting)."
+      - "stale-own / stale-upstream whose source change is STRUCTURAL WIRING / METADATA ONLY — a realizes / governed-by edge re-wired, an order change, a sources: path move, a decided-in correction, a title renumbering → artispec render <article> --ack-own <section> --reason <text>. This whitelist is EXHAUSTIVE; if the change is not on it, it is not an ack-own case. An ack-own attests the prose still implements CHANGED source, so a factcheck follow-up over the acked sections is expected (non-blocking)."
+      - "a content-bearing change (must_cover, breadth, or a decision statement moved) → the prose DOES need rewriting: escalate to rewrite mode via artispec stale <section> --reason (whole article: artispec stale <article> --reason). NEVER ack-own a content change."
     brief_envelope:
       - "brief audience / depth / layout / kind changed → review the existing prose, then ack-or-rewrite: --ack it if it still reads right under the new envelope, rewrite it if the new envelope demands different prose."
       - "brief breadth / must_cover / forbidden changed → rewrite (the coverage contract moved; re-render the leaf from its aperture) — this is never an ack case."
@@ -268,10 +282,10 @@ authoring:
       full-width" landed in a semantic subagent's brief). Only items the engine truly enforces say
       "→ the engine"; items it does not validate say "→ you, by hand".
     items:
-      - "Punctuation width (full / half-width) → NOT dispatched. Run docspec edit --punct (lint V18 flags any residual and points back at it). No subagent, no blind regex, no per-sentence hand-fixing, no audit finding."
-      - "Leaked scaffolding / placeholder leftovers ({#…} ids, [TBD] / [待補], a stray [!WARNING]) → docspec lint (blocking ERROR). Act on the findings; don't send a subagent hunting them."
-      - "Term identity / number drift → docspec lint (advisory WARN). The engine flags, it does not fix — YOU reconcile each by hand against the source; not a subagent's call."
-      - "Anchors / reference structure → docspec check. Deterministic resolution, engine-owned."
+      - "Punctuation width (full / half-width) → NOT dispatched. Run artispec edit --punct (lint V18 flags any residual and points back at it). No subagent, no blind regex, no per-sentence hand-fixing, no audit finding."
+      - "Leaked scaffolding / placeholder leftovers ({#…} ids, [TBD] / [待補], a stray [!WARNING]) → artispec lint (blocking ERROR). Act on the findings; don't send a subagent hunting them."
+      - "Term identity / number drift → artispec lint (advisory WARN). The engine flags, it does not fix — YOU reconcile each by hand against the source; not a subagent's call."
+      - "Anchors / reference structure → artispec check. Deterministic resolution, engine-owned."
       - "Banned openers / cross-section references (as above, 如前一節所述) → the engine does NOT validate these; YOU grep for them by hand. Still NOT dispatched — a one-line grep is your own job, and spawning a subagent for it is both waste and a mis-signal that it needs taste."
 
 # Universal filing rules (cross-skill; ONLY rules the engine actually enforces — so they're contract, not stance; guide projects them)
@@ -289,10 +303,10 @@ filing-rules:
     rule: "concept.governed-by must point only at a live concept.id of a real parent document — never a decision/history id, never a parallel sibling."
     enforced-by: check
   - id: crystallize-four-way
-    rule: "crystallized thinking distributes into exactly scope→concept / rulings→decisions / facts→material (via docspec put); rejected/superseded reasoning is recorded as a status:superseded decision that stays in decisions (never moved to a live-tree history); genuine throwaway is deleted. concept is required; decisions/material are on-demand (build only when the section owns rulings / has facts — never a fabricated empty container)."
+    rule: "crystallized thinking distributes into exactly scope→concept / rulings→decisions / facts→material (via artispec put); rejected/superseded reasoning is recorded as a status:superseded decision that stays in decisions (never moved to a live-tree history); genuine throwaway is deleted. concept is required; decisions/material are on-demand (build only when the section owns rulings / has facts — never a fabricated empty container)."
     enforced-by: put
   - id: retire-via-transaction
-    rule: "Retire a decision by marking it status: superseded/deprecated IN PLACE in its decisions.yaml (it stays addressable; view them with docspec show <article> --decisions --all-status, nothing is moved); retire a whole section with docspec retire; rename/move a section folder ONLY via docspec mv — never hand-move/delete; published archive/ is immutable (hash-netted by lint)."
+    rule: "Retire a decision by marking it status: superseded/deprecated IN PLACE in its decisions.yaml (it stays addressable; view them with artispec show <article> --decisions --all-status, nothing is moved); retire a whole section with artispec retire; rename/move a section folder ONLY via artispec mv — never hand-move/delete; published archive/ is immutable (hash-netted by lint)."
     enforced-by: retire / mv / lint
   - id: sibling-dependency-via-realizes
     rule: "A dependency on ANOTHER section's decision — sibling or cross-document — is declared as a structural edge: concept.realizes (list of decision ids). Never park an internal decision id in sources: (external provenance only) and never rely on a bare id mention in prose — staleness (stale-upstream) and impact only see structural edges."
@@ -329,7 +343,7 @@ project-files:
       canonical name, expand the abbreviation, may attach english on first use) / standard (external standard names → official
       spelling verbatim, do not translate) / protocol (protocol tokens → byte-exact, code formatting, do not translate). The
       aperture injects a **lean index** (canonical/bucket/code/aliases_forbidden); definition (a one-line canonical meaning) and
-      english are **drill-down fields** — returned on demand via `docspec show <id>` only, not injected (saves tokens), and the
+      english are **drill-down fields** — returned on demand via `artispec show <id>` only, not injected (saves tokens), and the
       agent writes per the definition (in its own words, don't clone; fidelity goes to factcheck, non-blocking). Plus lint Vg
       catches violations after the fact.
     reader: [apply, factcheck]         # both get the lean index injected; drill down for definition/english on demand via show <id>
@@ -360,7 +374,7 @@ project-files:
       engine/instructions, not by editing this file directly.
     fence: >
       Holds project knobs + forest-level metadata only. purpose = the overall goal of the whole forest (develop projects it into
-      the working context, visible via `docspec guide`); with multiple roots and no apex document, it is purpose's only home.
+      the working context, visible via `artispec guide`); with multiple roots and no apex document, it is purpose's only home.
       Writing doctrine → writing-guide.md; term identity → glossary.yaml.
   - id: roadmap
     file: corpus/<article>.roadmap.yaml (per-doc sibling sealed store) | docspec/roadmap.yaml (forest, cross-document); completion
@@ -373,10 +387,10 @@ project-files:
       note? / promoted-to(a change id — this entry has been promoted into engineering work; content moved with it, only this pointer
       remains, and the entry MUST carry nothing substantial beyond id/title/promoted-to). Completion leaves the file by exactly one of
       two routes: (a) promoted-to a change → the change-archive transaction prunes the entry (the archived dossier IS the completion
-      record); (b) small direct work, no change needed → `docspec roadmap done <id> --note "..."` moves it into roadmap-archive.yaml
+      record); (b) small direct work, no change needed → `artispec roadmap done <id> --note "..."` moves it into roadmap-archive.yaml
       (append-only {id, title, note, date}). per-doc (single-document owner) vs forest (cross-document, no single owner) split by
       target. Generated on demand (no file = no backlog).
-    reader: [develop]   # at start-of-work develop projects "this document's + the forest's backlog"; queryable any time via the `docspec roadmap` derived view
+    reader: [develop]   # at start-of-work develop projects "this document's + the forest's backlog"; queryable any time via the `artispec roadmap` derived view
     writer: [develop]   # develop records planned work (id/kind/title/what/target); completion routes via `roadmap done` or promotion, never a hand-edited status
     when: >
       develop looks at the backlog before starting work; records gap/task (target, optional depends-on). check (structure): rejects
@@ -398,7 +412,7 @@ project-files:
       promoted into engineering work; the finding collapses to id/face/severity/status/promoted-to, its full body moves with the
       promotion), log(append-only raised→responded trail)}. Stored at "the lowest level that can contain all sections touched": touches
       1 document → that doc-root; ≥ 2 → forest (criterion = number of distinct documents).
-    reader: [develop, factcheck]   # factcheck raises/queries, develop/human triages (docspec audit list/show); not injected via the aperture
+    reader: [develop, factcheck]   # factcheck raises/queries, develop/human triages (artispec audit list/show); not injected via the aperture
     writer: [factcheck]            # all via command (audit raise/resolve), append-only, validated on write; the agent does not hand-edit audit.yaml
     when: >
       factcheck `audit raise --target` (the sections touched); routed to doc/forest by number of distinct documents, marking sot-owner
@@ -436,12 +450,12 @@ project-files:
       A modification event container — the home for work that touches a NORMATIVE ruling or spans sections. STATE = LOCATION +
       DERIVATION, never a status field: changes/<id>/ = active, changes/_archive/<id>/ = accepted, changes/_abandoned/<id>/ = dropped;
       per-target acceptance is DERIVED on demand (never a stored task/checkbox). change.yaml = {id, title, why, created,
-      publish(advisory|release-bound, REQUIRED), seeds, targets, fork-hashes} and is ENGINE-OWNED (written only by `docspec change ...`,
+      publish(advisory|release-bound, REQUIRED), seeds, targets, fork-hashes} and is ENGINE-OWNED (written only by `artispec change ...`,
       hand-edits are check-flagged). Each target = {ref (concept.id | corpus path for create | file path | glossary term), origin
       (auto|manual), action}. action ∈ create|revise|align|redraft|review|retire|move is BOTH the acceptance criterion AND the apply
       mode (create/redraft → rewrite-from-blank; revise/align → patch-in-place). MODEL: staging is a draft branch — edits land in
       changes/<id>/staging/ (mirroring workspace-relative paths, copy-on-write per section folder / forest file / external file);
-      official corpus & docs stay byte-frozen until archive; `docspec render <article> --change <id>` renders the UNION view (staging over
+      official corpus & docs stay byte-frozen until archive; `artispec render <article> --change <id>` renders the UNION view (staging over
       official) into changes/<id>/preview/ (seeded from the official version so only truly-changed sections surface stale). ARCHIVE is
       the single human gate (running it = acceptance; no separate accept verb, "reject" = keep working until derivation goes green): it
       verifies every target derives done + a fork-drift guard, lands staged files into corpus, routes each affected deliverable (all
@@ -449,16 +463,16 @@ project-files:
       staging with zero rollback (official never moved). notes.md holds cross-section reasoning and MUST NEVER enter the blind-render
       aperture; it MUST NOT carry checkboxes or a status field (completeness is derived).
     reader: [develop]   # develop opens/works a change; instructions prepends the active-change context on any enlisted section
-    writer: [develop]   # only via `docspec change new/add-target/status/archive`; the agent never hand-edits change.yaml
+    writer: [develop]   # only via `artispec change new/add-target/status/archive`; the agent never hand-edits change.yaml
     when: >
-      Open a change AT THE MOMENT thinking reveals the work touches a ruling or spans sections (`docspec change new <id> --seed <dec-id>
+      Open a change AT THE MOMENT thinking reveals the work touches a ruling or spans sections (`artispec change new <id> --seed <dec-id>
       --publish advisory|release-bound`) — mid-develop, not an upfront ceremony; the enlistment line is "touches a normative ruling?",
       not section count (a typo/prose-polish proceeds with no change, so every decision's decided-in can reference a change id).
       Promote a roadmap entry with --from-roadmap (move, don't copy: the entry collapses to a promoted-to pointer). check validates the
       container: id unique across states, target ref dead-reference, action/publish/kind enum, promoted-to reverse-completeness.
     fence: >
       Holds the modification event only. Planned-but-not-started work → roadmap; discovered flaws → audit; term identity → glossary;
-      writing doctrine → writing-guide. Tasks/progress are DERIVED (docspec change status), never authored — "tasks" names no file.
+      writing doctrine → writing-guide. Tasks/progress are DERIVED (artispec change status), never authored — "tasks" names no file.
 
 # The engine recognizes only these reference arrows (closed set)
 relation-kinds: [realizes, governs, supersedes]
@@ -466,8 +480,8 @@ relation-kinds: [realizes, governs, supersedes]
 # ARTIFACTS = store category blocks (store-only-corpus). Each leaf lives as one record inside the
 # engine-owned single-file store `corpus/<article>.yaml`, holding three named category blocks:
 # concept (mapping) / decisions (list) / material (text). `generates:` is NOT a file the engine
-# writes per section on disk — it is the get/put EXPORT-FILENAME convention (`docspec get <section>
-# concept` still emits editable `concept.yaml` content for the agent to edit, `docspec put` validates
+# writes per section on disk — it is the get/put EXPORT-FILENAME convention (`artispec get <section>
+# concept` still emits editable `concept.yaml` content for the agent to edit, `artispec put` validates
 # and writes it back into the store block). The yaml skeleton is DERIVED from each artifact's field
 # schema (yaml_skeleton) — a single source, no hand-maintained templates/{concept,decisions,history}.yaml.
 # history is a store record category surfaced only in retirement archive packages. Only the .md artifacts
@@ -479,7 +493,7 @@ artifacts:
     description: The leaf section's governance and structural contract (one-line concept + writing envelope + source pointers + references).
     # Single source of truth = this schema: the fillable scaffold is DERIVED (yaml_skeleton from the field
     # contract below); there is no hand-maintained templates/concept.yaml to drift against. A fresh section's
-    # id/order are stamped by the first `docspec put <section> concept` (path-fingerprint id, sibling-count order).
+    # id/order are stamped by the first `artispec put <section> concept` (path-fingerprint id, sibling-count order).
     instruction: instructions/concept.md
     requires: []
     aperture:
@@ -566,14 +580,14 @@ artifacts:
     kind: yaml
     description: >
       A "lean index" of retirement records — NOT part of the live-tree leaf contract. It appears ONLY inside a
-      `corpus/_archive/<…>/` retirement package produced by the `docspec retire` transaction; a live leaf
+      `corpus/_archive/<…>/` retirement package produced by the `artispec retire` transaction; a live leaf
       directory never carries a history.yaml. (Dead DECISIONS are NOT relocated here — they stay in their owning
       decisions.yaml marked status: superseded/deprecated.) A retired SECTION's archived package holds one kind:section
       entry (id = that section's concept.id, with an archive link); the summary lives here (a one-line statement), the
       prose detail of "why it was abandoned" lives in the paired history.md (same id), and the detail of a whole-section
-      retirement = the archive folder itself. The agent queries via `docspec retired` (summary) / `docspec show <id>`
+      retirement = the archive folder itself. The agent queries via `artispec retired` (summary) / `artispec show <id>`
       (detail), and **never reads the raw files directly**. (store-only-corpus: history is a store record category;
-      a legacy scattered live-tree history.yaml is read only by the `docspec store migrate` bridge, never the live path.)
+      a legacy scattered live-tree history.yaml is read only by the `artispec store migrate` bridge, never the live path.)
     # scaffold DERIVED from the schema below (yaml_skeleton); no hand-maintained templates/history.yaml.
     instruction: instructions/history.md
     requires: []

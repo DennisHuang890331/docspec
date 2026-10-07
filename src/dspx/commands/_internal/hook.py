@@ -1,6 +1,6 @@
-"""docspec hook guard — agent 工具的 PreToolUse 守門（跨平台，邏輯在 Python）。
+"""artispec hook guard — agent 工具的 PreToolUse 守門（跨平台，邏輯在 Python）。
 
-各 agent 工具的 hook 設定成「動手前呼叫 `docspec hook guard`」即可，不必在設定檔裡寫
+各 agent 工具的 hook 設定成「動手前呼叫 `artispec hook guard`」即可，不必在設定檔裡寫
 各平台 shell（win/mac/linux 通用）。guard 從 stdin 讀工具呼叫 JSON：
   - Edit/Write：看 `tool_input.file_path`，落在 archive/ → 擋。
   - Bash/PowerShell：看 `tool_input.command`，若會**改到 / 刪到** archive/ 內檔案 → 擋
@@ -28,34 +28,38 @@ import sys
 from dspx.reports.freeze import is_frozen_path
 
 NAME = "hook"
-HELP = "agent-tool gatekeeper (internal; PreToolUse calls `docspec hook guard`)"
+HELP = "agent-tool gatekeeper (internal; PreToolUse calls `artispec hook guard`)"
 
 _BLOCK_MSG = (
-    "[docspec] Blocked: archive/ holds published frozen versions, never to be modified. "
-    "To update content, edit docs/<article>/_latest.md, then `docspec freeze` a new version."
+    "[docspec] Blocked: version snapshot/ and legacy docs archive/ hold frozen sources, never to be modified. "
+    "To update content, edit docs/<article>/_latest.md, then `artispec freeze` a new version."
 )
 
 _STORE_BLOCK_MSG = (
     "[docspec] Blocked: corpus/<article>.yaml is an engine-owned single-file store guarded by an "
     "integrity seal — a hand-edit corrupts it. Change a section through the engine: "
-    "`docspec get/put <section> <category>`. "
-    "(If you truly must edit externally, run `docspec store fsck --accept` afterwards.)"
+    "`artispec get/put <section> <category>`. "
+    "(If you truly must edit externally, run `artispec store fsck --accept` afterwards.)"
 )
 
 
 _GOV_BLOCK_MSG = (
     "[docspec] Blocked: docspec/governance/ holds engine-owned, sealed governance records "
     "(questions, rulings, information, decisions, roadmap, suspect flags, the handover note). "
-    "Change them only through docspec commands (`docspec question|ruling|info|decision|roadmap|handover|impact ...`).")
+    "Change them only through artispec commands (`artispec question|ruling|info|decision|roadmap|handover|impact ...`).")
 
 _SW_BLOCK_MSG = (
     "[docspec] Blocked: docspec/software/ holds engine-owned, sealed software records (capability "
-    "specs, change folders, tasks, test plans, evidence). Change them only through `docspec code ...`; "
+    "specs, change folders, tasks, test plans, evidence). Change them only through `artispec code ...`; "
     "task completion is written by the engine from evidence. (software/config.yaml is hand-editable.)")
 
 def _clean(token: str):
     from pathlib import Path
-    return Path(token.strip().strip("'\""))
+    import os
+    p = Path(token.strip().strip("'\""))
+    if not p.is_absolute():
+        p = Path(_CWD or os.getcwd()) / p
+    return p.resolve()
 
 
 def _is_governance_file(token: str) -> bool:
@@ -75,6 +79,16 @@ def _is_software_file(token: str) -> bool:
             return p.suffix == ".yaml" and parts[i + 2:] != ("config.yaml",)
         if parts[i] == "docspec" and parts[i + 1] == "baselines":
             return p.suffix == ".yaml"
+        if parts[i] == "docspec" and parts[i + 1] == "changes":
+            relative = parts[i + 2:]
+            if relative and relative[0] in ("_archive", "_abandoned"):
+                relative = relative[1:]
+            # Recognize engine-owned software filenames even before creation;
+            # document staging/preview remains editable under the shared parent.
+            if p.suffix == ".yaml" and len(relative) >= 2:
+                return ((len(relative) == 2 and relative[1] in
+                         ("proposal.yaml", "design.yaml", "tests.yaml", "tasks.yaml"))
+                        or relative[1] == "specs")
     return False
 
 
@@ -265,6 +279,8 @@ def _normalize(data: object) -> tuple[list[dict], bool]:
     if not isinstance(tool_input, dict):
         raise _Unparseable("tool_input is not an object")
     name = data.get("tool_name") or data.get("name")
+    if name in ("Read", "read_file"):
+        return [], False  # Explicit read tools do not mutate their file_path.
     patch = None
     if name == "apply_patch":
         patch = tool_input.get("input") or tool_input.get("patch") or tool_input.get("command")
@@ -405,7 +421,7 @@ def _postcheck_one(tool_input: dict) -> int:
         return 0
 
 
-_USAGE = ("Usage: docspec hook guard|check (reads tool JSON from stdin)\n"
+_USAGE = ("Usage: artispec hook guard|check (reads tool JSON from stdin)\n"
           "  guard  PreToolUse freeze guard — blocks edits under archive/ (exit 2 = block)\n"
           "  check  PostToolUse completeness reminder for corpus/*.yaml (best-effort)\n")
 

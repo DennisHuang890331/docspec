@@ -1,4 +1,4 @@
-"""docspec normalize <article> — 對交付物散文面做確定性半形→全形標點正規化。
+"""artispec normalize <article> — 對交付物散文面做確定性半形→全形標點正規化。
 
 確定性機械變換（封閉映射表＋左鄰嚴格 CJK／右鄰 CJK-或-行尾條件；code／圖 path／URL／
 裸識別碼 byte-exact 跳過）。**帳本自持**（D4）：寫回後直接更新各觸及節 prose 指紋、
@@ -30,15 +30,15 @@ def _update_ledger_prose(layout, article: str, touched: set[str], new_text: str)
     """帳本自持（D4）：把觸及節的 prose 指紋更新為新值，own/anc/deps/norm/style 原樣保留。
 
     僅在帳本為現行版本時更新——v1／壞帳本不動（避免靜默遷移／吸收 stale 信號），改由警告
-    導向 `docspec render --rebaseline`。帳本無該節記錄（未撰寫）→ 不寫。"""
+    導向 `artispec render --rebaseline`。帳本無該節記錄（未撰寫）→ 不寫。"""
     version = read_ledger_version(layout, article)
     if version is None:
         return                                  # 無帳本（未 render）→ 無指紋可維護
     if version != LEDGER_FINGERPRINT_VERSION:
         sys.stderr.write(
-            f"docspec: ⚠ ledger of \"{article}\" is fingerprint v{version} (not current) — "
-            "prose fingerprints were NOT updated; `docspec diff` may show ✎drift until you run "
-            f"`docspec render {article} --rebaseline`.\n")
+            f"artispec: ⚠ ledger of \"{article}\" is fingerprint v{version} (not current) — "
+            "prose fingerprints were NOT updated; `artispec diff` may show ✎drift until you run "
+            f"`artispec render {article} --rebaseline`.\n")
         return
     ledger = read_ledger(layout, article)
     if not ledger:
@@ -57,7 +57,7 @@ def _update_ledger_prose(layout, article: str, touched: set[str], new_text: str)
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec normalize", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec normalize", description=HELP)
     parser.add_argument("article", help="name of the article to normalize")
     parser.add_argument(
         "--dry-run", action="store_true", dest="dry_run",
@@ -73,13 +73,13 @@ def run(argv: list[str]) -> int:
         return exc.exit_code
 
     if not any(lf.article == args.article for lf in leaves):
-        sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n")
+        sys.stderr.write(f"artispec: no leaf sections found for article \"{args.article}\"\n")
         return 1
 
     latest = layout.docs_latest(args.article)
     if not latest.is_file():
         sys.stderr.write(
-            f"docspec: deliverable {latest} does not exist — run `docspec render {args.article}` first.\n")
+            f"artispec: deliverable {latest} does not exist — run `artispec render {args.article}` first.\n")
         return 1
 
     text = latest.read_text(encoding="utf-8")

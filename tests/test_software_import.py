@@ -215,7 +215,13 @@ def test_task_set_fills_links_for_imported_tasks(proj, capsys):
                          "--verify", "inspection"]) == 0
     t = chg.load_change(proj, "dataset-library")["tasks"]["tasks"][1]
     assert t["implements"] == ["task-entry-page/R1"] and t["verify"] == {"methods": ["inspection"]}
-    assert code_cmd.run(["task", "set", "dataset-library", "2", "--verify", "test"]) == 1   # 缺 --tests
+    assert code_cmd.run(["task", "set", "dataset-library", "2", "--verify", "test"]) == 0
+    from dspx.engine.software import evidence as ev
+    current = next(t for t in ev.explain(proj, "dataset-library") if t["task"] == "2")
+    assert current["status"] == "not-started" and "planning" in current["why"]
+    assert code_cmd.run(["evidence", "run", "dataset-library", "2"]) == 1
+    errors, _warnings = chg.validate_change(proj, chg.load_change(proj, "dataset-library"), strict=True)
+    assert any("planning" in error or "no planned test" in error for error in errors)
 
 
 def test_refuses_to_import_twice_and_dry_run_writes_nothing(proj, capsys):

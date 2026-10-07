@@ -33,11 +33,12 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from dspx.engine import governance as gv
+from dspx.engine import actors, governance as gv
 from dspx.engine.layout import Layout
 from dspx.engine.software import changes as chg
 from dspx.engine.software import io
 from dspx.engine.software import tasks as tk
+from dspx.engine.software import scope
 
 EVIDENCE_TYPES = ("test-run", "inspection", "demonstration", "analysis", "acceptance", "waiver")
 _SATISFIES = {"test": ("test-run",), "inspection": ("inspection", "acceptance"),
@@ -71,7 +72,9 @@ def next_id(layout: Layout, tool: str) -> str:
 
 
 def _now() -> str:
-    return datetime.datetime.now().replace(microsecond=0).isoformat()
+    # Sequential attempts from different role labels can share the same second
+    # and have independent E-id counters; preserve actual creation ordering.
+    return datetime.datetime.now().astimezone().isoformat(timespec="microseconds")
 
 
 def _write(layout: Layout, rec: dict) -> dict:
@@ -154,17 +157,20 @@ def _short_reason(reason: str) -> str:
 def derive(layout: Layout, ch: dict, task: dict, evs: list[dict]) -> tuple[str, list[str], str]:
     """回 (狀態, 支持完成的證據 id, 說明)。evs＝這個任務的證據（舊到新）。"""
     waivers = [e for e in evs if e.get("type") == "waiver"]
+    waiver_errors = []
     if waivers:
         w = waivers[-1]
+        waiver_errors = waiver_problems(layout, ch, task, w)
+    if waivers and not waiver_errors:
         return "done-waived", [w["id"]], (f"waived by 「{w.get('ruling-quote')}」({w.get('ruling')})"
                                           if w.get("ruling-quote") else f"waived by {w.get('ruling')}")
     methods = io.as_list((task.get("verify") or {}).get("methods"))
+    if "test" in methods and not io.as_list((task.get("verify") or {}).get("tests")):
+        return "not-started", [], "pending test planning／待測試規劃: link planned tests with `artispec code task set … --tests`"
     keys = watched_files(ch, task)
     support, missing, stale, failing = [], [], [], []
     for m in methods:
         cands = [e for e in evs if e.get("type") in _SATISFIES.get(m, ())]
-        if m == "test":
-            cands = [e for e in cands if _covers_tests(e, task)]
         if not cands:
             missing.append(m)
             continue
@@ -174,9 +180,21 @@ def derive(layout: Layout, ch: dict, task: dict, evs: list[dict]) -> tuple[str, 
             if m == "test" and _SIGNOFF_RE.search(latest.get("reason") or ""):
                 wanted = set(io.as_list((task.get("verify") or {}).get("tests")))
                 planned = [t for t in ch["tests"].get("tests") or [] if str(t.get("id")) in wanted]
-                if not signoff_problems(layout, planned):
+                if not signoff_problems(layout, planned, ch):
                     failing[-1] += " — the tests have been signed off again since; rerun the evidence"
             continue
+        if m == "test" and not _covers_tests(latest, task):
+            failing.append(f"test ({latest['id']}: latest attempt did not run all planned tests)")
+            continue
+        scope_error = scope_problem(layout, ch, task, latest)
+        if scope_error:
+            stale.append(f"{m} ({latest['id']}; {scope_error})")
+            continue
+        if m == "test":
+            problems = signoff_problems(layout, _planned(ch, task), ch)
+            if problems:
+                stale.append(f"test ({latest['id']}; {'; '.join(problems)})")
+                continue
         changed = stale_files(layout, latest, keys)
         if changed:
             stale.append(f"{m} ({latest['id']}; changed: {', '.join(changed)})")
@@ -185,23 +203,74 @@ def derive(layout: Layout, ch: dict, task: dict, evs: list[dict]) -> tuple[str, 
     if methods and not missing and not stale and not failing:
         return "done", support, "all verification methods have fresh passing evidence"
     if stale:
-        return "needs-rerun", support, "evidence is stale: " + "; ".join(stale)
+        parts = ["evidence is stale: " + "; ".join(stale)]
+        if failing:
+            parts.append("latest failed: " + "; ".join(failing))
+        parts.extend(waiver_errors)
+        return "needs-rerun", support, "; ".join(parts)
     if evs:
         parts = []
         if failing:
             parts.append("latest failed: " + "; ".join(failing))
         if missing:
             parts.append("no evidence yet for: " + ", ".join(missing))
+        parts.extend(waiver_errors)
         return "in-progress", support, "; ".join(parts)
     if task.get("status") == "imported-done":
         return "imported-done", [], "completed before import (no evidence)"
     return "not-started", [], "no evidence yet"
 
 
+def scope_problem(layout: Layout, ch: dict, task: dict, rec: dict) -> str | None:
+    if not rec.get("scope"):
+        return "legacy evidence has no verification scope; rerun verification／舊證據未記錄驗證範圍，需補驗證"
+    current = scope.task_scope(layout, ch, task)
+    if rec["scope"] != current:
+        details = scope.differences(rec["scope"], current)
+        reason = "verification scope changed; review test sign-off and rerun evidence"
+        return reason + (": " + "; ".join(details) if details else "")
+    return None
+
+
+def waiver_problems(layout: Layout, ch: dict, task: dict, rec: dict) -> list[str]:
+    gov = gv.load_governance(layout) if gv.has_governance(layout) else gv.Governance([], [], [], [])
+    rid = gv.strip_ns(str(rec.get("ruling") or ""))
+    ruling = next((r for r in gov.rulings if str(r.get("id")) == rid), None)
+    status = gv.ruling_effective_status(ruling, gov) if ruling else "missing"
+    out = [] if status == "effective" else [f"waiver {rec['id']}: ruling {rid} is {status}"]
+    problem = scope_problem(layout, ch, task, rec)
+    if problem:
+        out.append(f"waiver {rec['id']}: {problem}")
+    if stale_files(layout, rec, watched_files(ch, task)):
+        out.append(f"waiver {rec['id']}: declared files changed; request a current waiver")
+    return out
+
+
+def acceptance_snapshot(layout: Layout, ch: dict, task: dict) -> tuple[dict, dict]:
+    contract, related = scope.acceptance_scope(layout, ch, task)
+    keys = sorted({key for t in related for key in watched_files(ch, t)})
+    return contract, snapshot(layout, keys)
+
+
+def current_acceptance(layout: Layout, ch: dict, task: dict, rec: dict) -> bool:
+    contract, files = acceptance_snapshot(layout, ch, task)
+    return (rec.get("type") == "acceptance" and rec.get("result") == "pass"
+            and rec.get("acceptance-scope") == contract and rec.get("acceptance-files") == files)
+
+
 def refresh(layout: Layout, cid: str, evs: list[dict] | None = None) -> list[tuple[str, str, str]]:
     """重新推導這個 change 每個任務的狀態並寫回 tasks.yaml（只有變了才寫）。回 [(任務, 舊, 新)]。"""
     ch = chg.load_change(layout, cid)
     evs = load_all(layout) if evs is None else evs
+    changed = derive_task_fields(layout, ch, evs)
+    if changed:
+        chg.write_part(layout, cid, "tasks", ch["tasks"])
+    return changed
+
+
+def derive_task_fields(layout: Layout, ch: dict, evs: list[dict]) -> list[tuple[str, str, str]]:
+    """Update only the supplied in-memory task records using the existing judgment."""
+    cid = ch["id"]
     changed = []
     for t in ch["tasks"].get("tasks") or []:
         mine = for_task(evs, cid, t["id"])
@@ -218,9 +287,22 @@ def refresh(layout: Layout, cid: str, evs: list[dict] | None = None) -> list[tup
                 t.pop(k, None)
             t.update(new_fields)
             changed.append((str(t["id"]), old, status))
-    if changed:
-        chg.write_part(layout, cid, "tasks", ch["tasks"])
     return changed
+
+
+def signoff_view(layout: Layout, ch: dict) -> list[dict]:
+    """Read-only per-test signoff result shared by list and work summary."""
+    rows = []
+    for test in ch["tests"].get("tests") or []:
+        try:
+            problems = signoff_problems(layout, [test], ch)
+            unsigned = test.get("signed") is None or test.get("signed") == {}
+            status = "unsigned" if unsigned else "needs-review" if problems else "current"
+        except (OSError, UnicodeError, io.SoftwareError) as exc:
+            problems = [f"cannot read sign-off inputs: {exc}"]
+            status = "unknown"
+        rows.append({"test": test["id"], "status": status, "problems": problems})
+    return rows
 
 
 def explain(layout: Layout, cid: str) -> list[dict]:
@@ -301,26 +383,71 @@ def test_file_key(location: str) -> str:
     return f"{repo}:{path}"
 
 
-def signoff_problems(layout: Layout, planned: list[dict]) -> list[str]:
+def signoff_problems(layout: Layout, planned: list[dict], ch: dict | None = None) -> list[str]:
     """測試角色簽收（A3）：規劃測試必須已簽收，且內容和簽收時相同。
 
     新的簽收比對「這個測試＋檔案裡共用的部分」（test-fingerprint），同檔別的測試變動不影響；
     舊的簽收沒有這個欄位，照舊比對整個檔案。"""
     out = []
     for t in planned:
-        signed = t.get("signed") or {}
+        signed = {} if t.get("signed") is None else t["signed"]
         key = test_file_key(t["location"])
+        if not isinstance(signed, dict):
+            out.append(f"test {t['id']}: invalid sign-off record; expected a mapping, not {type(signed).__name__}")
+            continue
+        if signed and (t.get("written-by-instance") is not None or signed.get("by-instance") is not None):
+            try:
+                actors.validate_instance(signed.get("by-instance"))
+                actors.require_author(t, signed.get("by"), signed.get("by-instance"))
+                if ch is not None:
+                    actors.require_independent(ch, signed.get("by"), signed.get("by-instance"))
+            except io.SoftwareError as exc:
+                out.append(f"test {t['id']}: invalid sign-off author: {exc}; the test role must review and sign again")
+                continue
         if not signed:
             out.append(f"test {t['id']} has not been signed off by the test role "
-                       f"(`docspec code testplan sign`)")
+                       f"(`artispec code testplan sign`)")
         elif (signed.get("test-fingerprint") != tk.test_fingerprint(layout, t["location"])
               if signed.get("test-fingerprint") else signed.get("fingerprint") != file_hash(layout, key)):
             out.append(f"test {t['id']} ({key}) changed after the test role signed it off — only the "
                        f"test role changes tests; it re-signs after reviewing the change")
+        elif not signed.get("scenario-fingerprint"):
+            out.append(f"test {t['id']}: legacy sign-off has no scenario fingerprint; the test role must review and sign again")
+        elif ch is not None and signed["scenario-fingerprint"] != scope.test_scope(layout, ch, t):
+            out.append(f"test {t['id']}: scenario or planned location changed after sign-off; the test role must review and sign again")
     return out
 
 
 _ENV_TOKEN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
+_COMMAND_WORD = re.compile(r'''(?:[^\s'"\\]|\\.|'[^']*'|"(?:\\.|[^"\\])*")+''')
+_WINDOWS_WORD = re.compile(
+    r'''^(?:(?:--?)?[A-Za-z_][A-Za-z0-9_-]*=)?["']?'''
+    r'''(?:[A-Za-z]:\\|\\\\|(?:\.{1,2}|[\w.-]+)\\(?=\S))''')
+
+
+def _command_words(raw: str) -> list[str]:
+    """Keep Windows path words literal, while other arguments keep POSIX quoting.
+
+    Parsing words independently avoids disabling escaping for the entire command
+    just because its executable uses backslashes. Single-quoted path contents
+    already remain literal in shlex and must not be escaped a second time.
+    """
+    tokens, end = [], 0
+    for match in _COMMAND_WORD.finditer(raw):
+        if raw[end:match.start()].strip():
+            raise ValueError("unmatched quote or trailing escape")
+        word, end = match.group(), match.end()
+        if _WINDOWS_WORD.match(word):
+            quote, protected = None, []
+            for char in word:
+                if char in "\"'" and (quote is None or char == quote):
+                    quote = None if quote else char
+                protected.append("\\\\" if char == "\\" and quote != "'" else char)
+            word = "".join(protected)
+        tokens.extend(shlex.split(word))
+    if raw[end:].strip():
+        raise ValueError("unmatched quote or trailing escape")
+    return tokens
 
 
 def _split_command(repo: str, cfg: dict) -> tuple[dict, list[str]]:
@@ -330,13 +457,20 @@ def _split_command(repo: str, cfg: dict) -> tuple[dict, list[str]]:
         raise io.SoftwareError(
             f"repo \"{repo}\": test-command {raw!r} contains a placeholder; write only the runner "
             f"(e.g. \"python -m pytest -q\") — the engine appends the planned test locations itself")
-    tokens = shlex.split(raw)
+    try:
+        tokens = _command_words(raw)
+    except ValueError as exc:
+        raise io.SoftwareError(f'repo "{repo}": invalid test-command quoting: {exc}') from exc
     env = {}
     while tokens and _ENV_TOKEN.match(tokens[0]):
         name, value = tokens.pop(0).split("=", 1)
         env[name] = value
     if not tokens:
         raise io.SoftwareError(f"repo \"{repo}\": test-command {raw!r} has no command to run")
+    if ("\\" in tokens[0] and not Path(tokens[0]).is_file()
+            and not re.search(r"\.(exe|cmd|bat|com)$", tokens[0], re.I)
+            and len(tokens) > 1 and re.search(r"\.(exe|cmd|bat|com)$", tokens[1], re.I)):
+        raise io.SoftwareError(f'repo "{repo}": executable path may contain spaces; wrap the full path in double quotes')
     return env, tokens
 
 
@@ -409,10 +543,11 @@ def run_tests(layout: Layout, cid: str, task_id: str, *, tool: str, timeout: int
                                f"split the task per repo")
     repo = repos_used.pop()
     if not tk.repo_known(layout, repo):
-        raise io.SoftwareError(f"repo \"{repo}\" is not registered — add it with `docspec code repo add <name> <path>`")
+        raise io.SoftwareError(f"repo \"{repo}\" is not registered — add it with `artispec code repo add <name> <path>`")
     cwd = tk.repo_root(layout, repo)
     keys = watched_files(ch, task)
     files_before = snapshot(layout, keys)
+    scope_before = scope.task_scope(layout, ch, task)
     with tempfile.TemporaryDirectory() as tmp:
         junit = Path(tmp) / "junit.xml"
         argv = build_command(layout, repo, [t["location"] for t in planned], junit)
@@ -421,11 +556,15 @@ def run_tests(layout: Layout, cid: str, task_id: str, *, tool: str, timeout: int
             proc = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, timeout=timeout,
                                   env=command_env(layout, repo))
             exit_code, output = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
-        except FileNotFoundError as exc:
-            raise io.SoftwareError(f"cannot run {command[0]!r}: {exc}") from exc
+        except OSError as exc:
+            exit_code, output = -1, f"cannot run {command[0]!r}: {exc}"
         except subprocess.TimeoutExpired:
             exit_code, output = -1, f"timed out after {timeout}s"
-        cases = _parse_junit(junit) if junit.is_file() else None
+        try:
+            cases = _parse_junit(junit) if junit.is_file() else None
+        except (ET.ParseError, OSError) as exc:
+            cases = None
+            output += f"\ninvalid JUnit report: {exc}"
 
     allow_skips = bool((task.get("verify") or {}).get("allow-skips"))
     per_test = []
@@ -458,7 +597,7 @@ def run_tests(layout: Layout, cid: str, task_id: str, *, tool: str, timeout: int
         counts = _summary_counts(output)
         reasons.append("the test runner produced no JUnit report, so no test can be confirmed "
                        "(set junit-arg for this repo in software/config.yaml)")
-    reasons += signoff_problems(layout, planned)
+    reasons += signoff_problems(layout, planned, ch)
     if exit_code != 0:
         reasons.append(f"exit code {exit_code}")
     if counts["failed"]:
@@ -476,7 +615,8 @@ def run_tests(layout: Layout, cid: str, task_id: str, *, tool: str, timeout: int
            "recorded-by": tool, "at": _now(), "repo": repo, "command": shlex.join(command),
            "commit": _git(cwd, "rev-parse", "HEAD"), "environment": environment(layout, cwd),
            "exit-code": exit_code, "counts": counts, "tests": ran,
-           "result": result, "files": files_before, "output-tail": output[-OUTPUT_TAIL:]}
+           "result": result, "files": files_before, "scope": scope_before,
+           "output-tail": output[-OUTPUT_TAIL:]}
     if per_test:
         rec["per-test"] = per_test
     if reasons:
@@ -500,7 +640,7 @@ def record(layout: Layout, cid: str, task_id: str, etype: str, *, tool: str, sub
     rec = {"id": next_id(layout, tool), "type": etype, "change": cid, "task": str(task_id),
            "recorded-by": tool, "at": _now(), "subject": subject.strip(),
            "conclusion": conclusion.strip(), "result": result,
-           "files": snapshot(layout, watched_files(ch, task))}
+           "files": snapshot(layout, watched_files(ch, task)), "scope": scope.task_scope(layout, ch, task)}
     return _write(layout, rec)
 
 
@@ -511,16 +651,18 @@ def accept(layout: Layout, cid: str, task_id: str, *, tool: str, read_back: str,
                                "(--read-back and --confirmed must not be empty)")
     ch = chg.load_change(layout, cid)
     task = _task(ch, task_id)
+    acceptance_contract, acceptance_files = acceptance_snapshot(layout, ch, task)
     rec = {"id": next_id(layout, tool), "type": "acceptance", "change": cid, "task": str(task_id),
            "recorded-by": tool, "at": _now(), "read-back": read_back.strip(),
            "confirmed-reply": confirmed.strip(), "result": "pass",
-           "files": snapshot(layout, watched_files(ch, task))}
+           "files": snapshot(layout, watched_files(ch, task)), "scope": scope.task_scope(layout, ch, task),
+           "acceptance-scope": acceptance_contract, "acceptance-files": acceptance_files}
     return _write(layout, rec)
 
 
 def waive(layout: Layout, cid: str, task_id: str, *, tool: str, ruling: str, reopen_when: str) -> dict:
     ch = chg.load_change(layout, cid)
-    _task(ch, task_id)
+    task = _task(ch, task_id)
     rid = gv.strip_ns(ruling)
     if not gv.has_governance(layout):
         raise io.SoftwareError("a waiver must cite an effective ruling, but there is no governance/")
@@ -534,7 +676,8 @@ def waive(layout: Layout, cid: str, task_id: str, *, tool: str, ruling: str, reo
     rec = {"id": next_id(layout, tool), "type": "waiver", "change": cid, "task": str(task_id),
            "recorded-by": tool, "at": _now(), "ruling": f"gov:{rid}",
            "ruling-quote": str(r.get("quote") or ""),
-           "reopen-when": reopen_when.strip(), "result": "pass"}
+           "reopen-when": reopen_when.strip(), "result": "pass", "scope": scope.task_scope(layout, ch, task),
+           "files": snapshot(layout, watched_files(ch, task))}
     return _write(layout, rec)
 
 
@@ -565,13 +708,21 @@ def validate(layout: Layout) -> tuple[list[str], list[str]]:
             if row["recorded"] != row["status"]:
                 warns.append(f"software change {cid}: task {row['task']} is recorded "
                              f"\"{row['recorded']}\" but evidence says \"{row['status']}\" — run "
-                             f"`docspec code change status {cid}` to refresh ({row['why']})")
+                             f"`artispec code change status {cid}` to refresh ({row['why']})")
         for task in ch["tasks"].get("tasks") or []:
             author = task.get("created-by")
             for tid in io.as_list((task.get("verify") or {}).get("tests")):
                 t = by_id.get(tid)
-                if t and author and author != "user" and t.get("written-by") == author:
+                if not t or not author or author == "user":
+                    continue
+                try:
+                    same = actors.same_actor(author, task.get("created-by-instance"),
+                                             t.get("written-by"), t.get("written-by-instance"))
+                except io.SoftwareError as exc:
+                    errs.append(f"software change {cid}: test {tid} / task {task['id']}: {exc}")
+                    continue
+                if same:
                     warns.append(f"software change {cid}: test {tid} was written by {author}, the same "
                                  f"agent that created task {task['id']} it verifies — tests should come "
-                                 f"from the test role")
+                                 f"from the test role (same session or missing same-provider session ids)")
     return errs, list(dict.fromkeys(warns))

@@ -33,7 +33,11 @@ def _validate_changes(layout, leaves: list[Leaf], id_set: set[str],
             errs.append(f"change[{cid}]: id appears in multiple states {states} "
                         "(a change id must live in exactly one of changes/ | _archive/ | _abandoned/)")
 
-    section_paths = {leaf.section for leaf in leaves}
+    selected = getattr(layout, "query_official_leaves", None)
+    target_leaves = selected() if callable(selected) else leaves
+    section_paths = {leaf.section for leaf in target_leaves}
+    target_concept_ids = {str(leaf.concept_id) for leaf in target_leaves if leaf.concept_id}
+    target_ids = target_concept_ids if callable(selected) else id_set | concept_ids
 
     # ── 逐個 active change 欄位級 + ref 死引用 ──
     for cid in chg.active_change_ids(layout):
@@ -47,8 +51,7 @@ def _validate_changes(layout, leaves: list[Leaf], id_set: set[str],
         for t in change.targets:
             if t.kind in ("create", "file", "term"):
                 continue   # create 路徑/外部檔/術語不查存在（apply 期才生/引擎視野外）
-            if (t.ref not in id_set and t.ref not in section_paths
-                    and t.ref not in concept_ids):
+            if t.ref not in section_paths and t.ref not in target_ids:
                 errs.append(f"change[{cid}] target[{t.ref}]: ref points to nonexistent section "
                             f"id/path \"{t.ref}\" (use --action create for a new section, or "
                             "--kind file for an external file)")

@@ -15,9 +15,9 @@ deliverable-cleanliness-truthful 落定，取代已 rebaseline 移出的歷史 e
   V15 docs 殘留撰寫工具/治理詞彙   ERROR  ← forest/governed-by/治理父/fan-in/factcheck/Tier-N/L2a/§回引…＝後台詞洩進交付物（補 V1 覆蓋缺口）
   V16 規範語句逃避詞（同句 應/不得）WARN  ← 最好／儘量／酌情／如有可能／視情況／最大限度（必要時故意排除，見下）
   V17 英文 AI-ism 詞彙            WARN  ← delve/tapestry/seamless…封閉 13 組＋句首 In today's；robust 刻意排除（見下）
-  V18 散文殘留半形標點           WARN  ← 散文面 span 內 normalize 會轉的半形標點（`,`/`.`/`:`/`;`/`?`/`!`）→ 指向 `docspec edit --punct`（不教手改）
-  V19 brief 欄逐字複述祖先        WARN  ← concept.brief 子欄 strip 後 byte 等於最近提供該欄的祖先值（沿 aperture 祖先鏈）→ 指向刪欄改繼承／`docspec store tidy`
-  V20 title 章號前綴             WARN  ← concept/group title 以大綱編號起頭（阿拉伯 `6.`／全形／頓號 `6、`／附錄字母 `A.`）→ 章號 render 推導、指向 `docspec store tidy`
+  V18 散文殘留半形標點           WARN  ← 散文面 span 內 normalize 會轉的半形標點（`,`/`.`/`:`/`;`/`?`/`!`）→ 指向 `artispec edit --punct`（不教手改）
+  V19 brief 欄逐字複述祖先        WARN  ← concept.brief 子欄 strip 後 byte 等於最近提供該欄的祖先值（沿 aperture 祖先鏈）→ 指向刪欄改繼承／`artispec store tidy`
+  V20 title 章號前綴             WARN  ← concept/group title 以大綱編號起頭（阿拉伯 `6.`／全形／頓號 `6、`／附錄字母 `A.`）→ 章號 render 推導、指向 `artispec store tidy`
   V21 散文未綁錨字面章號          WARN  ← 散文 `§9.2`／`第 6 章`／`見 §12` 未綁穩定錨（重排即漂）→ 改綁交叉引用錨（號碼 render 注入）；外部標準條號（`ISO … §4.2`）豁免
   Vg1/Vg2 術語一致               WARN
   Ve1 死錨點連結（export 破）     WARN  ← `](#x)` 對不上任何標題 slug → xelatex PDF 整份失敗
@@ -82,7 +82,7 @@ _RESERVED_EXAMPLE_RE = re.compile(
     r"|\b555-01\d\d\b",                   # NANP 虛構電話段（555-0100..0199）
     re.IGNORECASE,
 )
-# V10（跨文件數字一致 WARN）已退場——判官改呈現器 `docspec find --numbers`（實測 V10 對真語料
+# V10（跨文件數字一致 WARN）已退場——判官改呈現器 `artispec find --numbers`（實測 V10 對真語料
 # 0 finding；機械判數字語義 100% 誤報，改由引擎只攤、agent 判、人裁）。
 # V3 只抓 docspec 自己塞的鷹架佔位字（instructions 模板的 {id}/{title}/{order}/{name}）；
 # generic `<…>` 在技術散文太氾濫（KE 模板 <vehicle_id>、泛型 <T> 都合法），不再誤殺。
@@ -130,7 +130,7 @@ def _is_v15_whitelisted(match: str) -> bool:
 # 迴避了可驗收的規定」，逃避詞的前提條件仍可能在文件別處被獨立、封閉地定義，那是人的判斷。
 _ESCAPE_HATCH_RE = re.compile(r"最好|儘量|酌情|如有可能|視情況|最大限度")
 # V17 英文 AI-ism 詞彙（WARN，非阻塞）：封閉 13 組 word-boundary、case-insensitive 觸發詞——LLM 生成
-# 英文裡不成比例常見、單獨出現即是語域訊號的字（依 `docspec reference writing-en` 的 Orwell 式選詞
+# 英文裡不成比例常見、單獨出現即是語域訊號的字（依 `artispec reference writing-en` 的 Orwell 式選詞
 # 紀律；change deliverable-cleanliness-en-ai-isms）。出貨的詞表＝對 6 份已驗收英文交付物
 # ground-truthing 後的收窄版，**不是** reference 文件散文清單的照抄：
 #   - `robust` 整個排除——已驗收 survey 有 3 個合法 term-of-art 用法（paraphrase-robust、
@@ -264,13 +264,13 @@ def _scan_deliverable_text(body: str, where: str, all_ids: set[str]) -> list[Fin
         findings.append(Finding("V17", WARN, where,
                                 f"English AI-ism register tell \"{m.strip()}\" -- vocabulary "
                                 "disproportionately common in LLM-generated English (see "
-                                "`docspec reference writing-en`); prefer a plainer, more "
+                                "`artispec reference writing-en`); prefer a plainer, more "
                                 "specific word (advisory; a cited title or genuine term of "
                                 "art may be legitimate -- the call is the author's)"))
     for m in dict.fromkeys(_AI_ISM_OPENER_RE.findall(body)):
         findings.append(Finding("V17", WARN, where,
                                 f"English AI-ism opener \"{m}\" -- sentence-initial "
-                                "\"In today's ...\" is throat-clearing (see `docspec reference "
+                                "\"In today's ...\" is throat-clearing (see `artispec reference "
                                 "writing-en`); start with the actual claim instead"))
     seen_escape_hatch: set[str] = set()
     for sentence in _PSEUDO_SENTENCE_SPLIT_RE.split(body):
@@ -325,7 +325,7 @@ def _lint_docs(layout: Layout, articles: list[str], all_ids: set[str]) -> list[F
 
 
 def _lint_punctuation(layout: Layout, articles: list[str]) -> list[Finding]:
-    """V18 散文殘留半形標點（WARN、非阻塞）：散文面 span 內 `docspec edit --punct` 會轉換的
+    """V18 散文殘留半形標點（WARN、非阻塞）：散文面 span 內 `artispec edit --punct` 會轉換的
     半形標點 → 指向指令、不教手改。判定與 normalize 共用 `spans.propose_conversions`
     （單一權威、報必可修的閉環）；byte-exact span 與識別碼尾隨標點天然不觸發。
 
@@ -345,7 +345,7 @@ def _lint_punctuation(layout: Layout, articles: list[str]) -> list[Finding]:
             where = f"{file_where} § {section}" if section else file_where
             findings.append(Finding("V18", WARN, where,
                 f"{n} half-width punctuation mark(s) in prose that would normalize to full-width "
-                f"-- run `docspec edit {article} --punct` (deterministic; do not hand-edit)"))
+                f"-- run `artispec edit {article} --punct` (deterministic; do not hand-edit)"))
     return findings
 
 
@@ -481,7 +481,7 @@ def _lint_material(leaf: Leaf) -> list[Finding]:
 
 
 def _lint_drift(layout, leaves: list[Leaf]) -> list[Finding]:
-    """V8 骨肉漂移：corpus 章節 vs docs/_latest 不一致（提醒 docspec render）。"""
+    """V8 骨肉漂移：corpus 章節 vs docs/_latest 不一致（提醒 artispec render）。"""
     from dspx.engine.render import parse_section_bodies
     findings: list[Finding] = []
     by_article: dict[str, set] = {}
@@ -495,10 +495,10 @@ def _lint_drift(layout, leaves: list[Leaf]) -> list[Finding]:
         where = f"docs/{article}/_latest.md"
         for missing in sorted(corpus_sections - rendered):
             findings.append(Finding("V8", WARN, where,
-                f"section \"{missing}\" exists in corpus but not projected into docs (run docspec render {article})"))
+                f"section \"{missing}\" exists in corpus but not projected into docs (run artispec render {article})"))
         for orphan in sorted(rendered - corpus_sections):
             findings.append(Finding("V8", WARN, where,
-                f"docs has orphan section \"{orphan}\" (no such section in corpus; run docspec render {article})"))
+                f"docs has orphan section \"{orphan}\" (no such section in corpus; run artispec render {article})"))
     return findings
 
 
@@ -578,7 +578,7 @@ def _lint_freeze(layout: Layout) -> list[Finding]:
         detail = f"frozen area (archive/) {problem} -- published versions are immutable"
         if problem.startswith("not registered"):
             # 「未登記」死路變岔路口：附遷移指路的兩條正路（刪除/竄改訊息不加）
-            detail += (" (pre-docspec legacy versions: run 'docspec freeze register-legacy "
+            detail += (" (pre-docspec legacy versions: run 'artispec freeze register-legacy "
                        "<dir>', or keep them outside archive/ (e.g. docs/legacy/))")
         findings.append(Finding("V11", ERROR, rel, detail))
     return findings
@@ -661,7 +661,7 @@ def _lint_roadmap(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
         if len(entries) > _ROADMAP_OPEN_MAX:
             findings.append(Finding("Vr1", WARN, f"corpus/{art}/roadmap.yaml",
                 f"{len(entries)} entries (>{_ROADMAP_OPEN_MAX}) -- don't let the backlog become a "
-                "notes dump; split, start, promote, or `docspec roadmap done` some"))
+                "notes dump; split, start, promote, or `artispec roadmap done` some"))
 
     # 開放且仍帶全文的 finding（供 Vr3 鏡像偵測）。
     open_full_findings: dict[str, dict] = {}
@@ -808,7 +808,7 @@ def _lint_realizes(leaf: Leaf, index) -> list[Finding]:
 
 
 # ── V19 brief 逐字複述祖先 / V20 title 章號前綴（contract-slimming D6）──────────
-# 兩者皆 WARN、非阻塞（絕不影響 publish 閘）。下列判定原語是 lint 與 `docspec store tidy` 的
+# 兩者皆 WARN、非阻塞（絕不影響 publish 閘）。下列判定原語是 lint 與 `artispec store tidy` 的
 # **單一權威**——tidy 刪欄／剝前綴時 import 同一組常數/函式，判定不漂移。
 
 # brief 差異制的可繼承子欄（concept.brief 下）。tidy 逐字複述剝除也走這份清單。
@@ -846,7 +846,7 @@ def brief_dup_fields(leaf: Leaf, by_section: dict, concept_by_id: dict) -> list[
     """回傳該 leaf 的 brief 中「與最近提供該欄的祖先值 byte 等值」的欄名清單。
 
     最近祖先＝沿 aperture 同一條祖先鏈（`model.ancestor_leaves`，路徑父鏈優先、淺→深）第一個
-    對該欄有提供非空值者。lint（V19）與 `docspec store tidy`（刪這些欄改繼承）共用此判定。"""
+    對該欄有提供非空值者。lint（V19）與 `artispec store tidy`（刪這些欄改繼承）共用此判定。"""
     from dspx.engine.model import ancestor_leaves
     brief = _brief_of(leaf)
     if not brief:
@@ -868,7 +868,7 @@ def brief_dup_fields(leaf: Leaf, by_section: dict, concept_by_id: dict) -> list[
 
 
 def _lint_brief_dup(leaves: list[Leaf]) -> list[Finding]:
-    """V19：brief 子欄與最近祖先 byte 等值 → WARN（指向刪欄改繼承／`docspec store tidy`）。"""
+    """V19：brief 子欄與最近祖先 byte 等值 → WARN（指向刪欄改繼承／`artispec store tidy`）。"""
     from dspx.engine.model import _concept_by_id
     by_section = {lf.section: lf for lf in leaves}
     concept_by_id = _concept_by_id(by_section)
@@ -877,7 +877,7 @@ def _lint_brief_dup(leaves: list[Leaf]) -> list[Finding]:
         for fld in brief_dup_fields(leaf, by_section, concept_by_id):
             findings.append(Finding("V19", WARN, f"{leaf.section}/concept.yaml",
                 f"brief.{fld} is byte-identical to the value inherited from the nearest ancestor "
-                f"that supplies it -- delete the field to inherit it (batch cleanup: `docspec store tidy`)"))
+                f"that supplies it -- delete the field to inherit it (batch cleanup: `artispec store tidy`)"))
     return findings
 
 
@@ -892,7 +892,7 @@ _TITLE_APPENDIX_PREFIX_RE = re.compile(r"^\s*(?:[A-Z]\.|附錄\s*[A-Za-z0-9０-�
 def title_numbering_prefix(title: object) -> str | None:
     """回傳 title 開頭命中的大綱編號前綴字串（無則 None）。
 
-    lint（V20）與 `docspec store tidy` 剝除共用此判定——tidy 僅剝 arabic 式（`_TITLE_ARABIC_PREFIX_RE`，
+    lint（V20）與 `artispec store tidy` 剝除共用此判定——tidy 僅剝 arabic 式（`_TITLE_ARABIC_PREFIX_RE`，
     見 D7：附錄型 v1 不動）。`5G 網路架構` 型（數字後接字母、非編號標點）刻意不觸發。"""
     if not isinstance(title, str):
         return None
@@ -901,7 +901,7 @@ def title_numbering_prefix(title: object) -> str | None:
 
 
 def _lint_title_prefix(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
-    """V20：concept / group 記錄的 title 以大綱編號起頭 → WARN（指向 `docspec store tidy`）。
+    """V20：concept / group 記錄的 title 以大綱編號起頭 → WARN（指向 `artispec store tidy`）。
     ★store-only：group title 由 store 記錄枚舉（非散檔 group.yaml）。"""
     from dspx.engine import store as _store
     findings: list[Finding] = []
@@ -909,7 +909,7 @@ def _lint_title_prefix(layout: Layout, leaves: list[Leaf]) -> list[Finding]:
     def _flag(where: str, title: str, pref: str) -> None:
         findings.append(Finding("V20", WARN, where,
             f"title \"{title}\" begins with an outline-numbering prefix \"{pref.strip()}\" -- "
-            f"numbering is render-derived; drop the prefix from the title (batch cleanup: `docspec store tidy`)"))
+            f"numbering is render-derived; drop the prefix from the title (batch cleanup: `artispec store tidy`)"))
 
     for leaf in leaves:
         title = (leaf.concept or {}).get("title")

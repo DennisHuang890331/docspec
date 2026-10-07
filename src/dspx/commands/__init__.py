@@ -5,7 +5,7 @@
 projection/ maintenance/ _internal/）；**新增指令＝把模組丟進對應子套件即可**，registry
 掃子套件自動發現有這三個屬性的模組——不需在此手寫 import。`_` 前綴模組（_shared、各
 包的 helper）不被收。人面（`--help` 預設顯示）＝maintenance/ 子套件的成員；其餘 agent 面
-（靠 `docspec guide`/`instructions` 投影發現、`--help-all` 才列）。
+（靠 `artispec guide`/`instructions` 投影發現、`--help-all` 才列）。
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def _discover() -> None:
 _discover()
 
 # Human-facing CLI surface: the only commands a person runs directly (bootstrap +
-# maintenance). Everything else is agent-facing — driven by skills via `docspec guide` /
-# `docspec instructions` — and hidden from the default `--help` (still runnable; listed by
-# `docspec --help-all`). This is a discoverability split, not access control.
+# maintenance). Everything else is agent-facing — driven by skills via `artispec guide` /
+# `artispec instructions` — and hidden from the default `--help` (still runnable; listed by
+# `artispec --help-all`). This is a discoverability split, not access control.
 HUMAN_COMMANDS = frozenset(_HUMAN)

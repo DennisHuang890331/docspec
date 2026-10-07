@@ -137,5 +137,5 @@ def test_cli_wraps_domain_error_friendly(make_project, write_leaf, monkeypatch, 
     rc = cli.main(["check"])
     assert rc == 1                                   # 非零、但不是 traceback
     err = capsys.readouterr().err
-    assert "docspec:" in err and "integrity" in err  # 友善一行訊息＋指路 fsck
+    assert "artispec:" in err and "integrity" in err  # 友善一行訊息＋指路 fsck
     assert "Traceback" not in err

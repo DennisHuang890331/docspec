@@ -1,9 +1,9 @@
-"""docspec baseline — 專案基線：交付時把整個專案一次釘住，並查某個文件版本對應的軟體狀態。
+"""artispec baseline — 專案基線：交付時把整個專案一次釘住，並查某個文件版本對應的軟體狀態。
 
-    docspec baseline <名稱> [--note "…"]      建立（例：docspec baseline 期中交付）
-    docspec baseline list
-    docspec baseline show <名稱> [--json]
-    docspec baseline doc <文件> <版本> [--json]   文件定版時自動記下的軟體狀態
+    artispec baseline <名稱> [--note "…"]      建立（例：artispec baseline 期中交付）
+    artispec baseline list
+    artispec baseline show <名稱> [--json]
+    artispec baseline doc <文件> <版本> [--json]   文件定版時自動記下的軟體狀態
 """
 
 from __future__ import annotations
@@ -36,8 +36,8 @@ def _print_state(b: dict) -> None:
 
 def run(argv: list[str]) -> int:
     if argv and argv[0] not in _SUBS and not argv[0].startswith("-"):
-        argv = ["create", *argv]                        # `docspec baseline 期中交付`
-    p = argparse.ArgumentParser(prog="docspec baseline", description=HELP)
+        argv = ["create", *argv]                        # `artispec baseline 期中交付`
+    p = argparse.ArgumentParser(prog="artispec baseline", description=HELP)
     sub = p.add_subparsers(dest="op")
     c = sub.add_parser("create", help="pin the whole project under a name")
     c.add_argument("name")
@@ -76,7 +76,7 @@ def run(argv: list[str]) -> int:
         if args.op == "list":
             rows = pb.list_all(layout)
             if not rows:
-                print("(no project baselines yet — `docspec baseline <name>`)")
+                print("(no project baselines yet — `artispec baseline <name>`)")
             for r in rows:
                 print(f"{r['name']} — {r['created-at']}" + (f" — {r['note']}" if r.get("note") else "")
                       + (f" ({r['warnings']} warning(s))" if r["warnings"] else ""))

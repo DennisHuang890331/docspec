@@ -1,4 +1,4 @@
-"""docspec store — 一篇一檔儲存的維修/遷移門（dump / load / fsck / migrate / tidy）。
+"""artispec store — 一篇一檔儲存的維修/遷移門（dump / load / fsck / migrate / tidy）。
 
 「全走引擎」的鎖入風險（設計 §4.4）由三層維修門緩解：
 - `store dump <article>`  ：store → 散檔唯讀匯出（除錯/災難救援）。
@@ -133,7 +133,7 @@ def _guard_scatter_files(layout: Layout, article: str) -> list[str]:
         if p.name in _LEGACY_WORKFILES:
             unexpected.append(f"{p.relative_to(layout.corpus_dir).as_posix()} (legacy workbench/"
                               "prose file — the develop workbench is retired; distill it into the "
-                              "store with `docspec put`, or delete it yourself, then re-run migrate)")
+                              "store with `artispec put`, or delete it yourself, then re-run migrate)")
             continue
         if p.name not in allowed:
             unexpected.append(p.relative_to(layout.corpus_dir).as_posix())
@@ -146,13 +146,13 @@ def _migrate_one(layout: Layout, article: str, schema) -> int:
         print(f"store migrate: {article} already a store (nothing to do)")
         return 0
     if backend == "none":
-        sys.stderr.write(f"docspec: store migrate: no such article {article!r} in corpus/\n")
+        sys.stderr.write(f"artispec: store migrate: no such article {article!r} in corpus/\n")
         return 1
 
     unexpected = _guard_scatter_files(layout, article)
     if unexpected:
         sys.stderr.write(
-            f"docspec: store migrate {article}: refusing — the scattered tree has files the store "
+            f"artispec: store migrate {article}: refusing — the scattered tree has files the store "
             "does not model yet (migration would lose them):\n")
         for u in unexpected:
             sys.stderr.write(f"    ✗ {u}\n")
@@ -161,11 +161,11 @@ def _migrate_one(layout: Layout, article: str, schema) -> int:
     try:
         article_obj, mism = _parity_check(layout, article, schema)
     except st.StoreError as exc:
-        sys.stderr.write(f"docspec: store migrate {article}: {exc}\n")
+        sys.stderr.write(f"artispec: store migrate {article}: {exc}\n")
         return 1
     if mism:
         sys.stderr.write(
-            f"docspec: store migrate {article}: PARITY GATE FAILED — not written (scattered files "
+            f"artispec: store migrate {article}: PARITY GATE FAILED — not written (scattered files "
             "left intact):\n")
         for m in mism:
             sys.stderr.write(f"    ✗ {m}\n")
@@ -177,7 +177,7 @@ def _migrate_one(layout: Layout, article: str, schema) -> int:
     art_dir = layout.section_dir(article)
     tmp = layout.corpus_dir / f"_migrating_{article}"
     if tmp.exists():
-        sys.stderr.write(f"docspec: store migrate {article}: leftover {tmp.name}/ from an aborted "
+        sys.stderr.write(f"artispec: store migrate {article}: leftover {tmp.name}/ from an aborted "
                          "run — resolve it (restore or delete) before migrating.\n")
         return 1
     art_dir.rename(tmp)
@@ -189,7 +189,7 @@ def _migrate_one(layout: Layout, article: str, schema) -> int:
         if dossier.is_dir():
             shutil.rmtree(dossier)
         tmp.rename(art_dir)
-        sys.stderr.write(f"docspec: store migrate {article}: failed mid-write ({exc}); "
+        sys.stderr.write(f"artispec: store migrate {article}: failed mid-write ({exc}); "
                          "scattered tree restored, nothing lost.\n")
         return 1
     shutil.rmtree(tmp)
@@ -198,7 +198,7 @@ def _migrate_one(layout: Layout, article: str, schema) -> int:
           f"parity gate passed).")
     if folded_gov:
         print(f"  folded {folded_gov} governance file(s) into the sealed dossier/forest stores")
-    print(f"  reverse anytime: docspec store dump {article} <DIR>  then delete the dossier")
+    print(f"  reverse anytime: artispec store dump {article} <DIR>  then delete the dossier")
     return 0
 
 
@@ -242,7 +242,7 @@ def _delete_scatter_tree(layout: Layout, article: str) -> None:
 
 def _dump_one(layout: Layout, article: str, out_dir: Path, schema) -> int:
     if not st.article_has_store(layout, article):
-        sys.stderr.write(f"docspec: store dump: no store file corpus/{article}.yaml\n")
+        sys.stderr.write(f"artispec: store dump: no store file corpus/{article}.yaml\n")
         return 1
     article_obj = st.load_article(st.store_path(layout, article))
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -279,10 +279,10 @@ def _dump_one(layout: Layout, article: str, out_dir: Path, schema) -> int:
 
 def _load_one(layout: Layout, article: str, src_dir: Path, schema) -> int:
     if not src_dir.is_dir():
-        sys.stderr.write(f"docspec: store load: no such directory {src_dir}\n")
+        sys.stderr.write(f"artispec: store load: no such directory {src_dir}\n")
         return 1
     if st.article_has_store(layout, article):
-        sys.stderr.write(f"docspec: store load: corpus/{article}.yaml already exists "
+        sys.stderr.write(f"artispec: store load: corpus/{article}.yaml already exists "
                          "(delete it first, or use fsck)\n")
         return 1
     leaves = []
@@ -297,7 +297,7 @@ def _load_one(layout: Layout, article: str, src_dir: Path, schema) -> int:
         try:
             meta = yaml.safe_load(gy.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as exc:
-            sys.stderr.write(f"docspec: store load: malformed {gy} ({exc})\n")
+            sys.stderr.write(f"artispec: store load: malformed {gy} ({exc})\n")
             return 1
         rec = {"path": f"{article}/{rel}" if rel != "." else article}
         for k in ("title", "order", "numbering"):
@@ -305,7 +305,7 @@ def _load_one(layout: Layout, article: str, src_dir: Path, schema) -> int:
                 rec[k] = meta[k]
         groups.append(rec)
     if not leaves:
-        sys.stderr.write(f"docspec: store load: no concept.yaml under {src_dir}\n")
+        sys.stderr.write(f"artispec: store load: no concept.yaml under {src_dir}\n")
         return 1
     article_obj = st.article_from_leaves(article, leaves, groups, revision=1)
     # 過封條驗證的往返（dump→parse verify）確保寫出即合法。
@@ -329,7 +329,7 @@ def _cmd_migrate_layout(layout: Layout, schema) -> int:
         old_store = st.legacy_store_path(layout, article)
         if new_store.is_file() and old_store.is_file():
             sys.stderr.write(
-                f"docspec: store migrate-layout: article \"{article}\" exists in BOTH layouts — "
+                f"artispec: store migrate-layout: article \"{article}\" exists in BOTH layouts — "
                 "delete or merge the legacy flat file first (refusing to guess which is truth).\n")
             rc = 1
             continue
@@ -357,7 +357,7 @@ def _cmd_migrate_layout(layout: Layout, schema) -> int:
                     yaml.safe_load(new.read_text(encoding="utf-8"))
             except Exception as exc:  # noqa: BLE001 — 任何驗證失敗都停手保舊檔
                 new.unlink(missing_ok=True)
-                sys.stderr.write(f"docspec: store migrate-layout: {article}/{kind}: verification "
+                sys.stderr.write(f"artispec: store migrate-layout: {article}/{kind}: verification "
                                  f"at the new location failed ({exc}); old file left intact.\n")
                 rc = 1
                 break
@@ -405,7 +405,7 @@ def _fsck_governance(layout: Layout, articles: list[str], accept: bool) -> int:
                 write_sealed(path, kind=kind, scope=scope, revision=rev, list_key=key, items=items)
                 print(f"store fsck: {path.name} RESEALED (external change adopted)")
             else:
-                sys.stderr.write(f"docspec: store fsck: {path.name}: {exc}\n")
+                sys.stderr.write(f"artispec: store fsck: {path.name}: {exc}\n")
                 rc = 1
     return rc
 
@@ -418,10 +418,10 @@ def _fsck(layout: Layout, articles: list[str], accept: bool, schema) -> int:
         if (layout.article_store(article).is_file()
                 and st.legacy_store_path(layout, article).is_file()):
             sys.stderr.write(
-                f"docspec: store fsck: article \"{article}\" exists in BOTH layouts — "
+                f"artispec: store fsck: article \"{article}\" exists in BOTH layouts — "
                 f"corpus/{article}/article.yaml (active) shadows corpus/{article}.yaml "
                 "(legacy, silently ignored). Delete or merge the legacy file "
-                "(`docspec store migrate-layout` refuses until resolved).\n")
+                "(`artispec store migrate-layout` refuses until resolved).\n")
             rc = 1
         path = st.store_path(layout, article)
         try:
@@ -433,7 +433,7 @@ def _fsck(layout: Layout, articles: list[str], accept: bool, schema) -> int:
                 st.save_article(layout, article_obj, schema)
                 print(f"store fsck: {article} RESEALED (external change adopted)")
             else:
-                sys.stderr.write(f"docspec: store fsck: {article}: {exc}\n")
+                sys.stderr.write(f"artispec: store fsck: {article}: {exc}\n")
                 rc = 1
     return _fsck_governance(layout, articles, accept) or rc
 
@@ -441,7 +441,7 @@ def _fsck(layout: Layout, articles: list[str], accept: bool, schema) -> int:
 # ── CLI ───────────────────────────────────────────────────────────────
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec store", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec store", description=HELP)
     sub = parser.add_subparsers(dest="sub", required=True)
 
     p_mig = sub.add_parser("migrate", help="convert a scattered article to a store file (parity-gated)")
@@ -490,7 +490,7 @@ def run(argv: list[str]) -> int:
                 print("store migrate --all: no scattered articles to migrate")
             return rc
         if not args.article:
-            sys.stderr.write("docspec: store migrate: give an <article> or --all\n")
+            sys.stderr.write("artispec: store migrate: give an <article> or --all\n")
             return 2
         return _migrate_one(layout, args.article, schema)
 

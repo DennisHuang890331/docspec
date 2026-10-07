@@ -1,7 +1,7 @@
 """封存（收尾）：把 change 的規格差異併回正式規格，資料夾收進 `changes/_archive/<日期>-<id>/`，寫一筆基線。
 
 順序（交易式：先全部算好、檢查過，才開始寫；寫到一半失敗就還原）：
-    1. 依證據刷新任務狀態
+    1. 在記憶體依證據推導任務狀態（乾跑不寫入）
     2. 嚴格檢查（草稿決策、基準指紋不符、前置 change 未封存都算錯）
     3. 完整性：任務都完成或豁免；需要人看的需求（檢查／展示）要有使用者驗收或豁免
     4. 在副本上套用差異，併入「情境 ← 測試」（verified-by），驗證新規格
@@ -20,6 +20,7 @@ from dspx.engine.software import evidence as ev
 from dspx.engine.software import io
 from dspx.engine.software import specs as sp
 from dspx.engine.software import tasks as tk
+from dspx.engine.software import scope
 
 DONE = ("done", "done-waived", "imported-done")
 HUMAN_METHODS = ("inspection", "demonstration")
@@ -44,48 +45,94 @@ def blockers(layout: Layout, ch: dict, evs: list[dict]) -> list[str]:
         out.append(f"change {cid} has spec deltas but no tasks")
     for t in tasks:
         status, _support, why = ev.derive(layout, ch, t, ev.for_task(evs, cid, t["id"]))
-        if status not in DONE:
+        imported_test = (status == "imported-done"
+                         and "test" in io.as_list((t.get("verify") or {}).get("methods")))
+        if status not in DONE or imported_test:
             out.append(f"task {t['id']} ({t.get('title')}) is {tk.STATUS_LABEL.get(status, status)}: {why}")
     # 需要人看的需求：實作它的任務之中，至少一個有使用者驗收或豁免
-    changed_reqs, _ = tk._changed_requirements(ch)
-    for ref in sorted(changed_reqs):
+    changed_reqs, changed_scenarios = tk._changed_requirements(ch, layout)
+    for ref in sorted(changed_scenarios):
+        reqref = scope.requirement_ref(ref)
+        req = tk._requirement_after(layout, ch, reqref) or {}
+        if "test" not in io.as_list(req.get("verification")):
+            continue
+        plans = [p for p in ch["tests"].get("tests") or [] if ref in io.as_list(p.get("covers"))]
+        for planned in plans:
+            implementers = [t for t in tasks if reqref in {
+                scope.requirement_ref(r) for r in io.as_list(t.get("implements"))}
+                and str(planned["id"]) in io.as_list((t.get("verify") or {}).get("tests"))]
+            valid = False
+            for task in implementers:
+                mine = ev.for_task(evs, cid, task["id"])
+                status, support, _ = ev.derive(layout, ch, task, mine)
+                if status == "done-waived":
+                    valid = True
+                elif status == "done" and "test" in io.as_list((task.get("verify") or {}).get("methods")):
+                    valid = any(e["id"] in support and e.get("type") == "test-run"
+                                and str(planned["id"]) in io.as_list(e.get("tests")) for e in mine)
+                if valid:
+                    break
+            if not valid:
+                out.append(f"scenario {ref}: planned test {planned['id']} lacks valid test evidence "
+                           "from an implementing task (or an applicable current waiver)")
+    accepted_reqs = changed_reqs | {
+        scope.requirement_ref(ref) for t in tasks for ref in io.as_list(t.get("implements"))}
+    for ref in sorted(accepted_reqs):
         req = tk._requirement_after(layout, ch, ref) or {}
         if not set(io.as_list(req.get("verification"))) & set(HUMAN_METHODS):
             continue
         implementers = [t for t in tasks if any(
             f"{sp.split_ref(x)[0]}/{sp.split_ref(x)[1]}" == ref for x in io.as_list(t.get("implements")))]
-        ok = any(e.get("type") in ("acceptance", "waiver")
+        ok = any(ev.current_acceptance(layout, ch, t, e)
                  for t in implementers for e in ev.for_task(evs, cid, t["id"]))
+        if not ok and implementers:
+            ok = all(ev.derive(layout, ch, t, ev.for_task(evs, cid, t["id"]))[0] == "done-waived"
+                     for t in implementers)
         if not ok:
             out.append(f"requirement {ref} is verified by "
                        f"{'/'.join(m for m in io.as_list(req.get('verification')) if m in HUMAN_METHODS)}"
-                       f" and needs the owner's acceptance (`docspec code evidence accept`) or a waiver")
+                       f" and needs the owner's acceptance (`artispec code evidence accept`) or a waiver")
     return out
 
 
 def plan(layout: Layout, cid: str) -> dict:
     """算出封存結果但不寫入。回 {ok, errors, warnings, specs, renames, affected, …}。"""
-    ev.refresh(layout, cid)
+    from dspx.engine.change_catalog import ensure_unique
+    ensure_unique(layout, cid)
     ch = chg.load_change(layout, cid)
     evs = ev.load_all(layout)
+    ev.derive_task_fields(layout, ch, evs)
     errors, warnings = chg.validate_change(layout, ch, strict=True)
     errors += blockers(layout, ch, evs)
     new_specs, _conflicts, renames = chg.preview_specs(layout, ch)   # 衝突已在嚴格檢查裡
 
     # 被修改的情境：舊的 verified-by 不再保證新行為 → 改由這次規劃的測試接手（舊的列出來給測試角色確認）
     dropped: list[dict] = []
-    for cap, cd in ch["deltas"].items():
-        for x in cd.get("deltas") or []:
-            if x.get("op") != "modify-scenario" or not ({"when", "then"} & set(x)) or cap not in new_specs:
-                continue
-            ref = _rename(f"{cap}/{x['ref']}", renames)
-            _c, rid, sid = sp.split_ref(ref)
-            scn = sp.find_scenario(sp.find_requirement(new_specs[cap], rid), sid)
-            if scn is not None and scn.get("verified-by"):
-                dropped.append({"scenario": ref, "tests": io.as_list(scn.pop("verified-by"))})
+    for original in sorted(tk._changed_requirements(ch, layout)[1]):
+        ref = _rename(original, renames)
+        cap, rid, sid = sp.split_ref(ref)
+        if cap not in new_specs:
+            continue
+        scn = sp.find_scenario(sp.find_requirement(new_specs[cap], rid), sid)
+        if scn is not None and scn.get("verified-by"):
+            dropped.append({"scenario": ref, "tests": io.as_list(scn.pop("verified-by"))})
+
+    # Record only tests actually passed in current supporting evidence. A waiver,
+    # imported completion or an allowed skip is not a successful execution.
+    passed = set()
+    for task in ch["tasks"].get("tasks") or []:
+        mine = ev.for_task(evs, cid, task["id"])
+        status, support, _ = ev.derive(layout, ch, task, mine)
+        if status != "done":
+            continue
+        for record in mine:
+            if record["id"] in support and record.get("type") == "test-run":
+                passed.update(str(p["test"]) for p in record.get("per-test") or [] if p.get("outcome") == "passed")
 
     # 併入「情境 ← 測試」（verified-by），依編號重配改寫引用；測到既有能力也一併記上
     for t in ch["tests"].get("tests") or []:
+        if str(t["id"]) not in passed:
+            continue
         for ref in io.as_list(t.get("covers")):
             cap, rid, sid = sp.split_ref(_rename(ref, renames))
             if cap not in new_specs:
@@ -129,6 +176,7 @@ def archive(layout: Layout, cid: str, *, tool: str) -> dict:
         raise io.SoftwareError(f"cannot archive {cid}:\n  - " + "\n  - ".join(p["errors"]))
     date = datetime.date.today().isoformat()
     dest = io.archive_dir(layout) / f"{date}-{cid}"
+    source = io.change_dir(layout, cid)
     if dest.exists():
         raise io.SoftwareError(f"{dest} already exists")
 
@@ -145,6 +193,8 @@ def archive(layout: Layout, cid: str, *, tool: str) -> dict:
     if p["dropped-verified-by"]:
         baseline["dropped-verified-by"] = p["dropped-verified-by"]
     baseline_path = io.baselines_dir(layout) / f"{date}-{cid}.yaml"
+    task_path = source / "tasks.yaml"
+    old_tasks = task_path.read_bytes() if task_path.is_file() else None
 
     # 交易：記下舊內容，失敗就還原
     backups = {}
@@ -152,11 +202,12 @@ def archive(layout: Layout, cid: str, *, tool: str) -> dict:
         path = io.spec_path(layout, cap)
         backups[path] = path.read_bytes() if path.is_file() else None
     try:
+        io.write(task_path, "tasks", p["ch"]["tasks"])
         for spec in p["specs"].values():
             sp.write_spec(layout, spec)
         io.write(baseline_path, "baseline", baseline)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(io.change_dir(layout, cid)), str(dest))
+        shutil.move(str(source), str(dest))
     except BaseException:
         for path, data in backups.items():
             if data is None:
@@ -164,8 +215,12 @@ def archive(layout: Layout, cid: str, *, tool: str) -> dict:
             else:
                 path.write_bytes(data)
         baseline_path.unlink(missing_ok=True)
-        if dest.exists() and not io.change_dir(layout, cid).exists():
-            shutil.move(str(dest), str(io.change_dir(layout, cid)))
+        if dest.exists() and not source.exists():
+            shutil.move(str(dest), str(source))
+        if old_tasks is None:
+            task_path.unlink(missing_ok=True)
+        else:
+            task_path.write_bytes(old_tasks)
         raise
     from dspx.engine.software.links import clear_requirement_suspects
     cleared = clear_requirement_suspects(layout, cid, p["ch"], tool)
@@ -199,7 +254,7 @@ def run_regression(layout: Layout, capability: str | None = None, timeout: int =
     results = []
     for repo, items in regression_list(layout, capability).items():
         if not tk.repo_known(layout, repo):
-            results.append({"repo": repo, "error": "repo not registered — add it with `docspec code repo add <name> <path>`"})
+            results.append({"repo": repo, "error": "repo not registered — add it with `artispec code repo add <name> <path>`"})
             continue
         with tempfile.TemporaryDirectory() as tmp:
             junit = Path(tmp) / "junit.xml"

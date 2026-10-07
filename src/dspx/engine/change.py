@@ -10,7 +10,7 @@ delta。暫存的是**結構化真相 + 重渲染**（整檔替換、非三方�
 - 暫存＝草稿分支：`changes/<id>/staging/` 鏡像 **workspace（專案根）相對路徑**（copy-on-write：
     corpus 章節＝複製整個節資料夾；森林級檔/外部 file target＝複製該檔）。正式面 archive 前 byte 不動。
 - union view：有 change context 時「staging 優先、正式補底」合成森林；無 context 逐 byte 同現行。
-- 預覽：`docspec render --change <id>` 從 union view 渲染到 `changes/<id>/preview/<article>_latest.md`
+- 預覽：`artispec render --change <id>` 從 union view 渲染到 `changes/<id>/preview/<article>_latest.md`
     ＋ staging 側 sidecar 帳本；預覽成品與帳本從正式版 seed（★G2）。
 """
 
@@ -51,7 +51,7 @@ STATE_ARCHIVED = "archived"
 STATE_ABANDONED = "abandoned"
 
 _MACHINE_HEADER = (
-    "# docspec change container (maintained by the `docspec change` commands; do not edit by "
+    "# artispec change container (maintained by the `artispec change` commands; do not edit by "
     "hand — the engine owns this file, there is no status field, state = location).\n")
 
 
@@ -629,6 +629,16 @@ class OverlayLayout:
         staged = staging_target(self._change.dir, self._base, self._base.writing_guide)
         return staged if staged.is_file() else self._base.writing_guide
 
+    def query_glossary_path(self) -> Path:
+        official = self._base.planning_home / "glossary.yaml"
+        staged = staging_target(self._change.dir, self._base, official)
+        return staged if staged.is_file() else official
+
+    def query_config_path(self) -> Path:
+        official = self._base.planning_home / "config.yaml"
+        staged = staging_target(self._change.dir, self._base, official)
+        return staged if staged.is_file() else official
+
     # ── preview 產物（正式 docs 永不被暫存污染，D2）──
     def docs_latest(self, article: str) -> Path:
         return self._preview / f"{article}_latest.md"
@@ -831,7 +841,7 @@ def routing_change_for(layout: Layout, section: str, *,
                               "(only an active change has a staging branch to write into)")
         raise ChangeError(
             f"--change \"{explicit_id}\" does not target section \"{section}\" — enlist it first: "
-            f"`docspec change add-target {explicit_id} {section} --action revise`")
+            f"`artispec change add-target {explicit_id} {section} --action revise`")
     if not candidates:
         return None
     if len(candidates) == 1:
@@ -1200,6 +1210,12 @@ def move_to_state(layout: Layout, change: Change, new_state: str) -> Path:
     """把 change 容器整包搬到目標狀態根（_archive/_abandoned）；回新路徑。"""
     src = change.dir
     dst = change_dir(layout, change.id, new_state)
+    reason = validate_id(change.id)
+    if reason:
+        raise ChangeError(reason)
+    home = layout.planning_home.resolve()
+    if not src.resolve().is_relative_to(home) or not dst.resolve().is_relative_to(home):
+        raise ChangeError("change move leaves managed root")
     dst.parent.mkdir(parents=True, exist_ok=True)
     if dst.exists():
         raise ChangeError(f"cannot move change to {dst}: destination already exists")

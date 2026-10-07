@@ -1,4 +1,4 @@
-"""docspec lint — 交付物潔淨度報告（單跑不擋；publish 時 ERROR 級當閘）。
+"""artispec lint — 交付物潔淨度報告（單跑不擋；publish 時 ERROR 級當閘）。
 
 article 引數＝輸出過濾（lint 永遠跑全模型——縮輸入 leaves 會廢掉 V1 的跨文件 id 洩漏
 偵測＝false green）。歸屬契約（Decision 5）：對 `where` 的**檔案路徑段**做前綴比對——
@@ -35,7 +35,7 @@ def _finding_article(where: str, known_articles: set[str]) -> str | None:
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec lint", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec lint", description=HELP)
     parser.add_argument("article", nargs="?", default=None,
                         help="scope findings to this article (project-level findings stay visible)")
     parser.add_argument("--json", action="store_true", dest="as_json", help="output as JSON")
@@ -51,7 +51,7 @@ def run(argv: list[str]) -> int:
     known = {lf.article for lf in leaves}
     if args.article:
         if args.article not in known:
-            sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n")
+            sys.stderr.write(f"artispec: no leaf sections found for article \"{args.article}\"\n")
             return 1
 
     findings = run_lint(layout, leaves, schema)

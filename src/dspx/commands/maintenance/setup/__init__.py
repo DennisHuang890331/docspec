@@ -1,6 +1,6 @@
-r"""docspec setup — 把受控 render 工具鏈裝進 data_dir（冪等）。
+r"""artispec setup — 把受控 render 工具鏈裝進 data_dir（冪等）。
 
-讓 `docspec export`/`proof` 不依賴 dev 環境，且字型移出 wheel。
+讓 `artispec export`/`proof` 不依賴 dev 環境，且字型移出 wheel。
 
 **核心（永遠裝）＝字型 + pandoc + typst（預設 render 引擎）**：
   1. 字型放 data_dir/fonts：主路＝從 _FONT_MANIFEST 的 pinned OFL URL 下載 zip→驗 sha256
@@ -94,7 +94,9 @@ HELP = "Install the controlled render toolchain (fonts + pandoc + typst) into da
 # ── 主流程 ────────────────────────────────────────────────────────
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec setup", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec setup", description=HELP)
+    parser.add_argument("--migrate-data", action="store_true",
+                        help="only migrate legacy docspec managed assets offline; keep the source and never overwrite conflicts")
     parser.add_argument("--force", action="store_true",
                         help="ignore idempotency, reinstall TinyTeX and re-copy fonts")
     parser.add_argument("--no-download", action="store_true",
@@ -108,10 +110,15 @@ def run(argv: list[str]) -> int:
                              "only needed to locally compile an emitted journal .tex (the default Typst track does not use it)")
     args = parser.parse_args(argv)
 
+    if args.migrate_data:
+        if any((args.force, args.no_download, args.no_dev_shortcut, args.with_drawio, args.with_latex)):
+            parser.error("--migrate-data is a standalone mode; do not combine it with installation options")
+        return _migrate_data()
+
     pkey = _platform_key()
     if pkey is None:
         sys.stderr.write(
-            f"docspec: unsupported platform ({platform.system()}/{platform.machine()})"
+            f"artispec: unsupported platform ({platform.system()}/{platform.machine()})"
             " — not covered by the TinyTeX manifest.\n")
         return 1
 
@@ -119,17 +126,17 @@ def run(argv: list[str]) -> int:
         # macOS 的下載/解壓/字型路徑在程式碼裡是齊的（manifest + 平台 key），但尚未在真實
         # Mac 硬體上跑過一輪端到端驗證（只在 Windows/Linux 實測過）——先誠實提醒，不擋。
         sys.stderr.write(
-            "docspec: note — macOS is not yet verified on real hardware "
+            "artispec: note — macOS is not yet verified on real hardware "
             "(only Windows and Linux are tested); setup will proceed but may hit "
             "untested edge cases. Reports welcome.\n")
 
     try:
         dd = paths.data_dir()
     except Exception as exc:  # noqa: BLE001 — platformdirs 缺席等
-        sys.stderr.write(f"docspec: cannot resolve data_dir ({exc}) — make sure platformdirs is installed.\n")
+        sys.stderr.write(f"artispec: cannot resolve data_dir ({exc}) — make sure platformdirs is installed.\n")
         return 1
 
-    print(f"docspec setup (platform={pkey}) → data_dir: {dd}")
+    print(f"artispec setup (platform={pkey}) → data_dir: {dd}")
 
     # 核心受控工具鏈（永遠裝）＝ fonts + pandoc + typst（預設 render 引擎）。
     # TinyTeX（LaTeX 軌）是 OPTIONAL、只在 `--with-latex` 才裝——預設 Typst 軌與 emit-only
@@ -141,12 +148,12 @@ def run(argv: list[str]) -> int:
 
     # 2. pandoc（受控 binary；確定性輸出，不靠系統 pandoc）
     if not _ensure_pandoc(force=args.force, no_download=args.no_download):
-        sys.stderr.write("docspec: pandoc install did not complete — setup aborted.\n")
+        sys.stderr.write("artispec: pandoc install did not complete — setup aborted.\n")
         return 1
 
     # 3. typst（受控 binary；Typst 軌＝預設 render 引擎，輕量、原生 CJK）
     if not _ensure_typst(force=args.force, no_download=args.no_download):
-        sys.stderr.write("docspec: typst install did not complete — setup aborted.\n")
+        sys.stderr.write("artispec: typst install did not complete — setup aborted.\n")
         return 1
 
     # 4. TinyTeX + tlmgr packages — OPTIONAL（--with-latex 明裝；或**偵測到已裝就對齊**——
@@ -159,22 +166,22 @@ def run(argv: list[str]) -> int:
     if args.with_latex or tinytex_present:
         if not _ensure_tinytex(pkey, force=args.force, no_download=args.no_download,
                                use_dev_shortcut=not args.no_dev_shortcut):
-            sys.stderr.write("docspec: TinyTeX install did not complete — setup aborted.\n")
+            sys.stderr.write("artispec: TinyTeX install did not complete — setup aborted.\n")
             return 1
         tlmgr = paths.tlmgr_path(paths.tinytex_root())
         if tlmgr is None:
-            sys.stderr.write("docspec: TinyTeX is in place but tlmgr was not found — the install may be incomplete.\n")
+            sys.stderr.write("artispec: TinyTeX is in place but tlmgr was not found — the install may be incomplete.\n")
             return 1
         ok, packages = _ensure_packages(tlmgr)
         if not ok:
-            sys.stderr.write("docspec: tlmgr package install did not complete (possibly offline/mirror issue) — setup aborted.\n")
+            sys.stderr.write("artispec: tlmgr package install did not complete (possibly offline/mirror issue) — setup aborted.\n")
             return 1
         xelatex = paths.resolve_xelatex()
 
     # 5. draw.io（選用、D8：核心不裝、--with-drawio 才裝；供 dspx-diagram subagent 渲圖）
     if args.with_drawio:
         if not _ensure_drawio(force=args.force, no_download=args.no_download, interactive=True):
-            sys.stderr.write("docspec: draw.io install did not complete — setup aborted.\n")
+            sys.stderr.write("artispec: draw.io install did not complete — setup aborted.\n")
             return 1
 
     # 6. tex.lock
@@ -189,13 +196,45 @@ def run(argv: list[str]) -> int:
     if xelatex:
         print(f"  xelatex: {xelatex}  (optional LaTeX track)")
     else:
-        print("  xelatex: not installed (run `docspec setup --with-latex` to compile journal .tex locally)")
+        print("  xelatex: not installed (run `artispec setup --with-latex` to compile journal .tex locally)")
     if drawio:
         print(f"  draw.io: {drawio}  (optional; diagram rendering)")
     else:
-        print("  draw.io: not installed (run `docspec setup --with-drawio` to add diagram rendering)")
-    print("  From now on `docspec export <article>` / `docspec proof <article>` run purely off data_dir.")
+        print("  draw.io: not installed (run `artispec setup --with-drawio` to add diagram rendering)")
+    print("  From now on `artispec export <article>` / `artispec proof <article>` run purely off data_dir.")
     # 兩軌更新心智：資產（本指令對齊）vs 程式碼（dspx wheel，用 uv 換）。setup 只碰資產層。
-    print("\nProgram code (the dspx wheel) is not updated here — use: "
-          "uv tool install --from <docspec path or PyPI> docspec --reinstall --no-cache")
+    print("\nProgram code (the artispec wheel) is not updated here — use: "
+          "uv tool install --from <checkout path or published package source> artispec --reinstall --no-cache")
+    return 0
+
+
+def _migrate_data() -> int:
+    """獨立遷移模式：不偵測安裝平台、不下載、不執行正常 setup。"""
+    from dspx.engine.runtime_data import migrate_legacy_data
+
+    try:
+        report = migrate_legacy_data()
+    except (OSError, ValueError) as exc:
+        sys.stderr.write(f"artispec: data migration failed: {exc}\n")
+        return 1
+    print(f"artispec setup --migrate-data: {report['status']}")
+    print(f"  source (preserved): {report['source']}")
+    print(f"  target: {report['target']}")
+    if report["status"] == "missing":
+        print("  legacy source not found; nothing created or downloaded.")
+    else:
+        groups: dict[str, list[dict]] = {}
+        for item in report["items"]:
+            groups.setdefault(item["path"].split("/", 1)[0], []).append(item)
+        for name, items in groups.items():
+            created = sum(item["action"] == "created" for item in items)
+            files = sum(item["kind"] == "file" for item in items)
+            print(f"  {Path(report['source']) / name} -> {Path(report['target']) / name}: "
+                  f"{files} file(s) verified, {created} item(s) created, {len(items) - created} unchanged")
+            if name == "tex.lock":
+                item = items[0]
+                print(f"    sha256: {item['before_sha256']} -> {item['after_sha256']}")
+        for change in report["lock_paths"]:
+            print(f"  tex.lock {change['field']}: {change['before']} -> {change['after']}")
+        print(f"  unknown source root items left in place: {report['excluded']}")
     return 0

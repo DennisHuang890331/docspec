@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 
@@ -71,8 +72,8 @@ def test_update_command_and_argv():
     assert "uv tool install --from" in _install_source.update_command(git)
     assert "--reinstall" in _install_source.update_command(git)
     assert _install_source.update_argv(git)[0] == "uv" and "--reinstall" in _install_source.update_argv(git)
-    assert _install_source.update_command({"kind": "dir", "path": "/x"}) == "uv tool upgrade docspec"
-    assert _install_source.update_command(None) == "uv tool upgrade docspec"
+    assert _install_source.update_command({"kind": "dir", "path": "/x"}) == "uv tool upgrade artispec"
+    assert _install_source.update_command(None) == "uv tool upgrade artispec"
 
 
 # ── version 輸出（安裝來源 + typst 版本）──────────────────────────
@@ -80,7 +81,7 @@ def test_update_command_and_argv():
 def _stub_versions(monkeypatch):
     monkeypatch.setattr(version_cmd, "_typst_version", lambda: "0.13.1")
     monkeypatch.setattr(version_cmd, "_pandoc_version", lambda: "3.1.11")
-    monkeypatch.setattr(version_cmd, "_tinytex_version", lambda: "(not installed; run `docspec setup`)")
+    monkeypatch.setattr(version_cmd, "_tinytex_version", lambda: "(not installed; run `artispec setup`)")
 
 
 def test_version_report_git_source(monkeypatch):
@@ -100,7 +101,7 @@ def test_version_report_dir_source(monkeypatch):
         "kind": "dir", "path": "/home/u/docspec"})
     out = version_cmd.report()
     assert "installed from directory /home/u/docspec" in out
-    assert "build snapshot" in out and "uv tool upgrade docspec" in out
+    assert "build snapshot" in out and "uv tool upgrade artispec" in out
 
 
 def test_version_report_no_source_omits_line(monkeypatch):
@@ -124,10 +125,25 @@ def test_typst_version_reads_subprocess(monkeypatch):
 def test_typst_version_missing_hints(monkeypatch):
     from dspx.engine import paths
     monkeypatch.setattr(paths, "resolve_typst", lambda: None)
-    assert "docspec setup" in version_cmd._typst_version()
+    assert "artispec setup" in version_cmd._typst_version()
 
 
 # ── init 非阻塞更新檢查（全 mock）─────────────────────────────────
+
+
+def test_init_update_check_reads_dev_branch_head(monkeypatch):
+    import urllib.request
+
+    requests = []
+
+    def urlopen(request, **kwargs):
+        requests.append(request.full_url)
+        return io.BytesIO(json.dumps({"sha": "synthetic-dev-head"}).encode())
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    assert init_cmd._github_head_sha(timeout=0.1) == "synthetic-dev-head"
+    assert requests == ["https://api.github.com/repos/DennisHuang890331/docspec/commits/dev"]
+
 
 def _init_dir(tmp_path, monkeypatch, name):
     proj = tmp_path / name
@@ -178,7 +194,7 @@ def test_init_update_check_dir_offline_no_network(tmp_path, monkeypatch, capsys)
                         lambda *a, **k: called.append(1) or "z")
     assert init_cmd.run(["--tool", "claude"]) == 0
     out = capsys.readouterr().out
-    assert "snapshot" in out and "uv tool upgrade docspec" in out
+    assert "snapshot" in out and "uv tool upgrade artispec" in out
     assert not called                                # 目錄裝＝零網路呼叫
 
 
@@ -212,13 +228,13 @@ def test_self_update_prints_dir_command(monkeypatch, capsys):
     monkeypatch.setattr(_install_source, "read_install_source",
                         lambda *a, **k: {"kind": "dir", "path": "/x"})
     assert su_cmd.run([]) == 0
-    assert "uv tool upgrade docspec" in capsys.readouterr().out
+    assert "uv tool upgrade artispec" in capsys.readouterr().out
 
 
 def test_self_update_unknown_source_generic_hint(monkeypatch, capsys):
     monkeypatch.setattr(_install_source, "read_install_source", lambda *a, **k: None)
     assert su_cmd.run([]) == 0
-    assert "uv tool upgrade docspec" in capsys.readouterr().out
+    assert "uv tool upgrade artispec" in capsys.readouterr().out
 
 
 def test_self_update_run_launches_detached_not_waited(monkeypatch, capsys):
@@ -239,7 +255,7 @@ def test_self_update_run_launches_detached_not_waited(monkeypatch, capsys):
         assert "creationflags" in calls["kw"]        # DETACHED_PROCESS|新 process group
     else:
         assert calls["kw"].get("start_new_session") is True
-    assert "docspec version" in capsys.readouterr().out
+    assert "artispec version" in capsys.readouterr().out
 
 
 # ── 兩層 help：update 露、template 藏 ─────────────────────────
@@ -260,4 +276,4 @@ def test_help_all_lists_template_and_update(capsys):
 def test_update_runnable_by_direct_dispatch(monkeypatch, capsys):
     monkeypatch.setattr(_install_source, "read_install_source", lambda *a, **k: None)
     assert cli.main(["update"]) == 0
-    assert "uv tool upgrade docspec" in capsys.readouterr().out
+    assert "uv tool upgrade artispec" in capsys.readouterr().out

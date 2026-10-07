@@ -1,9 +1,9 @@
-"""docspec archive <change> — 一次修改做完：套用並收進歷史（文件與軟體共用的入口）。
+"""artispec archive <change> — 一次修改做完：套用並收進歷史（文件與軟體共用的入口）。
 
 程式依 change 名稱判斷它屬於哪個領域，兩邊的檢查各自保留：
-- 文件 change（`docspec/changes/<id>/`）→ 等同 `docspec change archive`：每個 target 都完成、
+- 文件 change（`docspec/changes/<id>/`）→ 等同 `artispec change archive`：每個 target 都完成、
   草稿套用回正式內容、搬進 `changes/_archive/`；`--abandon --reason` 放棄。
-- 軟體 change（`docspec/software/changes/<id>/`）→ 等同 `docspec code archive`：任務都有證據、
+- 軟體 change（`docspec/software/changes/<id>/`）→ 等同 `artispec code archive`：任務都有證據、
   該有的驗收都有、規格沒有衝突，差異併回正式規格、寫基線、搬進 `_archive/`；`--dry-run` 只檢查。
 change 名稱跨領域不可重複（建立時就擋），所以不會判斷錯。
 """
@@ -41,7 +41,7 @@ def name_taken_elsewhere(layout, cid: str, domain: str) -> str | None:
 
 def run(argv: list[str]) -> int:
     if not argv or argv[0] in ("-h", "--help"):
-        print("usage: docspec archive <change> [--dry-run] [--abandon --reason R] [--override-drift]\n")
+        print("usage: artispec archive <change> [--dry-run] [--abandon --reason R] [--override-drift]\n")
         print(HELP)
         return 0
     from dspx.commands._shared import BootstrapError, bootstrap
@@ -50,24 +50,31 @@ def run(argv: list[str]) -> int:
     except BootstrapError as exc:
         return exc.exit_code
     cid = argv[0]
-    domain = domain_of(layout, cid)
+    from dspx.engine.change_catalog import ensure_unique
+    from dspx.engine.software.io import SoftwareError
+    try:
+        ensure_unique(layout, cid)
+        domain = domain_of(layout, cid)
+    except SoftwareError as exc:
+        sys.stderr.write(f"artispec archive: {exc}\n")
+        return 1
     if domain is None:
-        sys.stderr.write(f"docspec: no active change \"{cid}\" (document or software); "
-                         f"see `docspec change status` and `docspec code change list`.\n")
+        sys.stderr.write(f"artispec: no active change \"{cid}\" (document or software); "
+                         f"see `artispec change status` and `artispec code change list`.\n")
         return 1
     if domain == "both":
-        sys.stderr.write(f"docspec: both a document change and a software change are named \"{cid}\"; "
-                         f"use `docspec change archive {cid}` or `docspec code archive {cid}`.\n")
+        sys.stderr.write(f"artispec: both a document change and a software change are named \"{cid}\"; "
+                         f"use `artispec change archive {cid}` or `artispec code archive {cid}`.\n")
         return 2
     if domain == "doc":
         if "--dry-run" in argv:
-            sys.stderr.write("docspec: --dry-run applies to software changes; for a document change "
-                             f"see `docspec change status {cid}`.\n")
+            sys.stderr.write("artispec: --dry-run applies to software changes; for a document change "
+                             f"see `artispec change status {cid}`.\n")
             return 2
         from dspx.commands.change.change import _cmd_archive
         return _cmd_archive(argv)
     if any(a in argv for a in ("--abandon", "--override-drift")):
-        sys.stderr.write("docspec: --abandon / --override-drift apply to document changes only.\n")
+        sys.stderr.write("artispec: --abandon / --override-drift apply to document changes only.\n")
         return 2
     from dspx.commands.code import code as code_cmd
     return code_cmd.run(["archive", *argv])

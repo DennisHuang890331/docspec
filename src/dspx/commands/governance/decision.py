@@ -1,4 +1,4 @@
-"""docspec decision — 專案層（跨領域的方向性）決策。
+"""artispec decision — 專案層（跨領域的方向性）決策。
 
 - `add` 建草稿。取代舊決策時用 `--supersedes`，而且 `--statement` 必須是**合併後的完整新版**
   （2026/09/29 裁定：不再允許「以後者為準」式的局部取代）。
@@ -37,7 +37,7 @@ def history_chain(did: str, gov: gv.Governance) -> list[dict]:
 
 
 def run(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="docspec decision", description=HELP)
+    p = argparse.ArgumentParser(prog="artispec decision", description=HELP)
     sub = p.add_subparsers(dest="op")
     a = sub.add_parser("add", help="create a draft decision")
     a.add_argument("--title", required=True)
@@ -116,7 +116,7 @@ def run(argv: list[str]) -> int:
                 flagged = flag_after_change(layout, did)
                 if flagged:
                     print(f"impact: {len(flagged)} downstream item(s) marked suspect — "
-                          f"run `docspec impact` to review")
+                          f"run `artispec impact` to review")
             return 0
         if args.op == "show":
             did = gv.strip_ns(args.id)

@@ -336,7 +336,7 @@ def test_every_skill_is_drive_through_format():
         for section in ("**Input**", "**Steps**", "**Output**", "**Guardrails**"):
             assert section in s.body, f"{s.name} body missing {section}"
         # the driver leans on the engine: every skill invokes docspec commands
-        assert "docspec " in s.body, f"{s.name} does not anchor to any docspec command"
+        assert "artispec " in s.body, f"{s.name} does not anchor to any artispec command"
 
 
 def test_skill_bodies_carry_no_environment_troubleshooting():
@@ -428,18 +428,18 @@ def test_agent_path_recovery_now_lives_in_compatibility_not_body():
 
 
 def test_docspec_invocation_uses_absolute_path(monkeypatch):
-    monkeypatch.setattr(skills_cmd.shutil, "which", lambda _: r"C:\Users\u\.local\bin\docspec.exe", raising=False)
-    assert skills_cmd._docspec_invocation() == r"C:\Users\u\.local\bin\docspec.exe"
+    monkeypatch.setattr(skills_cmd.shutil, "which", lambda _: r"C:\Users\u\.local\bin\artispec.exe", raising=False)
+    assert skills_cmd._docspec_invocation() == r"C:\Users\u\.local\bin\artispec.exe"
 
 
 def test_docspec_invocation_quotes_spaces(monkeypatch):
-    monkeypatch.setattr(skills_cmd.shutil, "which", lambda _: r"C:\Program Files\bin\docspec.exe", raising=False)
-    assert skills_cmd._docspec_invocation() == r'"C:\Program Files\bin\docspec.exe"'
+    monkeypatch.setattr(skills_cmd.shutil, "which", lambda _: r"C:\Program Files\bin\artispec.exe", raising=False)
+    assert skills_cmd._docspec_invocation() == r'"C:\Program Files\bin\artispec.exe"'
 
 
 def test_docspec_invocation_falls_back_to_bare(monkeypatch):
     monkeypatch.setattr(skills_cmd.shutil, "which", lambda _: None, raising=False)
-    assert skills_cmd._docspec_invocation() == "docspec"
+    assert skills_cmd._docspec_invocation() == "artispec"
 
 
 def test_guard_detector_tolerates_absolute_path():

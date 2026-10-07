@@ -73,11 +73,11 @@ def _emit_journal(pandoc: str, template: Path, title: str, body_md: str,
     unknown, unused = slots_mod.validate_against_template(built, template_text)
     if unknown:
         sys.stderr.write(
-            "docspec: ⚠ this journal template references variable(s) not in the slot contract "
+            "artispec: ⚠ this journal template references variable(s) not in the slot contract "
             f"(the contract may need to flex): {', '.join(unknown)}\n")
     if unused:
         sys.stderr.write(
-            f"docspec: (info) slots provided but unused by this template: {', '.join(unused)}\n")
+            f"artispec: (info) slots provided but unused by this template: {', '.join(unused)}\n")
 
     with tempfile.TemporaryDirectory(prefix="dspx_journal_") as td:
         build = Path(td)

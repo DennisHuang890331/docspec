@@ -27,7 +27,9 @@ Codex 照 OpenSpec 改 skills-only：不再寫全域 $CODEX_HOME/prompts（舊�
 from __future__ import annotations
 
 import argparse
+import ntpath
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -220,7 +222,7 @@ def _retire_legacy(root: Path, tool: str, skills: list[Skill], *, force: bool,
     if not force:
         for p in stale:
             results.append(f"  ! legacy docspec file left in place: {p} "
-                           "(re-run `docspec init` to retire it)")
+                           "(re-run `artispec init` to retire it)")
         return
     for p in stale:
         _remove_path(p)
@@ -236,6 +238,11 @@ def _install(root: Path, tools: tuple[str, ...], force: bool) -> list[str]:
     if not skills:
         raise SkillError("no built-in skills found (package data missing?)")
     results: list[str] = []
+    if shutil.which("artispec") is None:
+        results.append(
+            "  ! PATH: `artispec` was not found; generated hooks require it. "
+            "Add the installation's command directory to PATH and re-run `artispec init` "
+            "to pin its absolute path (for uv tools: `uv tool update-shell`, then restart the session).")
     # 只給 workflow skill 產 command——support skill 由 subagent 載入、非人顯式叫用的階段。
     workflow_skills = [s for s in skills if s.is_workflow]
 
@@ -287,16 +294,20 @@ def _install(root: Path, tools: tuple[str, ...], force: bool) -> list[str]:
 
 
 # ---- freeze 守門 hook（擋改 archive/）----------------------------------------
-# 跨平台：hook 一律呼叫 `docspec hook ...`（邏輯在 Python），設定檔不寫各平台 shell。
+# 跨平台：hook 一律呼叫 `artispec hook ...`（邏輯在 Python），設定檔不寫各平台 shell。
 
 def _docspec_invocation() -> str:
-    """hook 指令叫用 docspec 的方式：安裝時解析**絕對路徑**（`shutil.which`），避免 hook 在
-    PATH 尚未更新／被沙箱清過的 shell 裡找不到 docspec 而靜默不守門（凍結保護失效）；
-    含空白則加引號（cmd/sh 皆可）；解不到才退回裸 `docspec`。"""
-    resolved = shutil.which("docspec")
+    """Pin the installed artispec path; unresolved PATH is reported by _install.
+
+    The helper name stays internal and does not provide an executable alias.
+    """
+    resolved = shutil.which("artispec")
     if not resolved:
-        return "docspec"
-    return f'"{resolved}"' if " " in resolved else resolved
+        return "artispec"
+    # A relative PATH entry must not make hooks depend on the init shell's cwd.
+    if not os.path.isabs(resolved) and not ntpath.isabs(resolved):
+        resolved = str(Path(resolved).resolve())
+    return f'"{resolved}"' if any(c.isspace() for c in resolved) else resolved
 
 
 def _claude_guard_entry() -> dict:
@@ -306,7 +317,7 @@ def _claude_guard_entry() -> dict:
             "type": "command",
             "command": f"{_docspec_invocation()} hook guard",
             "timeout": 10,
-            "statusMessage": "docspec freeze guard (archive/)",
+            "statusMessage": "artispec freeze guard (archive/)",
         }],
     }
 
@@ -318,13 +329,13 @@ def _claude_postcheck_entry() -> dict:
             "type": "command",
             "command": f"{_docspec_invocation()} hook check",
             "timeout": 10,
-            "statusMessage": "docspec completeness reminder (corpus/*.yaml)",
+            "statusMessage": "artispec completeness reminder (corpus/*.yaml)",
         }],
     }
 
 
 def _codex_guard_entry() -> dict:
-    # Codex 的 hook schema 與 Claude 同構（exit-2 + stderr 擋下，`docspec hook guard` 原樣可用）；
+    # Codex 的 hook schema 與 Claude 同構（exit-2 + stderr 擋下，`artispec hook guard` 原樣可用）；
     # 檔案編輯工具叫 apply_patch（加進 matcher），shell 仍是 Bash。
     return {
         "matcher": "Edit|Write|Bash|apply_patch",
@@ -332,7 +343,7 @@ def _codex_guard_entry() -> dict:
             "type": "command",
             "command": f"{_docspec_invocation()} hook guard",
             "timeout": 10,
-            "statusMessage": "docspec freeze guard (archive/)",
+            "statusMessage": "artispec freeze guard (archive/)",
         }],
     }
 
@@ -344,7 +355,7 @@ def _codex_postcheck_entry() -> dict:
             "type": "command",
             "command": f"{_docspec_invocation()} hook check",
             "timeout": 10,
-            "statusMessage": "docspec completeness reminder (corpus/*.yaml)",
+            "statusMessage": "artispec completeness reminder (corpus/*.yaml)",
         }],
     }
 
@@ -352,7 +363,7 @@ def _codex_postcheck_entry() -> dict:
 def _gemini_guard_entry() -> dict:
     # Gemini CLI hook 協定與 Claude 相容處：stdin 帶 tool_name/tool_input、exit 2＋stderr 擋下；
     # 內建工具參數同名（write_file/replace 的 file_path、run_shell_command 的 command），故
-    # `docspec hook guard` 原樣可用。差異：事件叫 BeforeTool、timeout 單位是毫秒。
+    # `artispec hook guard` 原樣可用。差異：事件叫 BeforeTool、timeout 單位是毫秒。
     return {
         "matcher": "write_file|replace|run_shell_command",
         "hooks": [{
@@ -364,19 +375,75 @@ def _gemini_guard_entry() -> dict:
     }
 
 
+def _owned_hook(hook: dict, action: str) -> bool:
+    """Match exact old/new executable invocations, not another tool's substring.
+
+    Host-shell tokenization is inappropriate for migrated Windows/POSIX paths.
+    """
+    if hook.get("type", "command") != "command":
+        return False
+    command = hook.get("command")
+    if not isinstance(command, str):
+        return False
+    match = re.fullmatch(r'''\s*(?:"([^"\r\n]+)"|'([^'\r\n]+)'|([^\s"']+))\s+hook\s+(guard|check)\s*''', command)
+    if match is None or match.group(4) != action:
+        return False
+    executable = next(part for part in match.groups()[:3] if part is not None)
+    basename = executable.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    return basename in {"docspec", "docspec.exe", "docspec.cmd", "artispec", "artispec.exe", "artispec.cmd"}
+
+
 def _is_docspec_guard(entry: dict) -> bool:
-    # 比對 `hook guard` 子命令（容忍 docspec 被寫成絕對路徑＝C4 portability 修法）。
-    for h in (entry or {}).get("hooks", []):
-        if "hook guard" in str(h.get("command", "")):
-            return True
-    return False
+    return any(_owned_hook(h, "guard") for h in (entry or {}).get("hooks", []))
 
 
 def _is_docspec_postcheck(entry: dict) -> bool:
-    for h in (entry or {}).get("hooks", []):
-        if "hook check" in str(h.get("command", "")):
-            return True
-    return False
+    return any(_owned_hook(h, "check") for h in (entry or {}).get("hooks", []))
+
+
+def _validate_hook_settings(settings: object, path: Path) -> dict:
+    """Reject unreadable structures before changing a user's settings."""
+    def invalid(reason: str) -> None:
+        raise SkillError(f"invalid hook settings in {path}: {reason}; repair the file and retry (not overwritten)")
+
+    if not isinstance(settings, dict):
+        invalid("top-level value must be an object")
+    hooks = settings.get("hooks", {})
+    if not isinstance(hooks, dict):
+        invalid("hooks must be an object")
+    for event, entries in hooks.items():
+        # Older Gemini settings placed control fields alongside event arrays.
+        # Preserve them; modern hooksConfig controls remain untouched outside hooks.
+        if event in {"enabled", "notifications"}:
+            if not isinstance(entries, bool):
+                invalid(f"hooks.{event} must be a boolean")
+            continue
+        if event == "disabled":
+            if not isinstance(entries, list) or not all(isinstance(name, str) for name in entries):
+                invalid("hooks.disabled must be an array of names")
+            continue
+        if not isinstance(entries, list):
+            invalid(f"hooks.{event} must be an array")
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(entry.get("hooks"), list):
+                invalid(f"hooks.{event} entries must be objects containing a hooks array")
+            for hook in entry["hooks"]:
+                if not isinstance(hook, dict):
+                    invalid(f"hooks.{event} hook must be an object")
+                if "command" in hook and not isinstance(hook["command"], str):
+                    invalid(f"hooks.{event} hook command must be a string")
+    return settings
+
+
+def _without_owned_hooks(entries: list[dict], action: str) -> list[dict]:
+    retained = []
+    for entry in entries:
+        remaining = [hook for hook in entry["hooks"] if not _owned_hook(hook, action)]
+        if len(remaining) == len(entry["hooks"]):
+            retained.append(entry)
+        elif remaining:
+            retained.append({**entry, "hooks": remaining})
+    return retained
 
 
 def _write_hook_settings(path: Path, guard_entry: dict, postcheck_entry: dict | None, *,
@@ -385,17 +452,18 @@ def _write_hook_settings(path: Path, guard_entry: dict, postcheck_entry: dict | 
     （Claude/Codex＝PreToolUse/PostToolUse，Gemini＝BeforeTool）。既有非 docspec 條目保留。"""
     import json
     settings: dict = {}
-    if path.is_file():
+    if path.exists():
         try:
-            settings = json.loads(path.read_text(encoding="utf-8")) or {}
-        except json.JSONDecodeError:
-            settings = {}
+            settings = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+            raise SkillError(f"cannot read hook settings in {path}: {exc}; repair the file and retry (not overwritten)") from exc
+    settings = _validate_hook_settings(settings, path)
     hooks = settings.setdefault("hooks", {})
-    pre = [e for e in hooks.get(pre_event, []) if not _is_docspec_guard(e)]
+    pre = _without_owned_hooks(hooks.get(pre_event, []), "guard")
     pre.append(guard_entry)
     hooks[pre_event] = pre
     if postcheck_entry is not None:
-        post = [e for e in hooks.get(post_event, []) if not _is_docspec_postcheck(e)]
+        post = _without_owned_hooks(hooks.get(post_event, []), "check")
         post.append(postcheck_entry)
         hooks[post_event] = post
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -406,7 +474,7 @@ def _write_hook_settings(path: Path, guard_entry: dict, postcheck_entry: dict | 
 def _install_hook(root: Path, tool: str, results: list[str]) -> None:
     """裝 PreToolUse 守門 hook（擋改 archive/ 凍結區）＋PostToolUse 完整性回饋。
 
-    Claude 與 Codex 的 hook schema 同構（command hook、exit-2 + stderr 擋下，`docspec hook
+    Claude 與 Codex 的 hook schema 同構（command hook、exit-2 + stderr 擋下，`artispec hook
     guard` 原樣可用）：Claude→`.claude/settings.json`、Codex→`.codex/hooks.json`（Codex 檔案
     編輯工具 apply_patch 已納 matcher）；Gemini CLI→`.gemini/settings.json`（BeforeTool）。
     Antigravity 的 BLOCK 機制是 stdout deny-JSON（非 exit-2）且工具名/欄位拼法未經官方文件實證
@@ -440,7 +508,7 @@ def _cmd_list(_args: argparse.Namespace) -> int:
     try:
         skills = available_skills()
     except SkillError as exc:
-        sys.stderr.write(f"docspec: {exc}\n")
+        sys.stderr.write(f"artispec: {exc}\n")
         return 1
     if not skills:
         print("(no built-in skills found)")
@@ -458,21 +526,16 @@ def _cmd_install(args: argparse.Namespace) -> int:
     try:
         results = _install(root, tools, args.force)
     except SkillError as exc:
-        sys.stderr.write(f"docspec: {exc}\n")
+        sys.stderr.write(f"artispec: {exc}\n")
         return 1
     print(f"Installing skills to {root} (tools: {', '.join(tools)})")
     for line in results:
         print(line)
-    if shutil.which("docspec") is None:
-        print("\n⚠ `docspec` is not on this shell's PATH — your agent tools (Claude/Codex/Gemini/Antigravity)")
-        print("  will hit \"docspec: command not recognized\". Add the uv tools bin dir to PATH:")
-        print("    uv tool update-shell    # then fully restart the agent tool's terminal/session")
-        print("  (the binary lives in `uv tool dir --bin`, normally ~/.local/bin).")
     return 0
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec skills", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec skills", description=HELP)
     sub = parser.add_subparsers(dest="action")
 
     p_list = sub.add_parser("list", help="list the built-in skills")
@@ -498,7 +561,7 @@ def run(argv: list[str]) -> int:
 def outdated_installs(root: Path) -> list[str]:
     """專案裡已安裝、但和這個 docspec 內建版本不同的 skill 與 AGENTS.md 協作區塊。
 
-    docspec 更新後，專案裡的副本不會自己跟著變；重跑 `docspec init` 才會刷新。
+    docspec 套件更新後，專案裡的副本不會自己跟著變；重跑 `artispec init` 才會刷新。
     只比對存在的檔案（沒裝的工具不算）。"""
     out: list[str] = []
     try:

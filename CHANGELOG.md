@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to docspec are recorded here. The project follows
+All notable changes to ArtiSpec (installation package: `artispec`) are recorded here. The project follows
 [Semantic Versioning](https://semver.org/). In addition to the package version
 (`pyproject.toml`), the **export-format / slot-contract surface** is versioned
 independently (`dspx.slots.CONTRACT_VERSION`) so that changes to the journal slot
@@ -9,6 +9,121 @@ own semver: a breaking slot rename/removal is a major bump, an added optional sl
 a minor bump.
 
 ## [Unreleased]
+
+### Changed — installation package and explicit user tool-data migration
+
+- The installation distribution is now `artispec`, and development uses `dev` after renaming `claude/software-domain-redesign`. This later owner ruling supersedes earlier installation-name and no-commit/no-push restrictions recorded below. Repository name `docspec`, Python imports `dspx`, project `docspec/`, `corpus`, `DOCSPEC_*` and ownership markers retain their names; sealed history and evidence retain their original bytes.
+- Managed user tools and fonts now use `platformdirs.user_data_dir('artispec', appauthor=False)`: `%LOCALAPPDATA%\artispec` on Windows, normally `~/.local/share/artispec` on Linux. Explicit `artispec setup --migrate-data` copies only managed `tinytex/`, `fonts/`, `pandoc/`, `typst/`, `drawio/`, `cache/`, `tex.lock` and `update-cache.json` from the former `user_data_dir('docspec')` offline without ordinary setup/downloads. It keeps the source as a backup and unrelated old-root contents in place, preserves other file bytes and rewrites only known `tex.lock` paths under the old root. Destination conflicts refuse the whole batch before copying; existing destination contents, including `installers/`, are retained. Matching content on repeat migration is unchanged. Project data is not moved automatically.
+- Installation and upgrade examples use direct `"<wheel>[export]"` requirements. Verify the new wheel in isolation before `uv tool uninstall docspec` and installing the new uv tool; uninstall removes only that old tool environment. Then explicitly migrate tools and run doctor/deep. Both READMEs receive only the current installation-name/upgrade correction; their owner-requested content reorganization remains pending.
+- Local checkout/wheel installation is available; the repository's `dev` Git source represents this work only after pushing, with repository access if required. No public PyPI release is claimed. Main and PR creation remain outside this authorization.
+- Latest same-topic exam trials still lack initial acceptance/archive, the capacity change and fresh-session takeover. Roadmap unlink remains an unapproved proposal and is not repaired in this batch. Completed change validation without archive does not establish a complete workflow pass; earlier failures and unfinished acceptance records remain intact.
+- OpenSpec change `align-artispec-installation` tracks this work; actual regression, packaging and installed-tool results are recorded in the [installation upgrade report](docs/dev/validation/installation-upgrade-run.md), separately from previous validation totals below.
+- Final regression passed on Windows (2135 passed, 1 skipped; Python 3.12.13) and actual WSL Linux (2132 passed, 4 skipped; Python 3.12.3), with 2136 collected and no failures/errors per platform. Original exit codes and XML were checked; 276 source/test/package/lock files retained their bytes. Skips are the existing retired-warning case and three additional Windows-only junction cases on Linux; PDF/proof had no skips. Four installed-wheel clean/upgrade scenarios passed 50 commands, 88 checks and 696 package-file comparisons. Explicit real tool-data migration verified 23,620 Windows and 20,751 Linux managed files, retaining the sources; candidate Windows doctor/deep and an actual one-page bilingual compile passed.
+- The user's uv tool installation now lists `artispec v0.1.0` with its sole `artispec` entry point; the old `docspec` tool environment was removed. The installed CLI's doctor/deep, a one-page Chinese compile and pip check for 16 packages exited successfully. Managed Typst 0.15, Pandoc 3.10, 19 fonts and TinyTeX passed health checks; the old tool-data source and 2026/10/06 wheel backup remain. Installed dependencies follow constraints exported from the repository lock. Shared-wheel delivery, committing and pushing `dev` remain pending; these results do not complete the unfinished agent workflow trials.
+
+### Fixed — executable work-summary source queries
+
+- Question, work and milestone source hints now use existing read-only CLI queries. Answered and withdrawn questions remain inspectable with their original body; work and milestone queries retain existing derived status and counts. No new CLI API, record format or completion algorithm is introduced.
+- Independent related regression passed on Windows and actual WSL Linux (81 cases each); final full regression passed with 2096 passed／1 skipped and 2093 passed／4 skipped. New-wheel installation and real-console checks passed on both platforms. Original failures, wheels and stopped exam cases remain intact; neither exam installation was updated. See [the source-query report](docs/dev/validation/summary-source-commands-run.md).
+
+### Added — explicit draft requirement sources and check coverage
+
+- Document realizes links can name an unarchived changed requirement with `draft-req:<change>/<capability>/R<n>`. Source resolution, fingerprints, projections, trace and work summaries share the selected change and sealed landing baseline/renames. Original references and historical seals remain intact; invalid provenance is reported separately from document completion.
+- Check JSON adds coverage v1, also used for text: project structure, actual reference scans, preview readiness and software issues. Semantic and delivery reviews are not performed; official prose synchronization is not assessed. Existing ok, errors, index scope and exit codes remain unchanged.
+- Engineering document guidance follows the task, audience, existing project conventions and kind. Updated develop/apply 2.6, factcheck 2.4 and generated guidance v4 retain custom writing guides and useful scope/navigation, without mandatory forms or new completion gates.
+- Evaluator tooling shares UTF-8 command records, real session checks, source resolution and verified artifact checkpoints. Concurrent command-log appends now use bounded OS file locks; original damaged records are preserved. Windows controller transport logs stay local, separately from native WSL command logs. Final regression passed on Windows (2087 passed, 1 skipped) and actual WSL Linux (2084 passed, 4 skipped); both installed-wheel checks passed. New same-topic seating cases are in progress, with no delivery pass claimed yet. Both README files remain outside this batch. See [the current validation report](docs/dev/validation/workflow-alignment-run.md).
+
+### Fixed — guide governance source contract
+
+- Full, develop and JSON guide projections now direct owner rulings and supplied facts to governance records, with change notes retaining rationale and references. This aligns the built-in workflow with the existing skills and generated rules; it adds no notes requirement or completion gate.
+- Independent regression and actual installed-console checks on Windows and Linux are recorded in [the guide report](docs/dev/validation/guide-governance-run.md). Engineering document defaults and draft requirement links remain proposals; the same seating experiment has not yet been rerun.
+
+### Fixed — archive reminders and delivery review guidance
+
+- Document archive's seed-only or missing-notes reminder now points to optional rationale and original governance queries. It does not claim that owner rulings are absent or announce inevitable archive. Target completion and fork-drift checks still apply; notes and governance records are not rewritten.
+- Updated propose/verify skills to 1.6 and generated guidance to v3. They distinguish recorded installation/network constraints, actual platform and finished-artifact coverage, and latest document claims from historical snapshots without adding engine gates.
+- Draft software requirement links remain a separate, unapproved [design proposal](docs/dev/proposals/draft-requirement-links.md); no new reference syntax is implemented in this batch. Actual follow-up validation and its limits are recorded in [the delivery-guidance report](docs/dev/validation/delivery-guidance-run.md), separately from earlier full workflow trials.
+
+### Fixed — workflow gaps found in the complete seating trial
+
+- Roadmap decisions and supplied information are background basis rather than deliverables. Basis-only work requires a reasoned manual close; missing related authority, broken sources and supersession cycles cannot establish completion. List and single-work queries share those checks, without reopening historical work merely for review flags.
+- Document `get`, `instructions`, `find`, `check` and `diff` now default to official sources. Explicit `--change <id>` selects one verified, read-only official/staging view with context and source metadata. Draft prose uses that change's preview; missing or stale prose is diagnosed instead of reviewing old official text. Queries do not render, execute tests or rewrite ledgers.
+- Work summaries default to JSON schema v2, retaining signer metadata, scope fingerprints and original-record entry points without repeated full signed contracts. Identical scope fingerprints share all sources; different historical scopes remain distinct. `roadmap show <id> --schema-version 1` retains the original schema. Stored signatures and evidence are unchanged.
+- Malformed saved scope identifiers retain the engine's existing review state and reasons without crashing or entering the scope index. No scope is fabricated or rewritten.
+- Updated develop/apply/factcheck/release/verify/implement skills and generated guidance v2: explicit document context, latest outputs versus immutable history, acceptance tied to a version, and references instead of duplicate mutable progress or owner quotations. Existing projects can refresh with `artispec init --agents-md --tool <actual-tool>`.
+- These repairs do not add a namespace for unarchived software requirements. Original trial failures and historical artifacts remain intact; follow-up regression and fresh-agent results are recorded separately in [the repair report](docs/dev/validation/workflow-review-gaps-run.md).
+
+### Fixed — validate edits of a change's own additions
+
+- Inline requirement and scenario edits now obey the existing delta operation field restrictions before writing. Unsupported fields such as a removal reason in a scenario modification are rejected without changing the original content or integrity seal.
+- Only supported content fields are updated; identifier and base metadata cannot overwrite assigned requirement or scenario identifiers. Existing verification scopes, signoffs, evidence and archive conditions are unchanged.
+- Delta help explains that `--reason` is for removal operations. Independent regression tests cover invalid writes, valid edits, semantic scope changes and actual engine verification/archive.
+
+### Fixed — independent sessions from the same provider
+
+- Software tests, tasks, signoffs and objections can record stable session ids alongside their original provider labels. Independent Codex sessions can plan and sign tests without being rejected solely because both use `gpt`; the same-session implementation guard remains.
+- Test changes, removal and objection responses enforce the original author's session when recorded. Evidence and diagnostics share the identity comparison; signoffs still depend on test/scenario fingerprints. Legacy same-provider records lacking ids remain conservative, without rewriting history.
+- Codex uses `CODEX_THREAD_ID`; `DOCSPEC_ACTOR_ID` is a fallback for a controller's saved launch id, with conflicting overrides rejected. This is traceable workflow metadata, not authentication. Test/implement skills are now 1.5; existing projects refresh the generated rules with `artispec init --agents-md --tool <actual-tool>`.
+
+### Changed — bilingual project overview
+
+- English and Traditional Chinese READMEs now share a concrete document/software example, distinguish starting from resuming work, and explain the skills/CLI boundary. The English file remains the default, with links between languages; the detailed user guide remains English.
+- Added a bilingual logo design brief for a separate drawing agent. The existing logo is unchanged; the proposed direction has not been selected as final artwork. README content/link checks do not replace the previous fresh-agent workflow trials.
+
+### Changed — document version directories (branch only)
+
+- The owner confirmed `relocate-document-versions`: new frozen Markdown and referenced managed assets belong to `docspec/changes/_versions/<article>/<version>/snapshot/`; regenerated exports/proof live beside that immutable snapshot, and article history lives at `_versions/<article>/history.md`. This replaces new writes to `docs/archive/` and `docs/revision_history/` while retaining legacy reads and protection.
+- `docs/` keeps working latest content, working assets and existing latest-output behavior. Unfrozen preview artifacts have their own `_preview/` directory. Normal changes and `_archive/` retain their domain formats, and first freeze does not require a new change.
+- The approved interfaces are read-only `artispec versions [article] [--json]` and explicit `artispec versions migrate [article] [--dry-run]`, with all articles selected when omitted. Migration must preflight paths, collisions and old freeze hashes, preserve snapshot bytes and sealed baselines, and rekey only verified manifest hashes. Missing historical image provenance must remain visible, without substituting current images.
+- Unversioned old proof is preserved as `_legacy-proof/` with unknown version provenance. Existing registered legacy files move to `_versions/_legacy/<name>/snapshot/` without invented semantic versions; default all-article migration includes them while keeping their original bytes and verified hashes.
+- Implemented version discovery, explicit migration, captured asset integrity and per-version export/proof. Independent review defects, including history symlink writes and image-only no-op detection, were reproduced and retested after repair. Regenerated proof/preview does not make handover stale; source asset changes remain tracked. Release skill is 3.3.
+- Windows full regression: 1729 passed, 1 skipped; Linux via actual WSL runtime: 1726 passed, 4 skipped (three Windows-only junction cases plus the existing retired warning case). Both platforms have 86 PDF/proof/layout-coordinate passes and final-wheel install/upgrade checks. See [version storage validation](docs/dev/validation/document-version-storage-run.md); these results do not replace the earlier unfinished fresh-agent trials. The concise README remains unchanged.
+
+### Changed — retire the old executable and document complete workflows (branch only)
+
+- The only console entry point is `artispec`. This explicit later owner ruling replaces the earlier compatibility-entry arrangement below. The distribution remains `docspec`; `dspx`, `docspec/`, `corpus`, `DOCSPEC_*` and existing management markers remain unchanged.
+- Current CLI help, error/advice text, guide/instructions, generated rules and built-in references use `artispec`. Sealed historical records, evidence and earlier release notes retain their original spelling.
+- Generated hooks resolve the installed `artispec` path and advise fixing PATH when it is unavailable; they never fall back to `docspec`. Refreshing integrations replaces this tool's legacy hooks while retaining custom settings and foreign hooks, and refuses corrupt settings instead of replacing them with empty configuration.
+- The English README is now a concise ArtiSpec entry page without the legacy name, including badge URLs. The linked [user guide](docs/user-guide.md) retains truthful local source/wheel installation for this unpublished branch, complete document/software workflows, and upgrade boundaries. Traceability reminders, required evidence and domain completion remain distinct.
+- Edited built-in workflow skills have increased versions. Existing projects refresh their managed instructions, skills and supported hooks with `artispec init --agents-md` using their actual integrations.
+- This batch is managed by `retire-docspec-command` and `validate-readme-workflows`. Six fresh-agent trials and Windows/Linux mechanical, packaging and PDF/proof results are recorded separately when actually executed; previous validation totals below do not certify this batch.
+- Fresh-agent trials found and repaired typed governance/requirement links rejected by `put`, a check/status crash on material-first sections, and direct Read payloads incorrectly rejected by the write guard. The same-provider independent-agent identity limitation remains pending owner approval; the full six-case acceptance is not yet complete. See [the current validation report](docs/dev/validation/readme-workflows-run.md).
+- A real document proof exposed merged code lines and altered indentation in the bundled Typst syntax highlighting. Scoped token rendering now preserves code lines, deliberate blank lines and indentation, with three actual PDF-coordinate regressions. Frozen source bytes and fidelity gates remain unchanged; the intentionally updated template pack has a regenerated integrity baseline.
+
+### Changed — ArtiSpec name and shared change discovery (branch only)
+
+- The product name is ArtiSpec and the primary command is `artispec`; `docspec` remains compatible. The installation package `docspec`, Python package `dspx`, managed directory `docspec/`, and `corpus` name stay unchanged.
+- New document and software changes share `docspec/changes/`, retaining each domain's formats, creation timing and completion checks. Documents keep targets/staging; software keeps proposal/design, deltas, tests and tasks. No mandatory software forms are added to document work.
+- `artispec change` lists active changes across both domains; `--all` includes history and `artispec change show <id>` reads either domain. These queries do not refresh state, run tests or move records. Existing domain creation and operation commands remain available.
+- Shared list/show JSON uses `schema-version: 1`. Change ids remain reserved across domains and history; missing, damaged or duplicate records report errors. Historical queries preserve recorded results rather than applying today's completion checks.
+- Legacy software changes and archives under `docspec/software/changes/` remain usable without migration. Explicit `artispec change migrate [--dry-run]` checks for conflicts before moving only those containers into the shared root, preserving their contents; queries never migrate them automatically.
+- Current README examples, generated instructions and installed skills use the new command and shared discovery flow; historical release notes retain their original command spelling.
+
+### Added — single work summary (branch only)
+
+- `docspec roadmap show <work-id> [--json]` computes a read-only summary of the existing work, children, prerequisites and linked sources. Version 1 JSON and text share decisions, sign-offs, evidence, document state, fixed-rule advice and missing-data diagnostics.
+- Original superseded references and effective successor content remain visible. Archived software shows historical task/sign-off evidence without reopening it; source integrity failures and dependency cycles cannot support completion.
+- Healthy text items are summarized by counts while problems retain identifiers and reasons. Generated instructions and skills use roadmap, then the selected work summary, then original sources when necessary.
+- The synthetic handover builder records external managed-content fingerprints and asserts that one summary reveals the case's key facts without writing project state. Fresh-agent evaluation is manual; CI remains mechanical regression only.
+
+### Improved — current workflow and stale-state diagnostics (branch only)
+
+- Current requirements follow explicit superseding owner rulings: clarification only when unclear, whole-note handover replacement, non-blocking traceability reminders, and evidence-backed completion. Historical rulings retain their text and identify replacements; product concurrent writing remains out of scope.
+- Proposal and generated agent instructions reuse known operating and delivery constraints, asking only about missing facts or choices that affect the design. Refresh installed instructions with `docspec init --agents-md`.
+- Handover records a versioned manifest of managed relative paths and hashes in the same read as its existing fingerprint. Text and JSON list added, modified and removed paths; older notes retain their freshness comparison and explicitly report unavailable detail.
+- Stale software evidence identifies changed requirements, scenarios, decision bases, tests, methods, runners and declared files through the existing evidence and roadmap explanations, without changing completion rules.
+- `code testplan list` now distinguishes unsigned, current, needs-review and unknown sign-offs. JSON preserves the test-plan fields and adds the same per-test `signoffs` diagnostics; reading the list neither signs tests nor runs them. This missing status was found during the synthetic fresh-agent handover evaluation.
+- A reproducible synthetic handover builder supports Windows and Linux with native launchers and a shared Python entry point; evaluator facts stay outside participant projects.
+
+### Fixed — workflow integrity review (branch only)
+
+- Archive follows required scenarios through planned tests, implementing tasks and current evidence or applicable waivers. Changed requirement statements include existing scenarios; `verified-by` lists only tests that actually passed.
+- Evidence carries a versioned, task-local verification scope; test sign-off includes the covered scenario behaviour. Latest failed attempts, including empty or incomplete collection, cannot be hidden by older success. Active legacy records require renewed sign-off/evidence; archived history is preserved.
+- Revoked or superseded waiver authority is rechecked, rejected decision bases reach dependent software work, and owner acceptance must cover the current requirement and implementation. Clearing an impact flag does not restore invalid authority.
+- Roadmap refuses manual completion of linked work or parents, compares current document content with its frozen snapshot, and explains failures, planning gaps and unfinished children in both text and JSON. Software divergence remains a non-blocking document reminder.
+- Test tasks may be drafted before planning. Generated collaboration rules and skills register or reuse roadmap work, hand pending planning to the test role, and follow current ruling/read-back rules.
+- Handover records a timezone-aware timestamp and managed-content fingerprint. Same-day changes produce a non-blocking stale reminder; legacy or unreadable state is explicitly unknown. Reads and timestamp-only changes do not stale the note.
+- Test-command parsing preserves Windows paths, quoted spaces and environment prefixes while retaining POSIX quoting. The existing Windows/Ubuntu CI matrix covers the regression cases; local verification does not imply CI has run.
 
 ### Changed — after the exam-seating validation run (branch only)
 

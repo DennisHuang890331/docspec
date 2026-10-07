@@ -157,7 +157,7 @@ def _seal(kind: str, record: dict) -> str:
 
 def dump_record(kind: str, record: dict) -> str:
     header = (f"# docspec governance {kind} — engine-owned; never edit by hand.\n"
-              f"# Change it through docspec commands; a hand-edit breaks the integrity seal.\n")
+              f"# Change it through artispec commands; a hand-edit breaks the integrity seal.\n")
     doc = {"format": RECORD_FORMAT_VERSION, "kind": f"governance-{kind}",
            "integrity": _seal(kind, record), "record": record}
     return header + _yaml_dump(doc)
@@ -181,7 +181,7 @@ def load_record(path: Path, kind: str) -> dict:
     if raw.get("integrity") != _seal(kind, record):
         raise GovernanceError(
             f"integrity seal mismatch: {path} — a hand-edit corrupted this governance record; "
-            f"change it through docspec commands (or run `docspec store fsck --accept` to adopt it).")
+            f"change it through artispec commands (or run `artispec store fsck --accept` to adopt it).")
     return record
 
 
@@ -369,7 +369,7 @@ def validate(layout: Layout) -> list[str]:
                             f"({KINDS[kind][0]}-<tool>-<n>)")
             if rid in ids:
                 errs.append(f"duplicate governance id \"{rid}\" (two branches numbered the same "
-                            f"record; run `docspec gov renumber {rid}` on the newer one)")
+                            f"record; run `artispec gov renumber {rid}` on the newer one)")
             ids[rid] = kind
             for key in r:
                 if key != "_file" and key not in fields:

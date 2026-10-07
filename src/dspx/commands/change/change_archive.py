@@ -11,21 +11,28 @@ from dspx.engine import change as chg
 
 
 def run_archive(layout, schema, change: "chg.Change", *, override_drift: bool = False) -> int:
+    from dspx.engine.change_catalog import ensure_unique
+    from dspx.engine.software.io import SoftwareError
+    try:
+        ensure_unique(layout, change.id)
+    except SoftwareError as exc:
+        sys.stderr.write(f"artispec archive: {exc}\n")
+        return 1
     # ① 驗全綠（每個 target 導出 done）
     statuses = chg.derive_change_status(layout, change, schema)
     if not chg.is_archivable(statuses):
-        sys.stderr.write(f"docspec: change \"{change.id}\" is not archivable — these targets are "
+        sys.stderr.write(f"artispec: change \"{change.id}\" is not archivable — these targets are "
                          "not done:\n")
         for s in statuses:
             if not s.done:
                 sys.stderr.write(f"  ✗ [{s.action}] {s.ref}: {s.detail}\n")
-        sys.stderr.write("  (fix them, or `docspec change archive <id> --abandon --reason <r>`)\n")
+        sys.stderr.write("  (fix them, or `artispec change archive <id> --abandon --reason <r>`)\n")
         return 1
 
     # ② fork 漂移守門（★#9 / D5）
     drift = chg.fork_drift(layout, change)
     if drift and not override_drift:
-        sys.stderr.write(f"docspec: change \"{change.id}\" archive aborted — a forked official file "
+        sys.stderr.write(f"artispec: change \"{change.id}\" archive aborted — a forked official file "
                          "drifted since staging (a zero-change direct edit or another change "
                          "archived first):\n")
         for d in drift:
@@ -126,7 +133,7 @@ def run_archive(layout, schema, change: "chg.Change", *, override_drift: bool = 
         done_steps.append("recomputed official ledgers")
 
     except _ArchiveAbort as exc:
-        sys.stderr.write(f"docspec: change \"{change.id}\" archive aborted mid-transaction: {exc}\n")
+        sys.stderr.write(f"artispec: change \"{change.id}\" archive aborted mid-transaction: {exc}\n")
         if done_steps:
             sys.stderr.write("  steps already completed (fix-forward, corpus already landed):\n")
             for s in done_steps:
@@ -151,13 +158,13 @@ def run_archive(layout, schema, change: "chg.Change", *, override_drift: bool = 
     # ★2.2：列名被 rebaseline 靜默轉 synced 的非 target 下游（未經本次顯式復驗）——非阻塞 WARN。
     if absorbed:
         sys.stderr.write(
-            f"docspec: ⚠ change \"{change.id}\" recomputed {len(absorbed)} downstream section(s) to "
+            f"artispec: ⚠ change \"{change.id}\" recomputed {len(absorbed)} downstream section(s) to "
             "synced that were NOT explicit targets of this change (not re-verified this change — "
             "the rebaseline absorbed their inherited staleness):\n")
         for sec, sync in absorbed:
             sys.stderr.write(f"    · {sec}  (was {sync})\n")
         sys.stderr.write("  if any needs real re-verification, open a follow-up change targeting it "
-                         "(or docspec stale <section> it).\n")
+                         "(or artispec stale <section> it).\n")
     return 0
 
 
@@ -198,9 +205,9 @@ def _land_forest_files(layout, change) -> list[str]:
 
 
 def _run_move(layout, schema, t: "chg.Target", leaves) -> int:
-    """收案時對正式面跑真正的 docspec mv（含全部路徑引用重寫）。"""
+    """收案時對正式面跑真正的 artispec mv（含全部路徑引用重寫）。"""
     if not t.dest:
-        sys.stderr.write(f"docspec: move target \"{t.ref}\" has no --dest; cannot mv.\n")
+        sys.stderr.write(f"artispec: move target \"{t.ref}\" has no --dest; cannot mv.\n")
         return 1
     section = chg.section_of_ref(t.ref, leaves) or t.ref
     from dspx.commands.corpus.mv import _run_section_mode
@@ -218,7 +225,7 @@ def _run_validator(cmd: str, path) -> None:
     try:
         subprocess.run(cmd.split() + [str(path)], check=False)
     except Exception as exc:   # noqa: BLE001 — validator 失敗非阻塞、只提示
-        sys.stderr.write(f"docspec: ⚠ file target validator \"{cmd}\" failed to run: {exc}\n")
+        sys.stderr.write(f"artispec: ⚠ file target validator \"{cmd}\" failed to run: {exc}\n")
 
 
 def _prune_promoted_roadmap(layout, change) -> str | None:
@@ -254,7 +261,7 @@ def _warn_unclosed_audit(layout, change) -> None:
     for f in all_findings(layout, load_project(layout)):
         if str(f.get("id")) == fid and f.get("status") == "open":
             sys.stderr.write(
-                f"docspec: ⚠ change \"{change.id}\" traces to audit finding \"{fid}\" which is still "
+                f"artispec: ⚠ change \"{change.id}\" traces to audit finding \"{fid}\" which is still "
                 "open — archive proceeds, but closing the finding stays an audit/factcheck act "
                 "(audit never gates, archive never closes findings).\n")
             return

@@ -5,7 +5,7 @@
   shared-core" framing was dropped after an adversarial review: it didn't survive contact with
   either "does the authoring agent need to know this" or internal citation scrutiny).
 
-  Consulted by `develop` (via `docspec reference writing-<lang>`) when drafting or refining a
+  Consulted by `develop` (via `artispec reference writing-<lang>`) when drafting or refining a
   project's writing-guide.md "Project conventions" section — NOT auto-injected. `develop` reads
   the relevant topic, proposes concrete conventions grounded in it, and asks the human before
   crystallizing them (the human may want different emphasis, a narrower scope, or none of it).
@@ -18,6 +18,8 @@
 
 <!-- topic: writing-zh -->
 # 中文寫作道地化參考（翻譯腔／西化中文）
+
+ArtiSpec 的文件預設按任務、讀者及既有 kind 解釋下列語言參考：操作寫前置條件、步驟、預期結果與故障處理；參考文件方便查欄位、介面與限制；說明文件交代理由與取捨。既有 writing-guide 與明確讀者要求優先，不強制論述鏈、表格或固定章節。空泛報幕可刪，真正有用的適用範圍與導覽保留；治理來源與測試流水帳留在紀錄，使用者需要的支援及未驗證限制仍說明。這是產品的寫作預設，不將下方外部作者的論述擴張為所有文類的硬規則。
 
 > 適用任何正式中文文件（技術、報告、說明、規格）。例句全部逐字引自外部來源（余光中／維基歐化中文／
 > Beginneros／VoiceTube／思果），出處見文末；禁任何自擬句子或自造用法。
@@ -78,7 +80,7 @@
 
 **段落要連貫。** 一段只講一個主題，主題句領頭，先給結論再補細節。句與句之間，讓每句開頭呼應前句已知的東西、句尾才帶出新資訊，讀者就不必回頭確認在講誰。段與段之間用內容銜接——「上述兩道措施」「這個限制」——指前文講過的事，而不是「如前所述」「第三節提到」這種報幕式的連結。
 
-**不要報幕。** 別寫「本節規範…」「本節說明…」「本節不討論…」「可驗證性：」「設計依據：」「如下所示：」這類元敘述。直接給結論、規定、事實就好。要表達某條可驗證，就把它寫成驗收得了的句子（「輸入超過 N 位元組時，系統應截斷並回傳…」），而不是先報一句「本節描述系統如何處理超長輸入」。全文概觀節同理：不敘述文件自身章節走法（「先以…再以…最後…」、「本規範把這項工作拆成…」），直接給主題與核心命題。
+**省去空泛報幕。** 「本節規範…」「本節說明…」「本節不討論…」「可驗證性：」「設計依據：」「如下所示：」若只是重述標題或寫作信封，可直接給任務、規定、事實。要表達某條可驗證，就把它寫成驗收得了的句子（「輸入超過 N 位元組時，系統應截斷並回傳…」），而不是只報一句「本節描述系統如何處理超長輸入」。ArtiSpec 按任務解釋這條原則：真正影響使用的適用範圍、前置條件、快速入口與可核對的導航保留；不因它提到文件或章節就禁止，也不強制每種文類都先寫論述結論。
 
 **語域別漂。** 選定正式程度後一以貫之，不要中途轉成口語、招呼或行銷腔（「讓我們」「其實很簡單」「相信你已經…」）。論證也別套同一個模子——需要解釋取捨時就解釋，不必每節都用同一句「之所以…是因為…此處否決…」。行政院《文書處理手冊》一句話概括這份守則的目標：簡、淺、明、確。
 
@@ -155,6 +157,8 @@
 <!-- topic: writing-en -->
 # English Writing Naturalness Reference (AI-sounding prose)
 
+ArtiSpec applies this language reference by the recorded task, audience and kind. How-to covers prerequisites, steps, expected results and failure handling; reference supports lookup of fields, interfaces and limits; explain covers reasons and trade-offs. Existing project conventions and explicit audiences override engineering-team defaults. Keep useful scope and navigation, support conditions and unverified limits; keep governance provenance and test diaries in records. These are product defaults, not an expansion of the cited authors' advice into mandatory forms or universal argument chains.
+
 > Applies to any formal English document (technical, report, spec). This is a DIFFERENT disease
 > from Chinese translationese, not its mirror image — English AI-writing tells are mostly not about
 > foreign-grammar calque, they are about a narrow, repetitive register that heavy LLM pretraining
@@ -228,11 +232,11 @@ landscape," and their close relatives; avoid closing a section with a generic, c
 restating what was just said ("In conclusion, X is a multifaceted topic that..."). If a section needs
 a closing thought, it should add something (a consequence, a caveat), not restate the opening.
 
-**No self-narration of the document's own structure.** "This document is divided into three parts:
-first... then... finally..." or "this section will discuss X" is signposting the reader could infer
-from the headings themselves; state the content directly. (This matches the Chinese-side "禁報幕"
-rule exactly — it is one of the few defects that is genuinely the same phenomenon in both languages,
-independent of grammar, because it is about document structure rather than sentence grammar.)
+**Avoid empty self-narration.** "This document is divided into three parts:
+first... then... finally..." or "this section will discuss X" can be redundant when it only repeats
+headings; state useful content directly. ArtiSpec applies this by task: keep scope, prerequisites,
+quick entry points and verifiable navigation that help the reader choose or perform the work.
+A reference or step sequence need not follow an explanatory argument's conclusion-first form.
 
 **Bullet-itis.** Converting ordinary connected reasoning into a bulleted list by default flattens an
 argument into disconnected fragments; reserve lists for genuinely parallel, enumerable items (Google

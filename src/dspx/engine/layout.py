@@ -4,11 +4,14 @@
     <project>/
     ├── docs/
     │   └── <article>/
-    │       ├── _latest.md             publish 投影成品（人讀唯一窗口；活的、可改）
-    │       └── archive/v<N>.md        已發行凍結快照（不可變；任何 archive/ 內禁改）
+    │       └── _latest.md             現行工作投影（活的、可改）
     └── docspec/                       ← planning home（判定：本目錄含 config.yaml）
         ├── .freeze.yaml               凍結區 hash 清單（publish 記、lint V11 抽查）
         ├── config.yaml
+        ├── changes/_versions/<article>/<version>/
+        │   ├── snapshot/document.md   定版內容與 assets/（不可變）
+        │   ├── exports/               該版可重生產物
+        │   └── proof/                 該版校樣圖片
         └── corpus/                   章節架構（資料夾樹鏡像文章骨架）
             └── <article>/<…>/<leaf>/  末節資料夾（含 concept.yaml 即為末節）
                 ├── concept.yaml  decisions.yaml  material.md  history.yaml
@@ -96,7 +99,7 @@ class Layout:
 
     planning_home: Path
     # 真實專案預設＝flat（見 config.DEFAULTS / bootstrap）；此 dataclass fallback 留 per-article
-    # 僅供測試直接建 Layout(home) 用。flat＝docs/<article>_latest.md＋docs/archive/<article>_v<N>.md。
+    # 僅供測試直接建 Layout(home) 用。docs_layout 只影響 latest/資產，定版共用版本區。
     docs_layout: str = "per-article"
 
     @property
@@ -214,16 +217,48 @@ class Layout:
         return self.article_verdicts(article)
 
     def docs_snapshot(self, article: str, version: str) -> Path:
-        # version＝semver 字串（X.Y.Z）。凍結快照一律收進 archive/ 子夾（兩種 layout 皆然）
-        # ——凍結＝資料夾級規則（任何 archive/ 內禁改），不靠檔名 pattern。見 dspx.reports.freeze。
-        if self.docs_layout == "flat":
-            return self.docs_dir / "archive" / f"{article}_v{version}.md"
-        return self.docs_dir / article / "archive" / f"v{version}.md"
+        """Resolve an existing snapshot without moving or choosing ambiguous copies."""
+        target = self.version_snapshot(article, version)
+        present = [p for p in (target, *self.legacy_snapshots(article, version)) if p.exists()]
+        if len(present) > 1:
+            raise LayoutError(f"ambiguous duplicate document version {article}@{version}: {present}")
+        return present[0] if present else target
+
+    def document_versions_dir(self, article: str) -> Path:
+        if not article or article in (".", "..", "_legacy") or any(c in article for c in "/\\"):
+            raise LayoutError(f"invalid document name: {article!r}")
+        return self.planning_home / "changes" / "_versions" / article
+
+    def version_dir(self, article: str, version: str) -> Path:
+        if version != "latest" and parse_semver(version) is None:
+            raise LayoutError(f"invalid document version: {version!r}")
+        return self.document_versions_dir(article) / ("_preview" if version == "latest" else version)
+
+    def version_snapshot(self, article: str, version: str) -> Path:
+        if version == "latest":
+            raise LayoutError("a preview is not a frozen version")
+        return self.version_dir(article, version) / "snapshot" / "document.md"
+
+    def version_export(self, article: str, version: str, fmt: str) -> Path:
+        if not fmt.isalnum():
+            raise LayoutError(f"invalid export format: {fmt!r}")
+        return self.version_dir(article, version) / "exports" / f"{article}_v{version}.{fmt}"
+
+    def version_proof(self, article: str, version: str) -> Path:
+        return self.version_dir(article, version) / "proof"
+
+    def legacy_snapshots(self, article: str, version: str) -> tuple[Path, Path]:
+        self.version_dir(article, version)
+        return (self.docs_dir / "archive" / f"{article}_v{version}.md",
+                self.docs_dir / article / "archive" / f"v{version}.md")
+
+    def legacy_changelogs(self, article: str) -> tuple[Path, Path]:
+        self.document_versions_dir(article)
+        return (self.docs_dir / "revision_history" / f"{article}.md",
+                self.docs_dir / article / "changelog.md")
 
     def docs_changelog(self, article: str) -> Path:
-        if self.docs_layout == "flat":
-            return self.docs_dir / "revision_history" / f"{article}.md"
-        return self.docs_dir / article / "changelog.md"
+        return self.document_versions_dir(article) / "history.md"
 
     # ── export 產物（終端衍生物，可重生；絕不在 archive/ 下）─────────
 
@@ -260,21 +295,29 @@ class Layout:
         從 archive 快照檔名解析 `X.Y.Z` → (major, minor, patch) tuple（可直接比較/排序）。
         不合 semver 的檔名跳過；無快照回空清單。
         """
-        if self.docs_layout == "flat":
-            root, pattern = self.docs_dir / "archive", f"{article}_v*.md"
-            stem_prefix = f"{article}_v"
-        else:
-            root, pattern = self.docs_dir / article / "archive", "v*.md"
-            stem_prefix = "v"
-        if not root.is_dir():
-            return []
-        out = []
-        for p in root.glob(pattern):
-            tail = p.stem[len(stem_prefix):]
-            parsed = parse_semver(tail)
-            if parsed is not None:
-                out.append(parsed)
-        return out
+        out = set()
+        versions = self.document_versions_dir(article)
+        if versions.is_dir():
+            for folder in versions.iterdir():
+                parsed = parse_semver(folder.name)
+                if folder.is_dir() and parsed is not None:
+                    if not (folder / "snapshot" / "document.md").is_file() and not any(
+                            p.is_file() for p in self.legacy_snapshots(article, folder.name)):
+                        if any(p.is_file() for p in folder.rglob("*")):
+                            raise LayoutError(f"document version has no snapshot: {folder}")
+                        continue
+                    out.add(parsed)
+        for root, prefix in ((self.docs_dir / "archive", f"{article}_v"),
+                             (self.docs_dir / article / "archive", "v")):
+            if root.is_dir():
+                for p in root.iterdir():
+                    if p.is_file() and p.suffix == ".md" and p.stem.startswith(prefix):
+                        parsed = parse_semver(p.stem[len(prefix):])
+                        if parsed is not None:
+                            out.add(parsed)
+        for version in out:
+            self.docs_snapshot(article, ".".join(map(str, version)))
+        return sorted(out)
 
     # ── 盤點 ─────────────────────────────────────────────────────
 

@@ -291,6 +291,7 @@ def test_decided_in_preserved_when_omitted_and_statement_unchanged(make_project,
 
 
 def test_archive_warns_on_empty_notes(make_project, write_leaf, monkeypatch, tmp_path, capsys):
+    """空 notes 只提醒理由／治理來源，不宣稱缺裁定，也不代替完成與漂移檢查。"""
     home = make_project()
     _wl_basic(write_leaf, home)
     _baseline_with_prose(home, monkeypatch)
@@ -298,22 +299,44 @@ def test_archive_warns_on_empty_notes(make_project, write_leaf, monkeypatch, tmp
     change_cmd.run(["add-target", "chg-n", "sec-intro", "--action", "review"])
     render_cmd.run(["g", "--change", "chg-n"])
     render_cmd.run(["g", "--change", "chg-n", "--ack", "g/intro", "--reason", "人已確認"])
+    layout = Layout(home, "per-article")
+    change = chg.load_change(layout, "chg-n")
+    notes_before = chg.notes_path(change.dir).read_bytes()
     capsys.readouterr()
     assert change_cmd.run(["archive", "chg-n"]) == 0
-    err = capsys.readouterr().err
-    assert "human-decision record" in err                          # 空 notes 提醒
+    result = capsys.readouterr()
+    err = result.err
+    assert "notes.md" in err and "title/--why seed" in err
+    assert "change rationale" in err and "references to existing governance records" in err
+    assert "The owner's words belong in governance" in err
+    for entrypoint in ("artispec ruling list", "artispec info list", "artispec decision list"):
+        assert entrypoint in err
+    assert "Do not duplicate or invent a ruling" in err
+    assert "non-blocking" in err
+    assert "target completion and fork-drift checks still apply" in err
+    assert "human-decision record" not in err
+    assert "Archiving anyway" not in err
+    assert 'archived change "chg-n"' in result.out
+    archived = chg.load_change(layout, "chg-n")
+    assert archived.state == chg.STATE_ARCHIVED
+    assert chg.notes_path(archived.dir).read_bytes() == notes_before
     # 有實質 notes 就不吵：下一張 change 寫了 notes 再 archive
     change_cmd.run(["new", "chg-m", "--publish", "advisory", "--why", "理由"])
     change_cmd.run(["add-target", "chg-m", "sec-intro", "--action", "review"])
-    layout = Layout(home, "per-article")
     change = chg.load_change(layout, "chg-m")
-    chg.notes_path(change.dir).write_text("# 理由\n\n人拍板：維持公制、rationale 記這裡。\n",
+    chg.notes_path(change.dir).write_text("# 理由\n\n維持公制；原裁定沿既有治理來源查閱。\n",
                                           encoding="utf-8", newline="\n")
+    notes_before = chg.notes_path(change.dir).read_bytes()
     render_cmd.run(["g", "--change", "chg-m"])
     render_cmd.run(["g", "--change", "chg-m", "--ack", "g/intro", "--reason", "人已確認"])
     capsys.readouterr()
     assert change_cmd.run(["archive", "chg-m"]) == 0
-    assert "human-decision record" not in capsys.readouterr().err
+    result = capsys.readouterr()
+    assert "title/--why seed" not in result.err
+    assert 'archived change "chg-m"' in result.out
+    archived = chg.load_change(layout, "chg-m")
+    assert archived.state == chg.STATE_ARCHIVED
+    assert chg.notes_path(archived.dir).read_bytes() == notes_before
 
 
 # ── 三角色紀律投影（B/C 的 schema/skill 半）────────────────────────────
@@ -324,7 +347,8 @@ def test_guide_projects_three_role_discipline(make_project, monkeypatch, capsys)
     monkeypatch.chdir(home.parent)
     assert guide_cmd.run([]) == 0
     out = capsys.readouterr().out
-    assert "Per-decision human confirmation" in out               # 逐條確認 step
+    assert "Owner authority for each decision" in out             # 逐條追溯負責人選擇
+    assert "Per-decision human confirmation" not in out           # 清楚內容不重複請示
     assert "Value crystallization self-check" in out              # 裸值自問 step
     assert "NORMATIVE VALUE" in out                               # filing rule 投影
 
@@ -333,7 +357,16 @@ def test_skills_carry_human_ruling_stances():
     from dspx.env.skills import available_skills
     bodies = {s.name: s.body for s in available_skills()}
     dev = bodies["dspx-develop"]
-    assert "INDIVIDUAL confirmation" in dev and "notes.md" in dev
+    assert "confirmation only when unclear" in dev and "preserve the owner's words" in dev
+    # 原話保存於治理；notes 承載理由和引用，不能再要求重抄清楚裁定。
+    assert "artispec ruling add" in dev and "artispec info add" in dev
+    assert "Preserve their words in governance" in dev
+    assert "`notes.md` links the rationale" in dev
+    assert "reuse clear rulings" in dev and "ask only for missing choices" in dev
+    assert "not after an already clear ruling" in dev
+    assert "Don't auto-crystallize or invent a normative decision" in dev
+    assert "owner's actual ruling" in dev
+    assert "without the human's individual confirmation" not in dev
     ap = bodies["dspx-apply"]
     assert "after the human rules" in ap or "human's ruling" in ap
     fc = bodies["dspx-factcheck"]

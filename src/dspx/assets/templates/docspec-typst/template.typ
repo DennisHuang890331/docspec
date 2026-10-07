@@ -165,9 +165,24 @@ $endif$
   width: 100%, stroke: 0.5pt + rgb("#d0d7de"),
 )[#it]
 // 行內程式碼＝淡灰底小圓角（與散文區隔，不喧賓）
-#show raw.where(block: false): box.with(
-  fill: rgb("#eff1f3"), inset: (x: 3pt), outset: (y: 3pt), radius: 2pt,
-)
+#show raw.where(block: false): it => {
+  // Pandoc's Skylighting EndLine is raw("\n"). Boxing that delimiter turns
+  // a source newline into inline whitespace and joins separate code lines.
+  if it.text == "\n" {
+    linebreak()
+  } else {
+    box(fill: rgb("#eff1f3"), inset: (x: 3pt), outset: (y: 3pt), radius: 2pt)[#it]
+  }
+}
+$if(highlighting-definitions)$
+// Highlight tokens are fragments of one code block. Apply this scoped rule
+// after inline-code styling so its boxes cannot alter token spacing.
+#let _pandoc_skylighting = Skylighting
+#let Skylighting(..args) = {
+  show raw.where(block: false): it => if it.text == "\n" { linebreak() } else { text(font: _mono, it.text) }
+  _pandoc_skylighting(..args)
+}
+$endif$
 // 引用區塊（`>`，本專案用作「設計理據」附註）：★docspec-issues #14——typst 預設 quote 兩側內縮成
 //   突兀窄柱（台中港審閱回饋）。改 Claude web 風：左側細色條＋左內縮，不縮右界（維持滿幅、消窄柱），
 //   不加底色＝正式公文的克制。上下留半行與前後文分隔。

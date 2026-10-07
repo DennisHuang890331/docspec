@@ -17,7 +17,7 @@ docspec **確定性**把旋鈕轉成 Typst 模板參數／pandoc 變數。任何
 
 旋鈕表的存放（見 config.py / commands/export.py）：
   - 專案預設＝config 的 `export.format` 區塊（沿用「未知鍵 warn、缺鍵給預設」）。
-  - per-article 覆寫＝`docspec export <art> --format-config <file.yaml>`（覆蓋同名旋鈕）。
+  - per-article 覆寫＝`artispec export <art> --format-config <file.yaml>`（覆蓋同名旋鈕）。
 """
 
 from __future__ import annotations
@@ -142,13 +142,13 @@ def validate_format_config(raw: Any, *, warn=None) -> dict:
 
     for section, body in raw.items():
         if section not in _KNOWN_SECTIONS:
-            warn(f"docspec: format has unknown section \"{section}\" (ignored)")
+            warn(f"artispec: format has unknown section \"{section}\" (ignored)")
             continue
         if not isinstance(body, dict):
             raise FormatConfigError(f"format.{section} must be a key-value mapping (dict).")
         for key, value in body.items():
             if key not in _KNOWN_KEYS[section]:
-                warn(f"docspec: format.{section} has unknown knob \"{key}\" (ignored)")
+                warn(f"artispec: format.{section} has unknown knob \"{key}\" (ignored)")
                 continue
             out[section][key] = value
 
@@ -244,7 +244,7 @@ def compile_typst_vars(knobs: dict) -> list[str]:
             out += ["-V", "margin=25mm"]
         elif preset == "cas-native":
             _warn_default(
-                "docspec: ⚠ page.preset 'cas-native' is a journal two-column trim and is not "
+                "artispec: ⚠ page.preset 'cas-native' is a journal two-column trim and is not "
                 "mapped on the single-column Typst track — using the house page geometry.")
         # a4-wide（預設）＝不發 → 模板 house 版心、行為不變。
 

@@ -103,7 +103,7 @@ def _verify_byte_lock(out: Path, body_md: str, article: str = "", *, ack: bool =
         import pdfplumber  # type: ignore
     except Exception:
         sys.stderr.write(
-            "docspec: ✗ pdfplumber not installed — cannot verify export render fidelity, so export FAILS "
+            "artispec: ✗ pdfplumber not installed — cannot verify export render fidelity, so export FAILS "
             "(the PDF was produced but is UNVERIFIED). Install the verifier: "
             "uv tool install --from <docspec path> docspec --with pdfplumber  (or `pip install 'docspec[export]'`). "
             "To skip verification deliberately, re-run with --no-verify.\n")
@@ -113,7 +113,7 @@ def _verify_byte_lock(out: Path, body_md: str, article: str = "", *, ack: bool =
         pdf_cm = pdfplumber.open(str(out))
     except Exception as exc:  # noqa: BLE001
         sys.stderr.write(
-            f"docspec: ✗ pdfplumber failed to open the produced PDF ({exc}) — render fidelity could not be "
+            f"artispec: ✗ pdfplumber failed to open the produced PDF ({exc}) — render fidelity could not be "
             "verified, so export FAILS (fail-closed). Re-run with --no-verify to skip verification.\n")
         return 1
 
@@ -151,25 +151,25 @@ def _verify_byte_lock(out: Path, body_md: str, article: str = "", *, ack: bool =
         latin_lost = sum(miss_latin.values())
         if latin_lost or extra:
             sys.stderr.write(
-                f"docspec: ✓ render fidelity passed (no CJK loss). informational: Latin/digit extraction differs by "
+                f"artispec: ✓ render fidelity passed (no CJK loss). informational: Latin/digit extraction differs by "
                 f"{latin_lost} char(s), PDF side has {sum(extra.values())} extra char(s) (monospace/ligature extraction noise, not lost content).\n")
         return 0
 
     # CJK 缺失 → 高度可疑。--ack（已 proof 複判）仍印報告但回 0。
     tag = "⚠ (--ack: re-checked, allowed)" if ack else "✗"
     sys.stderr.write(
-        f"docspec: {tag} render fidelity: detected a net CJK character loss of {sum(miss_cjk.values())} char(s) "
+        f"artispec: {tag} render fidelity: detected a net CJK character loss of {sum(miss_cjk.values())} char(s) "
         f"(suspected missing-glyph boxes / missing font / dropped segment). In source but missing from PDF: {_sample(miss_cjk)}\n")
     cjk_del = [r for r in del_runs if r[5] > 0][:6]
     for _i1, _i2, page, anchor, win, n_cjk in cjk_del:
         proof_hint = f"page_{page:0{max(2, len(str(len(pdf_pages))))}d}.png" if page else "?"
         sys.stderr.write(
             f"    page {page} · source §{anchor or '(preamble)'} · {n_cjk} CJK missing · context \"{win}\""
-            f"  → run docspec proof{f' {article}' if article else ''} and look at _proof/.../{proof_hint}\n")
+            f"  → run artispec proof{f' {article}' if article else ''} and look at _proof/.../{proof_hint}\n")
     if ack:
         return 0
     sys.stderr.write(
-        "  CJK here cannot be extracted back from the PDF = the render may be eating characters. Run `docspec proof` to that page to re-check:\n"
+        "  CJK here cannot be extracted back from the PDF = the render may be eating characters. Run `artispec proof` to that page to re-check:\n"
         "    · real missing-glyph boxes / dropped segment → fix the font/layout and re-export.\n"
         "    · proof shows the text and it's just an extraction misfire (e.g. text inside an image) → add --ack to allow it (or --no-verify to skip entirely).\n")
     return 1

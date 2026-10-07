@@ -1,4 +1,4 @@
-"""docspec edit <target> (--punct | --term OLD NEW | --replace OLD NEW) [--dry-run]
+"""artispec edit <target> (--punct | --term OLD NEW | --replace OLD NEW) [--dry-run]
    — 交付散文的機械精準修改原語（吸收 normalize + rename-term，並加節定位 literal 替換）。
 
 三個互斥模式：
@@ -31,10 +31,10 @@ def _run_replace(target: str, old: str, new: str, dry_run: bool) -> int:
     from dspx.commands.deliverable._normalize import _update_ledger_prose
 
     if not old:
-        sys.stderr.write("docspec: edit --replace: OLD must be non-empty\n")
+        sys.stderr.write("artispec: edit --replace: OLD must be non-empty\n")
         return 2
     if old == new:
-        sys.stderr.write("docspec: edit --replace: OLD and NEW are identical (nothing to do)\n")
+        sys.stderr.write("artispec: edit --replace: OLD and NEW are identical (nothing to do)\n")
         return 2
 
     try:
@@ -46,20 +46,20 @@ def _run_replace(target: str, old: str, new: str, dry_run: bool) -> int:
 
     section = target.strip("/")
     if section not in {lf.section for lf in leaves}:
-        sys.stderr.write(f"docspec: edit --replace: no such section \"{section}\"\n")
+        sys.stderr.write(f"artispec: edit --replace: no such section \"{section}\"\n")
         return 1
     article = layout.article_of(section)
     latest = layout.docs_latest(article)
     if not latest.is_file():
         sys.stderr.write(
-            f"docspec: deliverable {latest} does not exist -- run `docspec render {article}` first.\n")
+            f"artispec: deliverable {latest} does not exist -- run `artispec render {article}` first.\n")
         return 1
 
     text = latest.read_text(encoding="utf-8")
     hits = [h for h in _find_prose_hits(text, old) if h.section == section]
     if not hits:
         sys.stderr.write(
-            f"docspec: edit --replace: \"{old}\" -- 0 prose hit(s) in section \"{section}\"; "
+            f"artispec: edit --replace: \"{old}\" -- 0 prose hit(s) in section \"{section}\"; "
             "nothing changed.\n")
         return 1
 
@@ -93,7 +93,7 @@ def _guard_change(layout, sections: list[str]) -> tuple[str, str] | None:
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec edit", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec edit", description=HELP)
     parser.add_argument("target", nargs="?", default=None,
                         help="article (for --punct/--term) or section path (for --replace)")
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -125,14 +125,14 @@ def run(argv: list[str]) -> int:
     if hit:
         sec, cid = hit
         sys.stderr.write(
-            f"docspec: edit refuses — section \"{sec}\" is in active change \"{cid}\"; the "
+            f"artispec: edit refuses — section \"{sec}\" is in active change \"{cid}\"; the "
             "official deliverable is frozen during a change (edits land in staging, not official). "
             "Archive the change first, or edit through the change workflow.\n")
         return 1
 
     if args.punct:
         if not args.target:
-            sys.stderr.write("docspec: edit --punct needs an <article>\n")
+            sys.stderr.write("artispec: edit --punct needs an <article>\n")
             return 2
         from dspx.commands.deliverable import _normalize
         return _normalize.run([args.target] + dry)
@@ -146,6 +146,6 @@ def run(argv: list[str]) -> int:
     # --replace
     old, new = args.replace
     if not args.target:
-        sys.stderr.write("docspec: edit --replace needs a <section>\n")
+        sys.stderr.write("artispec: edit --replace needs a <section>\n")
         return 2
     return _run_replace(args.target, old, new, args.dry_run)

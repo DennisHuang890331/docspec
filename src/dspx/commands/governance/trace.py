@@ -1,4 +1,4 @@
-"""docspec trace <id> — 追溯查詢：一筆治理紀錄（或 `doc:<章節>`）的上游與下游。
+"""artispec trace <id> — 追溯查詢：一筆治理紀錄（或 `doc:<章節>`）的上游與下游。
 
 上游＝它依據／回答／取代了誰；下游＝誰依據／回答／取代／實現了它。追溯圖每次執行時重建。
 """
@@ -20,7 +20,7 @@ _UP = {"answers": "回答", "based-on": "依據", "supersedes": "取代", "reali
 
 
 def run(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="docspec trace", description=HELP)
+    p = argparse.ArgumentParser(prog="artispec trace", description=HELP)
     p.add_argument("id", help="a governance id (e.g. D-claude-13) or doc:<section path>")
     p.add_argument("--json", dest="as_json", action="store_true")
     args = p.parse_args(argv)

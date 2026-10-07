@@ -107,7 +107,7 @@ def check_authored_state(layout, leaves: list[Leaf]) -> list[str]:
             if notes.is_file():
                 for hit in _scan_state_markers(notes.read_text(encoding="utf-8")):
                     warns.append(f"changes/{cid}/notes.md contains {hit} — progress is DERIVED by "
-                                 "`docspec change status`; notes.md must not carry state (#6.2b)")
+                                 "`artispec change status`; notes.md must not carry state (#6.2b)")
     except Exception:  # noqa: BLE001 — change 子系統缺席時不影響其餘 check
         pass
     return warns

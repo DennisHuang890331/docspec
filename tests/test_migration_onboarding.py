@@ -73,12 +73,12 @@ def test_register_legacy_move_mode(make_project, write_leaf, monkeypatch):
 
     assert freeze_cmd.run(["register-legacy", str(src), "--into", "taichung"]) == 0
 
-    dest = home.parent / "docs" / "archive" / "legacy" / "taichung"
+    dest = home / "changes" / "_versions" / "_legacy" / "taichung" / "snapshot"
     assert (dest / "a_v2.4.md").read_text("utf-8") == "舊版 A"
     assert (dest / "sub" / "b.md").read_text("utf-8") == "舊版 B"
     legacy = freeze.load_legacy(home)
-    assert set(legacy) == {"docs/archive/legacy/taichung/a_v2.4.md",
-                           "docs/archive/legacy/taichung/sub/b.md"}
+    assert set(legacy) == {"docspec/changes/_versions/_legacy/taichung/snapshot/a_v2.4.md",
+                           "docspec/changes/_versions/_legacy/taichung/snapshot/sub/b.md"}
     assert freeze.load_manifest(home) == {}                       # frozen 表不動
     assert freeze.verify(home, home.parent, home.parent / "docs") == []
     assert _v11(home) == []                                       # lint V11 乾淨
@@ -110,7 +110,7 @@ def test_register_legacy_default_name_is_src_tail(make_project, write_leaf, monk
     src.mkdir()
     (src / "f.md").write_text("x", encoding="utf-8")
     assert freeze_cmd.run(["register-legacy", str(src)]) == 0
-    assert (home.parent / "docs" / "archive" / "legacy" / "台中港歷版" / "f.md").is_file()
+    assert (home / "changes" / "_versions" / "_legacy" / "台中港歷版" / "snapshot" / "f.md").is_file()
 
 
 # ── 6.4–6.6 防洗白／竄改／刪除 ─────────────────────────────────────────
@@ -237,14 +237,15 @@ def test_record_legacy_single_manifest_write(tmp_path, monkeypatch):
         f.write_text(f"歷版 {i}", encoding="utf-8")
         files.append(f)
     writes = []
-    orig = Path.write_text
+    from dspx.engine import store
+    orig = store.atomic_write_store
 
     def spy(self, *a, **k):
         if self.name == ".freeze.yaml":
             writes.append(self)
         return orig(self, *a, **k)
 
-    monkeypatch.setattr(Path, "write_text", spy)
+    monkeypatch.setattr(store, "atomic_write_store", spy)
     freeze.record_legacy(home, tmp_path, files)
     assert len(writes) == 1
     assert len(freeze.load_legacy(home)) == 5
@@ -272,7 +273,7 @@ def test_legacy_folder_never_pollutes_version_chain(tmp_path):
     leg2 = tmp_path / "docs" / "g" / "archive" / "legacy"
     leg2.mkdir(parents=True)
     (leg2 / "v2.4.0.md").write_text("舊", encoding="utf-8")
-    assert per.existing_versions("g") == []
+    assert per.existing_versions("g") == [(1, 0, 0)]  # Both legacy layouts remain readable; nested collections do not add versions.
 
 
 def test_first_publish_after_register_legacy_starts_at_1_0_0(make_project, write_leaf, monkeypatch):
@@ -284,7 +285,7 @@ def test_first_publish_after_register_legacy_starts_at_1_0_0(make_project, write
     (src / "g_v2.4.0.md").write_text("pre-docspec", encoding="utf-8")
     assert freeze_cmd.run(["register-legacy", str(src)]) == 0
     assert publish_cmd.run(["g"]) == 0
-    assert (docs / "archive" / "v1.0.0.md").is_file()
+    assert (home / "changes" / "_versions" / "g" / "1.0.0" / "snapshot" / "document.md").is_file()
 
 
 # ── 6.9 V11 訊息指路 ─────────────────────────────────────────────────
@@ -301,7 +302,7 @@ def test_v11_not_registered_message_points_to_migration(make_project, write_leaf
     findings = _v11(home)
     assert findings
     detail = findings[0].detail
-    assert "docspec freeze register-legacy" in detail
+    assert "artispec freeze register-legacy" in detail
     assert "docs/legacy/" in detail
 
 
@@ -315,14 +316,14 @@ def test_set_version_seeds_chain_then_patch_continues(make_project, write_leaf, 
     home = make_project()
     docs = _render_and_draft(home, monkeypatch, write_leaf, "中文內文第一版。")
     assert publish_cmd.run(["g", "--set-version", "2.5.2"]) == 0
-    assert (docs / "archive" / "v2.5.2.md").is_file()
+    assert (home / "changes" / "_versions" / "g" / "2.5.2" / "snapshot" / "document.md").is_file()
     cl = Layout(home, "per-article").docs_changelog("g").read_text("utf-8")
     assert "2.5.2" in cl and "首版" in cl and "Patch" not in cl
 
     latest = docs / "_latest.md"
     latest.write_text(latest.read_text("utf-8").replace("第一版", "第二版"), encoding="utf-8")
     assert publish_cmd.run(["g", "--level", "patch"]) == 0
-    assert (docs / "archive" / "v2.5.3.md").is_file()
+    assert (home / "changes" / "_versions" / "g" / "2.5.3" / "snapshot" / "document.md").is_file()
 
 
 def test_set_version_non_first_refused_zero_writes(make_project, write_leaf, monkeypatch, capsys):
@@ -342,7 +343,7 @@ def test_set_version_non_first_refused_zero_writes(make_project, write_leaf, mon
         in capsys.readouterr().err
     assert latest.read_bytes() == before_latest                   # 零寫入
     assert changelog.read_bytes() == before_cl
-    assert not (docs / "archive" / "v9.0.0.md").exists()
+    assert not (home / "changes" / "_versions" / "g" / "9.0.0" / "snapshot" / "document.md").exists()
 
 
 @pytest.mark.parametrize("bad", ["v2.5", "2.5", "2.5.x"])
@@ -364,8 +365,8 @@ def test_set_version_with_level_hints_level_ineffective(make_project, write_leaf
     assert publish_cmd.run(["g", "--set-version", "2.5.2", "--level", "major"]) == 0
     err = capsys.readouterr().err
     assert "no effect on the first version" in err and "2.5.2" in err
-    assert (docs / "archive" / "v2.5.2.md").is_file()
-    assert not (docs / "archive" / "v3.0.0.md").exists()
+    assert (home / "changes" / "_versions" / "g" / "2.5.2" / "snapshot" / "document.md").is_file()
+    assert not (home / "changes" / "_versions" / "g" / "3.0.0" / "snapshot" / "document.md").exists()
 
 
 def test_dry_run_set_version_previews_and_forecasts_refusal(make_project, write_leaf,
@@ -385,7 +386,7 @@ def test_dry_run_set_version_previews_and_forecasts_refusal(make_project, write_
     out = capsys.readouterr().out
     assert "--set-version cannot rewrite history" in out
     assert "dry-run verdict: NO-GO" in out
-    assert not (docs / "archive" / "v2.5.2.md").exists()
+    assert not (home / "changes" / "_versions" / "g" / "2.5.2" / "snapshot" / "document.md").exists()
 
 
 # ── 6.15 guide 投影＋skill stance ─────────────────────────────────────

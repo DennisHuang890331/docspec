@@ -1,5 +1,7 @@
 # The exact prompts used to produce the showcase
 
+Historical record: these prompts retain the commands used in that run. Current installations use `artispec` and provide no `docspec` executable. For a new run, follow the current [README](../../README.md); document versioning now uses `artispec freeze`.
+
 These are the stage prompts from the validation run (one pipeline per document, workers on Claude
 Sonnet). Per-document values — genre, language, topic, a depth target, and a "what to watch"
 note — were filled into the templates below. `${...}` marks a per-run substitution.

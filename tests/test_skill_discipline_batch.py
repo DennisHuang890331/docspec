@@ -24,6 +24,34 @@ def test_guide_projects_develop_fractional_order(make_project, monkeypatch, caps
     assert "order: 2.5" in out
 
 
+def test_guide_reuses_clear_owner_choices_but_requires_missing_or_unclear_choices(make_project, monkeypatch, capsys):
+    """已明確裁定直接引用；有缺漏才問，有歧義才覆述，agent 不得補造決策。"""
+    home = make_project()
+    monkeypatch.chdir(home.parent)
+    assert guide_cmd.run([]) == 0
+    text = " ".join(capsys.readouterr().out.split())
+    assert "the human is the only source of decisions" in text
+    assert "Reuse each clear choice and authorization the owner already supplied, citing its source" in text
+    assert "do not require another confirmation or discard a clear choice because several choices were supplied together" in text
+    assert "Ask only for missing choices that affect the design" in text
+    assert "read back unclear content and wait for confirmation before recording it" in text
+    assert "NEVER put a normative decision that has no actual owner choice behind it" in text
+
+
+def test_software_skills_preserve_owner_authority_and_independent_test_role():
+    """免除重複確認不代表 agent 可以自行裁定需求、改測試或代替負責人驗收。"""
+    proposer = " ".join(_skill_body("dspx-propose").split())
+    assert "read back and wait for confirmation only if the owner was unclear" in proposer
+    assert "ask only about missing facts or choices that affect this design" in proposer
+    assert "Do not write deltas that assume a choice the owner has not made" in proposer
+    tester = " ".join(_skill_body("dspx-test").split())
+    assert "Do not open the implementation files the tasks declare" in tester
+    implementer = " ".join(_skill_body("dspx-implement").split())
+    assert "Never edit a test" in implementer
+    assert "If they already clearly accepted this version, use that reply" in implementer
+    assert "Agent inspection never substitutes for owner acceptance of changed content" in implementer
+
+
 # ── 3. 〔#16〕〔#19〕skill drive-through 落地（規則搬進投影、skill 只錨、不重抄）────
 
 
@@ -53,7 +81,7 @@ def test_apply_punctuation_guardrail_points_to_normalize():
     點名），但長文寫作原則已搬進投影。"""
     body = _skill_body("dspx-apply")
     dont = body[body.rindex("**Guardrails**"):]
-    assert "docspec edit --punct" in dont
+    assert "artispec edit --punct" in dont
     assert "byte-exact" in dont.lower()
     assert "width sweep" in dont.lower() or "blind regex" in dont.lower()
     assert "no punctuation auto-fix today" not in body       # 誠實版已過時、不得殘留

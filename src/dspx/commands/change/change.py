@@ -1,4 +1,4 @@
-"""docspec change — 修改事件容器的生命週期指令（new / add-target / status / archive）。
+"""artispec change — 修改事件容器的生命週期指令（new / add-target / status / archive）。
 
 狀態＝位置＋導出（無 status 欄、引擎獨占寫 change.yaml）。archive 是唯一人閘（執行＝接受）；
 退回＝繼續改讓導出自動變不綠（無獨立 accept/return 機制）。詳見 change-container /
@@ -22,7 +22,7 @@ HELP = ("modification event container: change new / add-target / status / archiv
 # ── change new ────────────────────────────────────────────────────────
 
 def _cmd_new(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="docspec change new")
+    p = argparse.ArgumentParser(prog="artispec change new")
     p.add_argument("id", help="change id (lowercase alphanumeric with '-'; becomes changes/<id>/)")
     p.add_argument("--seed", action="append", default=[], metavar="REF",
                    help="a decision id, concept id, or term:<glossary-term> the change stems from "
@@ -40,11 +40,11 @@ def _cmd_new(argv: list[str]) -> int:
 
     reason = chg.validate_id(args.id)
     if reason:
-        sys.stderr.write(f"docspec: refusing to create change \"{args.id}\": {reason}\n")
+        sys.stderr.write(f"artispec: refusing to create change \"{args.id}\": {reason}\n")
         return 2
     if args.publish is None:
         sys.stderr.write(
-            "docspec: change new requires --publish advisory|release-bound (fail-loud, no default "
+            "artispec: change new requires --publish advisory|release-bound (fail-loud, no default "
             "— the publish policy is a mandatory declaration, not an afterthought).\n")
         return 2
 
@@ -55,14 +55,21 @@ def _cmd_new(argv: list[str]) -> int:
     except BootstrapError as exc:
         return exc.exit_code
 
+    from dspx.engine.change_catalog import ensure_available
+    from dspx.engine.software.io import SoftwareError
+    try:
+        ensure_available(layout, args.id)
+    except (SoftwareError, chg.ChangeError) as exc:
+        sys.stderr.write(f"artispec: refusing to create change: {exc}\n")
+        return 2
     from dspx.commands.change.archive import name_taken_elsewhere
     clash = name_taken_elsewhere(layout, args.id, "doc")
     if clash:
-        sys.stderr.write(f"docspec: refusing to create change \"{args.id}\": {clash} — change names "
-                         f"are shared by documents and software (one `docspec archive`).\n")
+        sys.stderr.write(f"artispec: refusing to create change \"{args.id}\": {clash} — change names "
+                         f"are shared by documents and software (one `artispec archive`).\n")
         return 2
     if chg.change_state(layout, args.id) is not None:
-        sys.stderr.write(f"docspec: change \"{args.id}\" already exists "
+        sys.stderr.write(f"artispec: change \"{args.id}\" already exists "
                          f"({chg.change_state(layout, args.id)}); not overwritten.\n")
         return 2
 
@@ -82,7 +89,7 @@ def _cmd_new(argv: list[str]) -> int:
     if args.from_roadmap:
         moved = _promote_roadmap(layout, args.from_roadmap, change)
         if moved is None:
-            sys.stderr.write(f"docspec: roadmap entry \"{args.from_roadmap}\" not found "
+            sys.stderr.write(f"artispec: roadmap entry \"{args.from_roadmap}\" not found "
                              "(cannot promote).\n")
             return 1
         change.promoted_from = args.from_roadmap
@@ -121,7 +128,7 @@ def _cmd_new(argv: list[str]) -> int:
         for t in autos:
             print(f"    [{t.action}] {t.ref}")
     else:
-        print("  no auto targets from seeds — add them with `docspec change add-target`.")
+        print("  no auto targets from seeds — add them with `artispec change add-target`.")
     # ★2.1 通用引用型下游提示：以散文錨引用 seed（不硬寫值）的 auto target，改動未必需重寫，
     #   可 remove-target 免除誤卡導出完成度（避免 byte-identical 被反作弊拒收）。
     generic = _generic_reference_autos(layout, leaves, autos, args.seed)
@@ -129,14 +136,14 @@ def _cmd_new(argv: list[str]) -> int:
         print(f"  ↳ generic-reference downstream ({len(generic)}): "
               + ", ".join(generic) + " — their prose cites the seed by anchor (no hardwired value), "
               "so a value change may not require rewriting them. If a target does not actually "
-              f"change, drop it: `docspec change remove-target {args.id} <ref>`.")
+              f"change, drop it: `artispec change remove-target {args.id} <ref>`.")
     # 盲區提醒（投影、不落檔）
     print("  ↳ blind-spot reminder: auto targets cover only reverse-realizes. Add MANUAL targets "
           "for prose cross-references, figures, schemas, and file targets the engine cannot see "
-          "(docspec change add-target).")
+          "(artispec change add-target).")
     if blind_terms:
         print(f"  ↳ term seed(s) {', '.join(blind_terms)}: run "
-              f"`docspec edit --term <old> <new> --dry-run` to find prose hits, then add-target them.")
+              f"`artispec edit --term <old> <new> --dry-run` to find prose hits, then add-target them.")
     return 0
 
 
@@ -205,7 +212,7 @@ def _promote_roadmap(layout, entry_id: str, change: "chg.Change") -> str | None:
 # ── change add-target ─────────────────────────────────────────────────
 
 def _cmd_add_target(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="docspec change add-target")
+    p = argparse.ArgumentParser(prog="artispec change add-target")
     p.add_argument("id", help="change id")
     p.add_argument("ref", help="concept.id / section path (existing) | corpus path (create) | "
                                "file path (file) | glossary term (term)")
@@ -225,12 +232,12 @@ def _cmd_add_target(argv: list[str]) -> int:
         return exc.exit_code
 
     if chg.change_state(layout, args.id) != chg.STATE_ACTIVE:
-        sys.stderr.write(f"docspec: no active change \"{args.id}\" to add a target to.\n")
+        sys.stderr.write(f"artispec: no active change \"{args.id}\" to add a target to.\n")
         return 1
     change = chg.load_change_at(chg.change_dir(layout, args.id, chg.STATE_ACTIVE),
                                 chg.STATE_ACTIVE)
     if change.target_by_ref(args.ref) is not None:
-        sys.stderr.write(f"docspec: target \"{args.ref}\" already in change \"{args.id}\".\n")
+        sys.stderr.write(f"artispec: target \"{args.ref}\" already in change \"{args.id}\".\n")
         return 2
 
     t = chg.Target(ref=args.ref, action=args.action, origin=args.origin, kind=args.kind,
@@ -252,7 +259,7 @@ def _cmd_add_target(argv: list[str]) -> int:
         section = chg.section_of_ref(args.ref, leaves)
         if section is None:
             sys.stderr.write(
-                f"docspec: ref \"{args.ref}\" does not resolve to an existing section "
+                f"artispec: ref \"{args.ref}\" does not resolve to an existing section "
                 "(concept.id or section path). For a new section use --action create; for a file "
                 "use --kind file.\n")
             return 1
@@ -278,7 +285,7 @@ def _cmd_add_target(argv: list[str]) -> int:
 # ── change remove-target ──────────────────────────────────────────────
 
 def _cmd_remove_target(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="docspec change remove-target")
+    p = argparse.ArgumentParser(prog="artispec change remove-target")
     p.add_argument("id", help="change id")
     p.add_argument("ref", help="the target ref to drop (concept.id / section path / file path)")
     args = p.parse_args(argv)
@@ -291,13 +298,13 @@ def _cmd_remove_target(argv: list[str]) -> int:
         return exc.exit_code
 
     if chg.change_state(layout, args.id) != chg.STATE_ACTIVE:
-        sys.stderr.write(f"docspec: no active change \"{args.id}\".\n")
+        sys.stderr.write(f"artispec: no active change \"{args.id}\".\n")
         return 1
     change = chg.load_change_at(chg.change_dir(layout, args.id, chg.STATE_ACTIVE),
                                 chg.STATE_ACTIVE)
     t = change.target_by_ref(args.ref)
     if t is None:
-        sys.stderr.write(f"docspec: change \"{args.id}\" has no target \"{args.ref}\".\n")
+        sys.stderr.write(f"artispec: change \"{args.id}\" has no target \"{args.ref}\".\n")
         return 1
 
     # 丟棄該 target 的 staging（檔案粒度、不誤刪子節暫存），再自 change 移除。
@@ -323,7 +330,7 @@ def _cmd_remove_target(argv: list[str]) -> int:
 # ── change status ─────────────────────────────────────────────────────
 
 def _cmd_status(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="docspec change status")
+    p = argparse.ArgumentParser(prog="artispec change status")
     p.add_argument("id", nargs="?", default=None, help="change id (omit to list all active changes)")
     p.add_argument("--json", action="store_true", dest="as_json")
     args = p.parse_args(argv)
@@ -340,7 +347,7 @@ def _cmd_status(argv: list[str]) -> int:
 
     state = chg.change_state(layout, args.id)
     if state is None:
-        sys.stderr.write(f"docspec: no change \"{args.id}\".\n")
+        sys.stderr.write(f"artispec: no change \"{args.id}\".\n")
         return 1
     change = chg.load_change(layout, args.id)
     # ★8.5：已收案/已棄案的 change 顯示終態，而非對已消失的 staging 導出 0/N not archivable。
@@ -408,7 +415,7 @@ def _list_active(layout, schema, as_json: bool) -> int:
 # ── change archive (accept) / --abandon ───────────────────────────────
 
 def _cmd_archive(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="docspec change archive")
+    p = argparse.ArgumentParser(prog="artispec change archive")
     p.add_argument("id", help="change id")
     p.add_argument("--abandon", action="store_true", help="drop the change (zero rollback needed)")
     p.add_argument("--reason", default=None, help="required with --abandon")
@@ -424,10 +431,17 @@ def _cmd_archive(argv: list[str]) -> int:
     except BootstrapError as exc:
         return exc.exit_code
 
+    from dspx.engine.change_catalog import ensure_unique
+    from dspx.engine.software.io import SoftwareError
+    try:
+        ensure_unique(layout, args.id)
+    except SoftwareError as exc:
+        sys.stderr.write(f"artispec archive: {exc}\n")
+        return 1
     if chg.change_state(layout, args.id) != chg.STATE_ACTIVE:
         st = chg.change_state(layout, args.id)
         sys.stderr.write(
-            f"docspec: no active change \"{args.id}\""
+            f"artispec: no active change \"{args.id}\""
             + (f" (it is {st})" if st else "") + ".\n")
         return 1
     change = chg.load_change(layout, args.id)
@@ -435,17 +449,20 @@ def _cmd_archive(argv: list[str]) -> int:
     if args.abandon:
         return _abandon(layout, change, args.reason)
 
-    # human-decision-provenance：notes.md＝人的決策原文記錄。只剩 --why 種入內容＝記錄空白，
-    # WARN 提醒（非阻擋——archive 是人的閘，人可無視）。
+    # notes 只檢查是否有超出開單種子的文字，不判斷治理來源或語意完整性。
+    # 理由／引用留 notes，負責人原話留治理；提醒不影響下方完成與漂移檢查。
     notes = chg.notes_path(change.dir)
     body = notes.read_text(encoding="utf-8").strip() if notes.is_file() else ""
     seeded = {f"# {change.title}".strip(), (change.why or "").strip()}
     substantive = [ln for ln in body.splitlines() if ln.strip() and ln.strip() not in seeded]
     if not substantive:
         sys.stderr.write(
-            "docspec: ⚠ notes.md carries nothing beyond the --why seed — the human-decision "
-            "record for this change is empty (the agent should have recorded the human's rulings "
-            "as they were confirmed). Archiving anyway (your gate, your call).\n")
+            "artispec: ⚠ notes.md has no additional text beyond the title/--why seed (or is missing).\n"
+            "  When useful, add change rationale and references to existing governance records. "
+            "The owner's words belong in governance: `artispec ruling list`, "
+            "`artispec info list`, `artispec decision list`.\n"
+            "  Do not duplicate or invent a ruling to satisfy this reminder. "
+            "This reminder is non-blocking; target completion and fork-drift checks still apply.\n")
 
     from dspx.commands.change.change_archive import run_archive
     return run_archive(layout, schema, change, override_drift=args.override_drift)
@@ -453,7 +470,7 @@ def _cmd_archive(argv: list[str]) -> int:
 
 def _abandon(layout, change, reason) -> int:
     if not reason:
-        sys.stderr.write("docspec: --abandon requires --reason <text>.\n")
+        sys.stderr.write("artispec: --abandon requires --reason <text>.\n")
         return 2
     # 丟 staging/preview、reason 入 change.yaml、搬 _abandoned/、roadmap 復活提示；正式面零變化。
     import shutil
@@ -468,7 +485,7 @@ def _abandon(layout, change, reason) -> int:
     if change.promoted_from:
         print(f"  ↳ reminder: the promoted source \"{change.promoted_from}\" is now a bare pointer "
               "into an _abandoned dossier — resurrect or re-point that roadmap/audit entry "
-              "(the engine will NOT auto-resurrect; docspec check flags the orphan).")
+              "(the engine will NOT auto-resurrect; artispec check flags the orphan).")
     return 0
 
 
@@ -484,8 +501,14 @@ _SUB = {
 
 
 def run(argv: list[str]) -> int:
-    if not argv or argv[0] in ("-h", "--help"):
-        print("docspec change — modification event container\n")
+    if not argv or argv[0] in ("list", "show", "migrate", "--json", "--all"):
+        from dspx.commands.change._query import run as query
+        return query(argv)
+    if argv[0] in ("-h", "--help"):
+        print("artispec change — document and software changes\n")
+        print("  [--all] [--json]                         list changes (default: active)")
+        print("  show <id> [--json]                       read domain-specific current state")
+        print("  migrate [--dry-run]                      explicitly move legacy software containers")
         print("Subcommands (each takes --help for its flags):")
         print("  new <id> --publish <p> [--seed REF ...]   open a change container")
         print("  add-target <id> <ref> --action <a>        enlist a target (stages it + enlist-stales)")
@@ -496,7 +519,7 @@ def run(argv: list[str]) -> int:
     sub, rest = argv[0], argv[1:]
     fn = _SUB.get(sub)
     if fn is None:
-        sys.stderr.write(f"docspec change: unknown subcommand \"{sub}\". "
+        sys.stderr.write(f"artispec change: unknown subcommand \"{sub}\". "
                          f"Valid: {', '.join(_SUB)}\n")
         return 2
     return fn(rest)

@@ -52,10 +52,25 @@ def is_frozen_path(path: str | Path) -> bool:
     以前「任何一層叫 archive 都算」會把別的工具的封存目錄（例如 OpenSpec 的
     `openspec/changes/archive/`）也當成 docspec 的凍結區，連讀取都被誤擋。"""
     parts = Path(path).parts
+    # Only this tool's version snapshots; exports/proof remain regenerable.
+    for i in range(len(parts) - 2):
+        if parts[i:i + 3] == ("docspec", "changes", "_versions"):
+            if len(parts) <= i + 4:
+                return True  # Removing the version root or an article removes snapshots.
+            from dspx.engine.layout import parse_semver
+            if parse_semver(parts[i + 4]) is not None or parts[i + 3] == "_legacy":
+                if len(parts) == i + 5 or parts[i + 5] == "snapshot":
+                    return True
     if "archive" not in parts:
         return False
-    last = max(i for i, part in enumerate(parts) if part == "archive")
-    return "docs" in parts[:last]
+    for i, part in enumerate(parts):
+        if part == "docs":
+            if parts[i + 1:i + 2] == ("archive",):
+                return True
+            if (len(parts) > i + 2 and parts[i + 2] == "archive"
+                    and parts[i + 1] not in ("exports", "assets", "revision_history")):
+                return True
+    return False
 
 
 def _hash(path: Path) -> str:
@@ -79,16 +94,30 @@ def _manifest_path(home: Path) -> Path:
 def _load_raw(home: Path) -> dict:
     """讀整份 manifest（頂層 dict）；壞 YAML → FreezeError（cli 包成友善一行）。"""
     p = _manifest_path(home)
+    if p.is_symlink():
+        raise FreezeError(f"freeze manifest must not be a symbolic link: {p}")
     if not p.is_file():
         return {}
     try:
-        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError as exc:
+        from dspx.engine.model import _DupCheckLoader
+        data = yaml.load(p.read_text(encoding="utf-8"), Loader=_DupCheckLoader)
+    except (OSError, yaml.YAMLError) as exc:
         # 壞檔（Drive 衝突截斷）→ domain error 帶路徑（cli 包成友善一行），不裸 traceback。
         mark = getattr(exc, "problem_mark", None)
         position = f" (line {mark.line + 1})" if mark is not None else ""
         raise FreezeError(f"YAML parse failed: {p}{position}") from exc
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        raise FreezeError(f"invalid freeze manifest mapping: {p}")
+    for key in ("frozen", "legacy"):
+        table = data.get(key, {})
+        if not isinstance(table, dict) or any(not isinstance(k, str) or not isinstance(v, str)
+                                              for k, v in table.items()):
+            raise FreezeError(f"invalid {key} table in freeze manifest: {p}")
+    algorithms = data.get("hash-algorithms", {})
+    if (not isinstance(algorithms, dict)
+            or any(not isinstance(k, str) or v != "sha256-bytes" for k, v in algorithms.items())):
+        raise FreezeError(f"invalid hash-algorithms table in freeze manifest: {p}")
+    return data
 
 
 def _table(data: dict, key: str) -> dict[str, str]:
@@ -108,13 +137,11 @@ def load_legacy(home: Path) -> dict[str, str]:
 
 def _write_manifest(home: Path, frozen: dict[str, str], legacy: dict[str, str]) -> None:
     """兩表一次寫回；legacy 空表不落鍵（與現行單表 manifest 位元相容）。"""
-    data: dict = {"frozen": frozen}
+    data: dict = {**_load_raw(home), "frozen": frozen}
     if legacy:
         data["legacy"] = legacy
-    _manifest_path(home).write_text(
-        yaml.safe_dump(data, allow_unicode=True, sort_keys=True),
-        encoding="utf-8", newline="\n",
-    )
+    from dspx.engine.store import atomic_write_store
+    atomic_write_store(_manifest_path(home), yaml.safe_dump(data, allow_unicode=True, sort_keys=True))
 
 
 def record(home: Path, project_root: Path, snapshot: Path) -> None:
@@ -148,7 +175,7 @@ def record_legacy(home: Path, project_root: Path, files: list[Path]) -> list[str
     return sorted(entries)
 
 
-def verify(home: Path, project_root: Path, docs_dir: Path) -> list[tuple[str, str]]:
+def verify(home: Path, project_root: Path, docs_dir: Path, *, read_only: bool = False) -> list[tuple[str, str]]:
     """抽查凍結區完整性。回傳 (相對路徑, 問題) 清單；空＝全部完好。
 
     舊 manifest 自動遷移（fingerprint v2 D6）：條目為舊算法（未正規化）hash 時，新算法必
@@ -157,6 +184,8 @@ def verify(home: Path, project_root: Path, docs_dir: Path) -> list[tuple[str, st
     一致」的檔案會被改寫＝零洗白窗口；不另立 rehash 指令（遷移在 mismatch 首次被看見處——
     lint V11／publish 閘——自動完成、一次性）。"""
     import sys
+    from dspx.engine.document_versions import _safe
+    from dspx.engine.layout import Layout, LayoutError
     raw = _load_raw(home)
     frozen, legacy = _table(raw, "frozen"), _table(raw, "legacy")
     root = project_root.resolve()
@@ -168,27 +197,42 @@ def verify(home: Path, project_root: Path, docs_dir: Path) -> list[tuple[str, st
             (legacy, "legacy history was deleted", "legacy history was tampered with")):
         for rel, want in table.items():
             f = root / rel
+            try:
+                _safe(Layout(home), f)
+            except (LayoutError, ValueError, OSError):
+                problems.append((rel, "frozen path leaves the project or uses a symbolic link"))
+                continue
+            byte_hash = raw.get("hash-algorithms", {}).get(rel) == "sha256-bytes"
             if not f.is_file():
                 problems.append((rel, deleted))
-            elif _hash(f) != want:
-                if _hash_legacy_algo(f) == want:
+            elif (_hash_legacy_algo(f) if byte_hash else _hash(f)) != want:
+                if not byte_hash and _hash_legacy_algo(f) == want:
                     # 舊算法命中＝內容位元未變、僅算法升級 → 遷移該條目（一次性）
-                    table[rel] = _hash(f)
-                    migrated.append(rel)
+                    if not read_only:
+                        table[rel] = _hash(f)
+                        migrated.append(rel)
                 else:
                     problems.append((rel, tampered))
     if migrated:
         _write_manifest(home, frozen, legacy)
         for rel in sorted(migrated):
             sys.stderr.write(
-                f"docspec: freeze manifest entry for {rel} migrated to the newline-normalized "
+                f"artispec: freeze manifest entry for {rel} migrated to the newline-normalized "
                 "hash algorithm (content verified byte-identical under the old algorithm).\n")
     # 2) 磁碟上 archive/ 內、卻沒登記的檔（手動塞進凍結區）＝兩表聯集都查無；同步垃圾
     #    （desktop.ini 類）白名單排除——它們由同步工具自動生成、非人為放置，不該鎖發布。
-    if docs_dir.is_dir():
-        for f in docs_dir.rglob("*"):
+    versions_dir = home / "changes" / "_versions"
+    for scan_dir in (docs_dir, versions_dir):
+        if not scan_dir.is_dir():
+            continue
+        for f in scan_dir.rglob("*"):
             if f.is_file() and is_frozen_path(f) and not is_sync_junk(f.name):
-                rel = f.resolve().relative_to(root).as_posix()
+                try:
+                    _safe(Layout(home), f)
+                    rel = f.resolve().relative_to(root).as_posix()
+                except (LayoutError, ValueError, OSError):
+                    problems.append((str(f), "snapshot path leaves the project or uses a symbolic link"))
+                    continue
                 if rel not in frozen and rel not in legacy:
                     problems.append((rel, "not registered (not produced by publish)"))
     return problems

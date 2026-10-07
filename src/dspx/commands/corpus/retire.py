@@ -1,8 +1,8 @@
-"""docspec retire <section> — 整節退場（含子節）到 corpus/_archive/。
+"""artispec retire <section> — 整節退場（含子節）到 corpus/_archive/。
 
 （消滅三胞胎：舊的「retire＝死決策純報告」已刪——死決策就地留在 decisions.yaml 標
-superseded/deprecated，用 `docspec show <article> --decisions --all-status` 檢視；退場整節＝
-本指令的交易；查詢已退場＝`docspec status --retired`。）
+superseded/deprecated，用 `artispec show <article> --decisions --all-status` 檢視；退場整節＝
+本指令的交易；查詢已退場＝`artispec status --retired`。）
 
 設計（per-section 獨立、適合長期文件管理）：
   1. 退場結構記錄 append 進該節「自己的」history.yaml 的 entries（kind:section＝原路徑、
@@ -16,7 +16,7 @@ superseded/deprecated，用 `docspec show <article> --decisions --all-status` �
   - **store 篇**（一篇一檔 corpus/<article>.yaml）＝把該子樹的記錄從活 store 抽出、dump 成
     _archive/ 封存包（可回復的散檔形態）、活 store 移除記錄、revision+1、原子重寫。
 
-查詢用 `docspec status --retired`。
+查詢用 `artispec status --retired`。
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ def _archived_retired_ids(layout) -> dict[str, str]:
     """封存區既有的整節退場 id → 封存位置（_archive/*/history.yaml 的 kind:section entry）。
 
     撞號拒絕（D5）用：「已退役」與「活著」對同一 id 不能同真——同 id 再退＝兩筆退場記錄
-    指同一 id、`docspec status --retired` 與回復流程無從分辨。"""
+    指同一 id、`artispec status --retired` 與回復流程無從分辨。"""
     out: dict[str, str] = {}
     root = layout.corpus_archive_dir
     if not root.is_dir():
@@ -95,8 +95,8 @@ def _warn_back_references(layout, section: str, sub_ids: set[str]) -> None:
 
     if hits:
         sys.stderr.write(
-            f"docspec: ⚠ {len(hits)} audit/roadmap reference(s) point into \"{section}\" and "
-            "will become dead references after retirement (docspec check will flag them):\n")
+            f"artispec: ⚠ {len(hits)} audit/roadmap reference(s) point into \"{section}\" and "
+            "will become dead references after retirement (artispec check will flag them):\n")
         for h in hits:
             sys.stderr.write(f"    {h}\n")
         sys.stderr.write("  retiring anyway; update or close these records afterwards.\n")
@@ -167,8 +167,8 @@ def _retire_store(layout, schema, section: str, args) -> int:
                if r.path == section or r.path.startswith(section + "/")]
     if not subtree:
         sys.stderr.write(
-            f"docspec: section \"{section}\" not found in store corpus/{article}.yaml. "
-            "Use docspec status to get the correct path.\n")
+            f"artispec: section \"{section}\" not found in store corpus/{article}.yaml. "
+            "Use artispec status to get the correct path.\n")
         return 1
 
     own = art.record_by_path(section)
@@ -183,7 +183,7 @@ def _retire_store(layout, schema, section: str, args) -> int:
     archived_ids = _archived_retired_ids(layout)
     if sec_id in archived_ids:
         sys.stderr.write(
-            f"docspec: refusing to retire \"{section}\": its id \"{sec_id}\" is already recorded "
+            f"artispec: refusing to retire \"{section}\": its id \"{sec_id}\" is already recorded "
             f"as retired in the archive at {archived_ids[sec_id]}.\n"
             "  a retired and a live section cannot share the same id — give this section a new "
             "concept id, or resolve the archived entry first, then retire again.\n")
@@ -211,7 +211,7 @@ def _retire_store(layout, schema, section: str, args) -> int:
     dup = [r.path for r in subtree if arch.record_by_path(r.path) is not None]
     if dup:
         sys.stderr.write(
-            f"docspec: refusing to retire \"{section}\": the archived store already holds "
+            f"artispec: refusing to retire \"{section}\": the archived store already holds "
             f"record(s) for {dup} — resolve the earlier retirement first.\n")
         return 1
     arch.records.extend(subtree)
@@ -262,12 +262,12 @@ def _retire_store(layout, schema, section: str, args) -> int:
     if moved_deliverables:
         print(f"  whole article \"{article}\" retired: store file removed; moved its deliverable + "
               f"ledger into the archive package ({', '.join(moved_deliverables)}).")
-    print("  content is recoverable; query with docspec status --retired, the engine already ignores the archive.")
+    print("  content is recoverable; query with artispec status --retired, the engine already ignores the archive.")
     return 0
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec retire", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec retire", description=HELP)
     parser.add_argument("section", help="path of the section to retire (relative to corpus/)")
     parser.add_argument("--in", dest="retired_in", default=None,
                         help="which change/session this is retired in (written to retired.in)")
@@ -287,7 +287,7 @@ def run(argv: list[str]) -> int:
     from dspx.engine import store as _store
     if not _store.article_has_store(layout, layout.article_of(section)):
         sys.stderr.write(
-            f"docspec: section \"{section}\" is not in a store (corpus/{layout.article_of(section)}"
+            f"artispec: section \"{section}\" is not in a store (corpus/{layout.article_of(section)}"
             ".yaml not found). retire operates on store sections.\n")
         return 1
     return _retire_store(layout, schema, section, args)

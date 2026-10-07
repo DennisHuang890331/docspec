@@ -93,7 +93,7 @@ def _ensure_tinytex(pkey: str, *, force: bool, no_download: bool,
             return paths.tlmgr_path(root) is not None
 
     if no_download:
-        sys.stderr.write("docspec: --no-download given, no TinyTeX in data_dir, and no dev shortcut — aborting.\n")
+        sys.stderr.write("artispec: --no-download given, no TinyTeX in data_dir, and no dev shortcut — aborting.\n")
         return False
 
     substr, sha = _MANIFEST["assets"][pkey]
@@ -128,14 +128,14 @@ def _run_tlmgr(tlmgr: Path, args: list[str], *, check: bool = True) -> bool:
         proc = subprocess.run([str(tlmgr), *args], check=False, env=env,
                               capture_output=True, text=True)
     except OSError as exc:
-        sys.stderr.write(f"docspec: tlmgr {' '.join(args)} could not run: {exc}\n")
+        sys.stderr.write(f"artispec: tlmgr {' '.join(args)} could not run: {exc}\n")
         return False
     if proc.returncode != 0:
         if check:
             tail = "\n".join(
                 ((proc.stderr or "") + (proc.stdout or "")).strip().splitlines()[-15:])
             sys.stderr.write(
-                f"docspec: tlmgr {' '.join(args)} returned non-zero (rc={proc.returncode}):\n{tail}\n")
+                f"artispec: tlmgr {' '.join(args)} returned non-zero (rc={proc.returncode}):\n{tail}\n")
         return False
     return True
 

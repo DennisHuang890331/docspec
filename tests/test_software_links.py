@@ -167,6 +167,13 @@ def test_roadmap_progress_follows_the_software_change(proj, capsys):
     assert code("archive", "fix") == 1                  # 設計仍引用被取代的決策
     assert "superseded decision" in capsys.readouterr().out
     code("change", "design", "fix", "--remove-decision", "D-claude-1", "--decision", "D-claude-2")
+    assert code("change", "delta", "fix", "--capability", "entry", "--op", "modify-requirement",
+                "--ref", "R1", "--based-on", "D-claude-2") == 0
+    for suspect in _impact(capsys)["suspects"]:
+        if suspect["target"] in ("swc:fix", "task:fix#1", "test:fix/T1", "req:entry/R1"):
+            assert impact_cmd.run(["clear", suspect["id"], "--reason", "已改依新決策並重驗"]) == 0
+    assert code("testplan", "sign", "fix", "--by", "gemini") == 0
+    assert code("evidence", "run", "fix", "1") == 0
     assert code("archive", "fix") == 0
     assert _roadmap_status(capsys)["W-claude-1"]["status"] == "done"
 
@@ -225,6 +232,11 @@ def test_doc_section_realizing_a_requirement_goes_stale_when_it_changes(proj, wr
     assert freeze_cmd.run(["guide"]) == 0
     assert "guide/home" in capsys.readouterr().err
     assert pb.doc_version_record(proj, "guide", "1.0.0")["software-divergence"] == ["guide/home"]
+    assert roadmap_cmd.run(["add", "--title", "交付說明书", "--ref", "doc:guide"]) == 0
+    rows = _roadmap_status(capsys)
+    row = next(r for r in rows.values() if "doc:guide" in r.get("refs", []))
+    assert row["status"] == "done"                 # stale-software 單獨不阻擋交付
+    assert any("stale-software" in detail or "軟體" in detail for detail in row["details"])
 
 
 def test_software_errors_do_not_hold_up_documents(proj, write_leaf, capsys):

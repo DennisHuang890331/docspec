@@ -1,7 +1,7 @@
-"""docspec mv — 引擎交易原語：改名/搬移 + 同步重寫 path-keyed 引用（原子、失敗零半套）。
+"""artispec mv — 引擎交易原語：改名/搬移 + 同步重寫 path-keyed 引用（原子、失敗零半套）。
 
 兩種模式（由引數形態自動判定）：
-  1. **節模式** `docspec mv <old-section> <new-section>`：改名/搬移一個 leaf 或 group 資料夾，
+  1. **節模式** `artispec mv <old-section> <new-section>`：改名/搬移一個 leaf 或 group 資料夾，
      確定性重寫①`docs/<article>_latest.md` 受影響的 section/group marker 行（不重寫則下次 render
      把舊路徑散文當無主丟棄＝毀稿）②森林級與 per-article `audit.yaml`/`roadmap.yaml` 的路徑型
      targets/sot-owner/target；自跑 `check` 驗引用完整；任一步失敗即回滾、零半套。
@@ -10,7 +10,7 @@
      指紋帳本不手改——收尾提示 `render --rebaseline` 以新 key 重生。
      **store 篇**（`corpus/<article>.yaml`）走結構化記錄搬移：改記錄的 path 前綴（不搬資料夾）、
      revision+1、canonical 原子重寫，其餘（引用重寫、check 自驗、回滾）一併原子完成。
-  2. **資產模式** `docspec mv docs/assets/old.png new.png`：改圖檔名＋以 basename 比對重寫所有
+  2. **資產模式** `artispec mv docs/assets/old.png new.png`：改圖檔名＋以 basename 比對重寫所有
      `docs/*_latest.md` 與 corpus `material.md` 的 `![](…old.png)` 引用；同樣原子/回滾。
 """
 
@@ -35,7 +35,7 @@ HELP = ("engine transaction: rename/relocate a leaf/group folder (or a docs/asse
 _IMAGE_EXTS = frozenset({
     ".png", ".svg", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".drawio"})
 
-_AUDIT_HEADER = ("# audit findings (maintained by the docspec audit command; do not edit by "
+_AUDIT_HEADER = ("# audit findings (maintained by the artispec audit command; do not edit by "
                  "hand). append-only adversarial log.\n")
 
 
@@ -214,10 +214,10 @@ def _run_section_mode(layout, schema, old_arg: str, new_arg: str) -> int:
     old = old_arg.strip("/")
     new = new_arg.strip("/")
     if not old or not new:
-        sys.stderr.write("docspec: both <old-section> and <new-section> must be non-empty\n")
+        sys.stderr.write("artispec: both <old-section> and <new-section> must be non-empty\n")
         return 2
     if old == new:
-        sys.stderr.write("docspec: source and destination are identical (nothing to move)\n")
+        sys.stderr.write("artispec: source and destination are identical (nothing to move)\n")
         return 2
     return _run_store_section_mode(layout, schema, old, new)
 
@@ -233,24 +233,24 @@ def _run_store_section_mode(layout, schema, old: str, new: str) -> int:
     # v1 範圍：article root 不搬、跨 article 不搬（store 天生 per-article）。
     if "/" not in old:
         sys.stderr.write(
-            f"docspec: refusing to move article root \"{old}\" — the store file is keyed by the "
+            f"artispec: refusing to move article root \"{old}\" — the store file is keyed by the "
             "article name (corpus/<article>.yaml); root moves are a later mv extension. v1 scope "
             "is leaf/group.\n")
         return 1
     if "/" not in new:
         sys.stderr.write(
-            f"docspec: destination \"{new}\" would be an article root (no parent segment); v1 mv "
+            f"artispec: destination \"{new}\" would be an article root (no parent segment); v1 mv "
             "cannot promote a section to an article root.\n")
         return 1
     if old_art != new_art:
         sys.stderr.write(
-            f"docspec: refusing cross-article move (\"{old_art}\" -> \"{new_art}\") — v1 mv is "
+            f"artispec: refusing cross-article move (\"{old_art}\" -> \"{new_art}\") — v1 mv is "
             "same-article only.\n")
         return 1
 
     problem = validate_section_path(new)
     if problem:
-        sys.stderr.write(f"docspec: refusing to move to \"{new}\": {problem}\n")
+        sys.stderr.write(f"artispec: refusing to move to \"{new}\": {problem}\n")
         return 2
 
     store_file = _store.store_path(layout, old_art)
@@ -258,19 +258,19 @@ def _run_store_section_mode(layout, schema, old: str, new: str) -> int:
     subtree = [r for r in art.records if r.path == old or r.path.startswith(old + "/")]
     if not subtree:
         sys.stderr.write(
-            f"docspec: section \"{old}\" not found in store corpus/{old_art}.yaml. "
-            "Use docspec status for paths.\n")
+            f"artispec: section \"{old}\" not found in store corpus/{old_art}.yaml. "
+            "Use artispec status for paths.\n")
         return 1
     if any(r.path == new or r.path.startswith(new + "/") for r in art.records):
         sys.stderr.write(
-            f"docspec: destination \"{new}\" already exists in the store; resolve it before moving.\n")
+            f"artispec: destination \"{new}\" already exists in the store; resolve it before moving.\n")
         return 1
 
     # mv 以 check 自驗——先要求綠（無法分辨既有錯與本次搬移造成的錯）。
     pre = _check_result(layout, schema)
     if not pre.ok:
         sys.stderr.write(
-            "docspec: refusing to mv — docspec check is not green; mv self-verifies with check and "
+            "artispec: refusing to mv — artispec check is not green; mv self-verifies with check and "
             "cannot tell a pre-existing error from one it caused. Fix these first:\n")
         for err in pre.errors[:20]:
             sys.stderr.write(f"    ✗ {err}\n")
@@ -302,13 +302,13 @@ def _run_store_section_mode(layout, schema, old: str, new: str) -> int:
                            + "\n    ".join(f"✗ {e}" for e in result.errors[:20]))
     except (_MvAbort, Exception) as exc:  # noqa: BLE001 — 任何失敗都要回滾
         _restore(snapshots)
-        sys.stderr.write(f"docspec: mv aborted (no partial effect): {exc}\n")
+        sys.stderr.write(f"artispec: mv aborted (no partial effect): {exc}\n")
         return 1
 
     print(f"mv: \"{old}\" -> \"{new}\" (store records repointed; references rewritten; check green)")
     for c in report:
         print(f"  {c}")
-    print(f"  reminder: run `docspec render {old_art} --rebaseline` — the fingerprint ledger is "
+    print(f"  reminder: run `artispec render {old_art} --rebaseline` — the fingerprint ledger is "
           "keyed by section path and is NOT hand-edited; rebaseline regenerates it for the new "
           "paths (prose is preserved). Identity (concept.id) is unchanged.")
     return 0
@@ -365,7 +365,7 @@ def _run_asset_mode(layout, schema, old_arg: str, new_arg: str) -> int:
     old_file = _resolve_asset(layout, old_arg)
     if old_file is None:
         sys.stderr.write(
-            f"docspec: asset \"{old_arg}\" not found (looked under docs/assets/ and the given "
+            f"artispec: asset \"{old_arg}\" not found (looked under docs/assets/ and the given "
             "path). Nothing moved.\n")
         return 1
     old_base = old_file.name
@@ -379,13 +379,13 @@ def _run_asset_mode(layout, schema, old_arg: str, new_arg: str) -> int:
         dst = old_file.parent / new_arg
     new_base = dst.name
     if dst.exists():
-        sys.stderr.write(f"docspec: destination asset already exists: {dst}. Resolve it first.\n")
+        sys.stderr.write(f"artispec: destination asset already exists: {dst}. Resolve it first.\n")
         return 1
 
     pre = _check_result(layout, schema)
     if not pre.ok:
         sys.stderr.write(
-            "docspec: refusing to mv — docspec check is not green; fix structural errors first "
+            "artispec: refusing to mv — artispec check is not green; fix structural errors first "
             "(mv self-verifies with check).\n")
         for err in pre.errors[:20]:
             sys.stderr.write(f"    ✗ {err}\n")
@@ -425,7 +425,7 @@ def _run_asset_mode(layout, schema, old_arg: str, new_arg: str) -> int:
             shutil.move(str(dst), str(old_file))
         _restore(snapshots)
         _remove_created_dirs(created_dirs)
-        sys.stderr.write(f"docspec: mv aborted (no partial effect): {exc}\n")
+        sys.stderr.write(f"artispec: mv aborted (no partial effect): {exc}\n")
         return 1
 
     try:
@@ -442,7 +442,7 @@ def _run_asset_mode(layout, schema, old_arg: str, new_arg: str) -> int:
     arts = sorted(a for a in touched_articles if a)
     if arts:
         print(f"  reminder: image refs changed prose in {', '.join(arts)}; run "
-              f"`docspec render <article> --rebaseline` so the ledger prose fingerprints follow.")
+              f"`artispec render <article> --rebaseline` so the ledger prose fingerprints follow.")
     return 0
 
 
@@ -478,7 +478,7 @@ def doc_roadmap_path(layout, article: str):
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec mv", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec mv", description=HELP)
     parser.add_argument(
         "old",
         help="old section path (relative to corpus/) OR an image asset path (docs/assets/x.png)")

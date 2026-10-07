@@ -1,4 +1,4 @@
-"""docspec init 開場畫面（仿 OpenSpec welcome-screen）。
+"""artispec init 開場畫面（仿 OpenSpec welcome-screen）。
 
 左側「文件」像素 logo **持續迴圈浮現＋重置**（＝會閃／脈動），右側 welcome 文字。
 動畫在背景執行緒跑、主執行緒等使用者按 Enter（仿 OpenSpec：邊閃邊等）。
@@ -57,18 +57,18 @@ _LOGO = _LOGO_U if _UNICODE else _LOGO_A
 _SEQ = ["blank", "dim", "normal", "bold", "bold", "normal", "dim"]
 
 _TEXT = [
-    f"{BOLD}{WHITE}Welcome to docspec{RESET}",
-    f"{DIM}Spec-driven development, for writing documents.{RESET}",
+    f"{BOLD}{WHITE}Welcome to ArtiSpec{RESET}",
+    f"{DIM}Specification-driven engineering for documents and software.{RESET}",
     "",
     f"{WHITE}This setup will configure:{RESET}",
     f"{DIM}  {BULLET} Agent skills for your AI tool{RESET}",
     f"{DIM}  {BULLET} /dspx:* slash commands{RESET}",
     "",
     f"{WHITE}Quick start after setup:{RESET}",
-    f"  {YELLOW}/dspx:develop{RESET} {DIM} shape the outline & decisions{RESET}",
-    f"  {YELLOW}/dspx:draft  {RESET} {DIM} render the prose{RESET}",
-    f"  {YELLOW}/dspx:publish{RESET} {DIM} freeze a version{RESET}",
-    f"  {YELLOW}/dspx:release{RESET} {DIM} typeset the PDF{RESET}",
+    f"  {YELLOW}artispec handover{RESET} {DIM} read the current handoff{RESET}",
+    f"  {YELLOW}artispec roadmap{RESET} {DIM} find existing work{RESET}",
+    f"  {YELLOW}artispec roadmap show <id>{RESET} {DIM} inspect the work and sources{RESET}",
+    f"  {YELLOW}artispec change show <id>{RESET} {DIM} inspect the linked change{RESET}",
     "",
     f"{CYAN}Press Enter to select tools...{RESET}",
 ]

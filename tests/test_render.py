@@ -388,7 +388,7 @@ def test_publish_snapshot_is_marker_free(make_project, write_leaf, monkeypatch):
     text = text.replace("## 2. 用法\n", "## 2. 用法\n\n呼叫 API 即可。\n")
     latest.write_text(text, encoding="utf-8")
     assert publish_cmd.run(["g"]) == 0
-    snapshot = home.parent / "docs" / "g" / "archive" / "v1.0.0.md"
+    snapshot = home / "changes" / "_versions" / "g" / "1.0.0" / "snapshot" / "document.md"
     snap_text = snapshot.read_text(encoding="utf-8")
     # ★凍結快照完全無隱形標記
     assert "dspx:section" not in snap_text

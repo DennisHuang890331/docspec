@@ -3,11 +3,12 @@
 concept 是這一末節的**身份與寫作信封**——draft 之後只在這個信封裡寫散文。它是**覆寫型**：改 scope 就地更新、不留史（要留史的判斷請走 decisions.yaml）。
 
 填寫要點：
-- `concept`：一句話講清「這節到底在說什麼」。這是 aperture 核心——draft 靠它定錨。
+- `concept`：一句話講清本節任務或主題。按讀者與既有 kind 組織：how-to 是操作步驟、reference 是查詢資料、tutorial 是學習引導、explain 是理由與取捨；不要求每節都成為論述鏈。這是 aperture 核心——draft 靠它定錨。
 - `brief`：寫作世界邊界（**鍵固定英文、值用專案語言**）：`audience`（寫給誰）、`depth`（多深入）、`breadth`（涵蓋多廣）、`forbidden`（不准寫什麼，list）、`layout`（prose / table / list…）、`kind`（可選，Diátaxis 章節型別：`explain` 論述／`how-to` 任務步驟／`reference` 查表終端／`tutorial` 教學）。`kind` 只當 **draft 提示＋audit 訊號**（型混由 factcheck 軟提示，不進 render、不是硬閘）；隨樹繼承（子省略＝沿用父）。**brief 全可選、差異制**：只填與祖先鏈不同的欄，省略＝繼承；逐字複製祖先值＝灌水（lint WARN）。root 節例外——須填滿 audience/depth/breadth。
 - `must_cover`：本節非提不可的點，draft 的 checklist。
 - `sources`：**只放外部出處指標**（用了哪份標準/論文/資料集，或 "Author's design"），不要把內容貼進來——內容是 material.md 的事。**⚠ 不要把「引用別節的決策」寫進這裡**：那是內部依賴、要用 `realizes:`/`governed-by:`。寫進 `sources` 的內部依賴對 staleness 隱形（上游決策被推翻時，本節不會轉 stale、散文繼續講死決策且過所有閘）——大型文件最致命的無聲漂移。`check` 偵測到 `sources` 出現專案內部 decision id 會直接擋（ERROR），逼你改用結構邊。
 - `realizes`：本節散文實現了哪些決策（指向 decisions/history 的 id）＝**內部跨節依賴的家**，餵 staleness 指紋（上游決策動了→本節 stale-upstream→重渲）。
-- `governed-by`：跨樹延伸——本概念延伸（治於）哪個父 concept（單向、子→父；父不存子，反向由 `docspec show <父 section> --impact` 的子孫類算出）。必須指向**活的 concept id**（kind=concept、非決策、非退場），祖先集會把父的 brief＋normative 繼承進來。
+- 軟體需求來源：正式規格用 `req:<capability>/R<n>`；尚在指定 change 中的變動需求用 `draft-req:<change>/<capability>/R<n>`。封存後保留原字串，工具以 sealed baseline 解析正式入口；缺失或失效照診斷追查，不猜同編號需求，也不為引用提早封存。軟體差異仍只記錄，不阻擋文件自身定版。
+- `governed-by`：跨樹延伸——本概念延伸（治於）哪個父 concept（單向、子→父；父不存子，反向由 `artispec show <父 section> --impact` 的子孫類算出）。必須指向**活的 concept id**（kind=concept、非決策、非退場），祖先集會把父的 brief＋normative 繼承進來。
 
-`id` / `order` 由首寫 concept 的 `docspec put` 自動蓋章（沒寫就補：路徑指紋 id、同層接龍 order）；別手改 id（它是 diff 判存廢的穩定身份）。`title` 設成純章節名（會成為文件章節標題）——**不含章號前綴**（`6.`／`11、`）：章號由 render 從 order＋樹位置確定性推導注入，title 只存名稱。附錄或慣例不編號的節設 `numbering: appendix`／`none`（沿樹繼承）。
+`id` / `order` 由首寫 concept 的 `artispec put` 自動蓋章（沒寫就補：路徑指紋 id、同層接龍 order）；別手改 id（它是 diff 判存廢的穩定身份）。`title` 設成純章節名（會成為文件章節標題）——**不含章號前綴**（`6.`／`11、`）：章號由 render 從 order＋樹位置確定性推導注入，title 只存名稱。附錄或慣例不編號的節設 `numbering: appendix`／`none`（沿樹繼承）。

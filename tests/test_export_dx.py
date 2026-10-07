@@ -18,6 +18,7 @@ from dspx.commands.export._pack_gate import _check_pack_integrity
 from dspx.commands.export._preprocess import _denumber_manual_headings
 from dspx.engine.config import load_config
 from dspx.engine.layout import Layout
+from dspx.reports import freeze
 
 _HAVE_PANDOC = paths.resolve_pandoc() is not None
 
@@ -29,6 +30,7 @@ def _setup(make_project, body="# 標題\n\n中文內容。\n", *, version="1.0.0
     snap = layout.docs_snapshot(article, version)
     snap.parent.mkdir(parents=True, exist_ok=True)
     snap.write_text(body, encoding="utf-8")
+    freeze.record(home, layout.project_root, snap)
     return home, layout
 
 
@@ -200,7 +202,7 @@ def test_pack_gate_refusal_points_to_eject_and_genhashes(tmp_path, capsys):
     pack = _tampered_pack(tmp_path)
     assert _check_pack_integrity(pack, is_bundled=True, allow=False) == 1
     err = capsys.readouterr().err
-    assert "docspec template eject" in err
+    assert "artispec template eject" in err
     assert "gen_pack_hashes.py" in err
     assert "--template <dir>" not in err                            # 誤導出口移除
 

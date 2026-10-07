@@ -2,21 +2,21 @@
 name: dspx-diagram
 description: >-
   Author a diagram as a draw.io (.drawio) file and render it to a high-resolution raster PNG for
-  embedding in a docspec deliverable. A SUPPORT skill, loaded by a delegated subagent — the main
+  embedding in an ArtiSpec deliverable. A SUPPORT skill, loaded by a delegated subagent — the main
   authoring agent (apply/develop) never loads it; it hands over intent and reviews the rendered image.
-  Use for architecture / flow / sequence / state / network diagrams a docspec section needs as a figure.
+  Use for architecture / flow / sequence / state / network diagrams an ArtiSpec section needs as a figure.
 kind: support
 license: PolyForm-Noncommercial-1.0.0
 compatibility: >-
-  Rendering needs the draw.io desktop CLI (`docspec setup --with-drawio`, or a system install; without
+  Rendering needs the draw.io desktop CLI (`artispec setup --with-drawio`, or a system install; without
   it the skill degrades to a browser-fallback URL or XML-only). The vision self-check needs a
   vision-capable model (skipped gracefully if absent). The vendored scripts are stdlib-only Python 3.
-  The docspec CLI is installed via uv tool — not on PATH in a fresh shell, run it from the dir printed
+  The artispec CLI is installed via uv tool — not on PATH in a fresh shell, run it from the dir printed
   by `uv tool dir --bin`, never reinstall; for the draw.io CLI prefer the managed binary or point
   DOCSPEC_DRAWIO at it.
 metadata:
   author: docspec
-  version: "2.0"
+  version: "2.1"
 ---
 
 You are a delegated subagent. The main agent gave you the diagram's *intent* (what it must show) and the deliverable asset dir (`docs/assets/`). Produce one `.drawio` source plus a rendered **PNG** there, then hand the image path back. You do NOT edit the deliverable prose, place the figure, or assign a figure number — the renderer numbers figures and `apply` writes the `![caption](assets/<file>)` reference.
@@ -35,17 +35,17 @@ You are a delegated subagent. The main agent gave you the diagram's *intent* (wh
 6. **Final render → PNG** — high-DPI raster (`--width 2400`); the deliverable embeds the PNG, the `.drawio` stays beside it as the regenerable source of truth.
 7. **Hand back** the PNG path + a one-line description of what it shows.
 
-**Degrade honestly if** the draw.io CLI is missing or crashes: do not retry in a loop, do not fake an image — run `scripts/encode_drawio_url.py <name>.drawio` for a browser URL, or hand back the `.drawio` XML alone, and say rendering needs `docspec setup --with-drawio`.
+**Degrade honestly if** the draw.io CLI is missing or crashes: do not retry in a loop, do not fake an image — run `scripts/encode_drawio_url.py <name>.drawio` for a browser URL, or hand back the `.drawio` XML alone, and say rendering needs `artispec setup --with-drawio`.
 
-**Pause / flag if** the diagram genuinely cannot fit a single column (much wider than tall): say so explicitly — "needs full-page / landscape" — so the main agent records the layout intent (it raises a `docspec audit` finding) instead of letting it vanish at the handoff.
+**Pause / flag if** the diagram genuinely cannot fit a single column (much wider than tall): say so explicitly — "needs full-page / landscape" — so the main agent records the layout intent (it raises a `artispec audit` finding) instead of letting it vanish at the handoff.
 
 **Output**
 
 ```
 diagram: docs/assets/<name>.png  (+ <name>.drawio source)
 shows: <one-line description>
-[if oversized] needs full-page / landscape — main agent, please raise a docspec audit finding
-[if no CLI] rendered via browser fallback / XML only — needs `docspec setup --with-drawio`
+[if oversized] needs full-page / landscape — main agent, please raise an ArtiSpec audit finding
+[if no CLI] rendered via browser fallback / XML only — needs `artispec setup --with-drawio`
 ```
 
 **Guardrails**

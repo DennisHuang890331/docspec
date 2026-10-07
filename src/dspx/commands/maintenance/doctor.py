@@ -1,16 +1,16 @@
-r"""docspec doctor — 唯一排版環境診斷入口（唯讀、離線、不改任何東西）。
+r"""artispec doctor — 唯一排版環境診斷入口（唯讀、離線、不改任何東西）。
 
 ★鐵律：doctor 只「看」、絕不「動」（不下載、不安裝、不寫 tex.lock）。每項一行
   OK / WARN / FAIL ＋（非 OK 時）一行可複製的修復指令。有任一 FAIL → exit 非零（給 CI）。
 
 檢查項（全離線、不連網）：
   1. 程式版本 dspx.__version__。
-  2. typst（預設 render 引擎）：paths.resolve_typst() 命中否（否 → FAIL：`docspec setup`）。
-  3. pandoc：受控 pandoc 命中否（缺 → FAIL：`docspec setup`）。
-  4. 字型：paths.REQUIRED_FONT_FILES 在 resolve_fonts_dir() 齊否（缺 → FAIL：`docspec setup`）。
+  2. typst（預設 render 引擎）：paths.resolve_typst() 命中否（否 → FAIL：`artispec setup`）。
+  3. pandoc：受控 pandoc 命中否（缺 → FAIL：`artispec setup`）。
+  4. 字型：paths.REQUIRED_FONT_FILES 在 resolve_fonts_dir() 齊否（缺 → FAIL：`artispec setup`）。
      （字型兩軌共用：Typst --font-path 與期刊 xelatex 都要。）
   5. TinyTeX（xelatex，OPTIONAL）：預設 Typst 軌不用、期刊軌 emit-only 不自編；只有想本機編
-     emit 出的期刊 `.tex` 才需要 → 缺 = WARN（`docspec setup --with-latex`），非 FAIL。
+     emit 出的期刊 `.tex` 才需要 → 缺 = WARN（`artispec setup --with-latex`），非 FAIL。
   6. tlmgr 套件（optional）：僅在 LaTeX 軌已裝時比對；未裝 → WARN「LaTeX 軌未裝（可選）」。
 
 選配：
@@ -56,7 +56,22 @@ class _Check:
 # ── 個別檢查（皆唯讀、離線）────────────────────────────────────────
 
 def _check_version() -> _Check:
-    return _Check(_OK, "docspec version", __version__)
+    return _Check(_OK, "artispec version", __version__)
+
+
+def _check_legacy_data() -> _Check | None:
+    """只檢查位置並提示明確遷移；診斷不讀寫或搬移資產內容。"""
+    try:
+        source, target = paths.legacy_data_dir(), paths.data_dir()
+        names = ("tinytex", "fonts", "pandoc", "typst", "drawio", "cache", "tex.lock", "update-cache.json")
+        needs_migration = source.is_dir() and any(
+            (source / name).exists() and not (target / name).exists() for name in names)
+    except OSError:
+        return None
+    if needs_migration:
+        return _Check(_WARN, "legacy managed data", f"legacy assets remain at {source}; current root: {target}",
+                      "artispec setup --migrate-data")
+    return None
 
 
 def _check_typst() -> _Check:
@@ -64,9 +79,9 @@ def _check_typst() -> _Check:
     try:
         typst = paths.resolve_typst()
     except Exception as exc:  # noqa: BLE001 — platformdirs 缺席等
-        return _Check(_FAIL, "typst (default engine)", f"resolution failed: {exc}", "docspec setup")
+        return _Check(_FAIL, "typst (default engine)", f"resolution failed: {exc}", "artispec setup")
     if typst is None:
-        return _Check(_FAIL, "typst (default engine)", "controlled typst not found", "docspec setup")
+        return _Check(_FAIL, "typst (default engine)", "controlled typst not found", "artispec setup")
     return _Check(_OK, "typst (default engine)", str(typst))
 
 
@@ -77,11 +92,11 @@ def _check_tinytex() -> _Check:
         xelatex = paths.resolve_xelatex()
     except Exception as exc:  # noqa: BLE001 — platformdirs 缺席等
         return _Check(_WARN, "TinyTeX (xelatex, optional)", f"resolution failed: {exc}",
-                      "docspec setup --with-latex")
+                      "artispec setup --with-latex")
     if xelatex is None:
         return _Check(_WARN, "TinyTeX (xelatex, optional)",
                       "not installed — only needed to locally compile an emitted journal .tex",
-                      "docspec setup --with-latex")
+                      "artispec setup --with-latex")
     return _Check(_OK, "TinyTeX (xelatex, optional)", str(xelatex))
 
 
@@ -89,20 +104,20 @@ def _check_packages() -> _Check:
     """tex.lock 宣告的 tlmgr 套件 vs setup 當前期望（_TEX_PACKAGES）。"""
     lock = paths.read_tex_lock()
     if lock is None:
-        return _Check(_WARN, "tlmgr packages", "tex.lock does not exist (not set up yet)", "docspec setup")
+        return _Check(_WARN, "tlmgr packages", "tex.lock does not exist (not set up yet)", "artispec setup")
     declared = set(lock.get("tlmgr_packages") or [])
     if not declared:
         # 受控 LaTeX 軌（TinyTeX）未安裝＝可選、預設 Typst 軌不需要 → 非缺陷
         return _Check(_WARN, "tlmgr packages (optional)",
                       "LaTeX track not installed — optional, only for locally compiling a journal .tex",
-                      "docspec setup --with-latex")
+                      "artispec setup --with-latex")
     expected = set(setup_cmd._TEX_PACKAGES)
     missing = sorted(expected - declared)
     if missing:
         return _Check(
             _WARN, "tlmgr packages",
             f"tex.lock is missing {len(missing)} expected package(s): {' '.join(missing)}",
-            "docspec setup")
+            "artispec setup")
     return _Check(_OK, "tlmgr packages", f"tex.lock declares {len(declared)}, covering all expected")
 
 
@@ -110,14 +125,14 @@ def _check_fonts() -> _Check:
     try:
         fdir = paths.resolve_fonts_dir()
     except Exception as exc:  # noqa: BLE001
-        return _Check(_FAIL, "fonts", f"resolution failed: {exc}", "docspec setup")
+        return _Check(_FAIL, "fonts", f"resolution failed: {exc}", "artispec setup")
     if fdir is None:
-        return _Check(_FAIL, "fonts", "controlled fonts directory not found", "docspec setup")
+        return _Check(_FAIL, "fonts", "controlled fonts directory not found", "artispec setup")
     missing = [f for f in paths.REQUIRED_FONT_FILES if not (fdir / f).is_file()]
     if missing:
         return _Check(
             _FAIL, "fonts",
-            f"{fdir} is missing {len(missing)} file(s): {', '.join(missing)}", "docspec setup")
+            f"{fdir} is missing {len(missing)} file(s): {', '.join(missing)}", "artispec setup")
     return _Check(_OK, "fonts", f"{len(paths.REQUIRED_FONT_FILES)} files present in {fdir}")
 
 
@@ -126,7 +141,7 @@ def _check_pandoc() -> _Check:
     if pandoc is None:
         return _Check(
             _FAIL, "pandoc", "controlled pandoc not found",
-            "docspec setup")
+            "artispec setup")
     return _Check(_OK, "pandoc", str(pandoc))
 
 
@@ -147,10 +162,10 @@ def _check_deep() -> _Check:
     pandoc = paths.resolve_pandoc()
     if pandoc is None:
         return _Check(_WARN, "deep test (real compile)", "pandoc missing, skipping real compile",
-                      "docspec setup")
+                      "artispec setup")
     typst = paths.resolve_typst()
     if typst is None:
-        return _Check(_WARN, "deep test (real compile)", "typst missing, skipping real compile", "docspec setup")
+        return _Check(_WARN, "deep test (real compile)", "typst missing, skipping real compile", "artispec setup")
     typst_template = paths.bundled_typst_template_dir()
     if typst_template is None or not (typst_template / "template.typ").is_file():
         return _Check(_WARN, "deep test (real compile)", "bundled Typst template not found, skipping real compile", None)
@@ -159,7 +174,7 @@ def _check_deep() -> _Check:
     except Exception:
         fonts_src = None
     if fonts_src is None:
-        return _Check(_WARN, "deep test (real compile)", "fonts missing, skipping real compile", "docspec setup")
+        return _Check(_WARN, "deep test (real compile)", "fonts missing, skipping real compile", "artispec setup")
 
     try:
         from dspx.commands.export import _build_pdf_typst
@@ -171,10 +186,10 @@ def _check_deep() -> _Check:
             bad = _pdf_text_layer_problem(out)
     except Exception as exc:  # noqa: BLE001 — 實編失敗＝環境壞，FAIL 但不 crash
         return _Check(_FAIL, "deep test (real compile)", f"single-page Chinese minimal file failed to compile: {exc}",
-                      "docspec doctor (fix the FAILs above first)")
+                      "artispec doctor (fix the FAILs above first)")
     if bad:
         return _Check(_FAIL, "deep test (real compile)",
-                      f"PDF text layer has broken/missing-glyph markers: {bad}", "docspec setup")
+                      f"PDF text layer has broken/missing-glyph markers: {bad}", "artispec setup")
     return _Check(_OK, "deep test (real compile)", "single-page Chinese minimal file compiled, text layer clean")
 
 
@@ -231,7 +246,7 @@ def _fetch_latest_tinytex_tag() -> str | None:
     try:
         req = urllib.request.Request(
             api, headers={"Accept": "application/vnd.github+json",
-                          "User-Agent": "docspec-doctor"})
+                          "User-Agent": "artispec-doctor"})
         with urllib.request.urlopen(req, timeout=15) as resp:
             data = json.load(resp)
         tag = data.get("tag_name")
@@ -263,15 +278,15 @@ def _check_latest() -> _Check | None:
     if latest != current:
         return _Check(
             _WARN, "update check",
-            f"docspec pins TinyTeX={current}, upstream latest={latest}",
-            "upgrade the docspec program (uv tool install … --reinstall --no-cache), then `docspec setup`")
+            f"artispec pins TinyTeX={current}, upstream latest={latest}",
+            "upgrade the artispec program (`artispec update`), then `artispec setup`")
     return _Check(_OK, "update check", f"already at the upstream latest TinyTeX ({latest})")
 
 
 # ── 主流程 ────────────────────────────────────────────────────────
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec doctor", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec doctor", description=HELP)
     parser.add_argument("--deep", action="store_true",
                         help="really compile a single-page Chinese minimal file to verify the text layer (catches font problems that only surface on a real compile)")
     parser.add_argument("--check-latest", action="store_true",
@@ -286,6 +301,9 @@ def run(argv: list[str]) -> int:
         _check_tinytex(),
         _check_packages(),
     ]
+    legacy = _check_legacy_data()
+    if legacy is not None:
+        checks.insert(1, legacy)
     if args.deep:
         checks.append(_check_deep())
     if args.check_latest:
@@ -293,7 +311,7 @@ def run(argv: list[str]) -> int:
         if latest is not None:
             checks.append(latest)
 
-    print("docspec doctor — typesetting environment diagnosis\n")
+    print("artispec doctor — typesetting environment diagnosis\n")
     fixes: list[str] = []
     for c in checks:
         print(f"  {_MARK[c.status]} {c.title}: {c.detail}")

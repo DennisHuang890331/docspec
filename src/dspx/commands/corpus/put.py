@@ -1,4 +1,4 @@
-"""docspec put <section> <category> <FILE|-> — corpus 真相的**唯一驗證寫入門**。
+"""artispec put <section> <category> <FILE|-> — corpus 真相的**唯一驗證寫入門**。
 
 concept/decisions/material 的寫入本該只有一道驗證門，不是 agent 各自寫再事後 lint/check 抓錯。put 把
 「寫入」變成一道引擎交易：收 agent 編輯後的內容 → 先過 `run_file_check`（既有欄位驗證）＋結構
@@ -15,6 +15,7 @@ check 收口，不在寫入（schema boundaries 明文）——put 只擋結構�
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import sys
 from pathlib import Path
 
@@ -144,7 +145,7 @@ def _candidate_ids_ordered(leaf: Leaf) -> list[str]:
 
 
 def _structural_errors(schema, section: str, category: str,
-                       candidate: Leaf, others: list[Leaf]) -> list[str]:
+                       candidate: Leaf, others: list[Leaf], layout: Layout) -> list[str]:
     """結構驗證（拒收判準）：欄位（enum/型別/未知鍵，非完整性）＋重複 id＋relation 目標存在。"""
     errs: list[str] = []
 
@@ -178,8 +179,24 @@ def _structural_errors(schema, section: str, category: str,
                 errs.append(f'{section}: {where} points to nonexistent id "{t}"')
 
     if category == "concept" and isinstance(candidate.concept, dict):
-        _check(candidate.concept.get("realizes"), "concept.realizes")
-        _check(candidate.concept.get("governed-by"), "concept.governed-by")
+        # Use the same typed-reference rules as check. External sources belong
+        # only to realizes; they must not become valid governed-by/supersedes IDs.
+        from dspx.check._ids_and_refs import collect_ids, check_dead_references
+        external = {}
+        realizes = candidate.concept.get("realizes") or []
+        targets = realizes if isinstance(realizes, list) else [realizes]
+        if any(str(ref).startswith("gov:") for ref in targets):
+            from dspx.engine.governance import decision_index_entries
+            external.update(decision_index_entries(layout))
+        if any(str(ref).startswith("req:") for ref in targets):
+            from dspx.engine.software.links import requirement_index_entries
+            external.update(requirement_index_entries(layout))
+        seen, _ = collect_ids([*others, candidate])
+        incoming = replace(candidate, decisions=[], history=[])
+        ref_errors = check_dead_references([incoming], seen, external)
+        # Retired software is an advisory document divergence, as in run_check.
+        errs.extend(error for error in ref_errors
+                    if "points to a retired software requirement" not in error)
     if category == "decisions":
         for e in candidate.decisions:
             eid = e.get("id", "?")
@@ -209,12 +226,12 @@ def _put_group(layout, schema, section: str, text: str, change) -> int:
     try:
         raw = _parse_yaml_text(text, section)
     except ModelError as exc:
-        sys.stderr.write(f"docspec: put rejected (no write): {exc}\n")
+        sys.stderr.write(f"artispec: put rejected (no write): {exc}\n")
         return 1
     if raw is None:
         raw = {}
     if not isinstance(raw, dict):
-        sys.stderr.write(f"docspec: put rejected — {section}: group top level must be a mapping\n")
+        sys.stderr.write(f"artispec: put rejected — {section}: group top level must be a mapping\n")
         return 1
     errs: list[str] = []
     for k in sorted(set(raw) - _GROUP_FIELDS):
@@ -226,7 +243,7 @@ def _put_group(layout, schema, section: str, text: str, change) -> int:
     if "numbering" in raw and raw["numbering"] not in _GROUP_NUMBERING:
         errs.append(f"group numbering must be one of {' | '.join(_GROUP_NUMBERING)}")
     if errs:
-        sys.stderr.write(f"docspec: put rejected — {len(errs)} error(s), the store record for "
+        sys.stderr.write(f"artispec: put rejected — {len(errs)} error(s), the store record for "
                          f"{section}/group is left unchanged:\n")
         for e in errs:
             sys.stderr.write(f"    ✗ {e}\n")
@@ -244,7 +261,7 @@ def _put_group(layout, schema, section: str, text: str, change) -> int:
 
     rec = art_obj.record_by_path(section)
     if rec is not None and rec.kind == "leaf" and (rec.concept or rec.decisions or rec.material):
-        sys.stderr.write(f"docspec: put rejected — \"{section}\" is a leaf section; a section "
+        sys.stderr.write(f"artispec: put rejected — \"{section}\" is a leaf section; a section "
                          "cannot be both a leaf and a grouping node\n")
         return 1
     had = rec is not None and rec.kind == "group"
@@ -264,7 +281,7 @@ def _put_group(layout, schema, section: str, text: str, change) -> int:
     where = f" into change \"{change.id}\" staging" if change is not None else ""
     print(f"put: {verb} {section}/group in store{where} "
           f"({', '.join(f'{k}={v}' for k, v in meta.items()) or 'empty meta'})")
-    print("  next: docspec render projects the group heading/order into the deliverable.")
+    print("  next: artispec render projects the group heading/order into the deliverable.")
     return 0
 
 
@@ -359,7 +376,7 @@ def _put_store(layout, schema, args, section: str, text: str, change) -> int:
         else:  # material（存原文；序列化時正規化換行）
             parsed = text
     except ModelError as exc:
-        sys.stderr.write(f"docspec: put rejected (no write): {exc}\n")
+        sys.stderr.write(f"artispec: put rejected (no write): {exc}\n")
         return 1
 
     # ── 建 candidate leaf（目標分類換新內容，其餘沿用記錄現值）→ 結構驗證 ──
@@ -374,9 +391,9 @@ def _put_store(layout, schema, args, section: str, text: str, change) -> int:
     candidate = Leaf(section=section, dir=layout.section_dir(section), concept=concept,
                      decisions=decisions, history=list(rec.history), has_material=has_material,
                      has_history=bool(rec.history), material=material)
-    errs = _structural_errors(schema, section, category, candidate, others)
+    errs = _structural_errors(schema, section, category, candidate, others, layout)
     if errs:
-        sys.stderr.write(f"docspec: put rejected — {len(errs)} structural error(s), the store record "
+        sys.stderr.write(f"artispec: put rejected — {len(errs)} structural error(s), the store record "
                          f"for {section}/{category} is left unchanged (no partial write):\n")
         for e in errs:
             sys.stderr.write(f"    ✗ {e}\n")
@@ -410,14 +427,14 @@ def _put_store(layout, schema, args, section: str, text: str, change) -> int:
         print(f"  stamped decided-in: {change.id} on {stamped_decided} new/changed decision(s)")
     if change is not None:
         print("  official store is byte-frozen (changes land at archive); "
-              f"next: docspec render --change {change.id}  then  docspec change status {change.id}.")
+              f"next: artispec render --change {change.id}  then  artispec change status {change.id}.")
     else:
-        print("  next: docspec status / docspec check picks up staleness; render to project prose.")
+        print("  next: artispec status / artispec check picks up staleness; render to project prose.")
     return 0
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec put", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec put", description=HELP)
     parser.add_argument("section", help="leaf section path (relative to corpus/)")
     parser.add_argument("category", choices=sorted(_CATEGORIES),
                         help="which artifact to write: concept | decisions | material | group (grouping-node title/order/numbering)")
@@ -429,11 +446,11 @@ def run(argv: list[str]) -> int:
 
     section = args.section.strip("/")
     if not section:
-        sys.stderr.write("docspec: section path must not be empty\n")
+        sys.stderr.write("artispec: section path must not be empty\n")
         return 2
     problem = validate_section_path(section)
     if problem:
-        sys.stderr.write(f'docspec: refusing to write "{section}": {problem}\n')
+        sys.stderr.write(f'artispec: refusing to write "{section}": {problem}\n')
         return 2
 
     try:
@@ -445,7 +462,7 @@ def run(argv: list[str]) -> int:
     try:
         text = _read_source(args.source)
     except FileNotFoundError:
-        sys.stderr.write(f"docspec: source file not found: {args.source}\n")
+        sys.stderr.write(f"artispec: source file not found: {args.source}\n")
         return 2
 
     # ── change-aware 路由（★P0）：target 節在某 active change → 寫進該單 staging、official 凍結 ──
@@ -453,12 +470,12 @@ def run(argv: list[str]) -> int:
         change = chg.routing_change_for(layout, section, explicit_id=args.change)
     except chg.RoutingAmbiguous as amb:
         sys.stderr.write(
-            f"docspec: section \"{section}\" is targeted by {len(amb.candidates)} active changes "
+            f"artispec: section \"{section}\" is targeted by {len(amb.candidates)} active changes "
             f"({', '.join(c.id for c in amb.candidates)}) — put refuses to guess. "
             "Re-run with --change <id> to name which staging to write into.\n")
         return 2
     except chg.ChangeError as exc:
-        sys.stderr.write(f"docspec: {exc}\n")
+        sys.stderr.write(f"artispec: {exc}\n")
         return 2
 
     # ★store-only：寫進 store 記錄（正式或 change 的 partial store staging），非散檔。

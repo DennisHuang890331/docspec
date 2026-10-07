@@ -253,7 +253,9 @@ def test_status_requires_tasks_and_test_coverage(sw, capsys):
     rc, out = _status(capsys)
     assert rc == 1
     assert any("no task implements it" in e for e in out["errors"])
-    assert any("no planned test covers it" in e for e in out["errors"])
+    assert any("no planned test covers it" in e for e in out["warnings"])
+    strict_errors, _ = chg.validate_change(sw, chg.load_change(sw, "entry-fix"), strict=True)
+    assert any("no planned test covers it" in e for e in strict_errors)
 
     assert code("testplan", "add", "entry-fix", "--location", "tests/test_entry.py::test_first_row",
                 "--covers", "task-entry-page/R1/S1") == 0

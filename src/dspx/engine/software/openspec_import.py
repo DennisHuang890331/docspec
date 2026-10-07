@@ -260,7 +260,7 @@ def _deltas_for(cap: str, spec: dict | None, parsed: dict, notes: list[str], whe
         r = _find_by_title(spec, m["title"])
         if r is None:
             notes.append(f"{where} {cap}: MODIFIED \"{m['title']}\" not found in the current spec — "
-                         f"skipped (add it by hand with `docspec code change delta`)")
+                         f"skipped (add it by hand with `artispec code change delta`)")
             continue
         if m["statement"] != r.get("statement"):
             add({"op": "modify-requirement", "ref": r["id"], "statement": m["statement"]})
@@ -323,7 +323,7 @@ def _change_parts(folder: Path, cid: str, tool: str, rel: str) -> tuple[dict, di
         design["open-questions"] = [
             f"待合併的設計決策：{'、'.join(merge)}（design.md 以「以後者為準」局部取代）。請寫出合併後的"
             f"完整決策（覆述 → 裁定 → decision add --supersedes），再用 "
-            f"`docspec code change design --decision` 引用。"]
+            f"`artispec code change design --decision` 引用。"]
     if prop["impact"]:
         design["migration"] = prop["impact"]
     tasks = {"tasks": []}
@@ -417,6 +417,19 @@ def run_import(layout: Layout, source: Path, *, tool: str, dry_run: bool = False
         archived.append((folder.name, cid, proposal, design, tasks))
         report["archived"].append({"change": cid, "folder": folder.name, "tasks": len(tasks["tasks"])})
 
+    # Shared identity checks must precede every write, including imported specs.
+    from dspx.engine.change_catalog import ensure_available
+    imported_ids = [row[0] for row in active] + [row[1] for row in archived]
+    if len(imported_ids) != len(set(imported_ids)):
+        raise io.SoftwareError("duplicate change ids in OpenSpec import")
+    for cid in imported_ids:
+        reason = chg.validate_id(cid)
+        if reason:
+            raise io.SoftwareError(f"invalid imported change {cid}: {reason}")
+        ensure_available(layout, cid)
+    for name, _cid, _proposal, _design, _tasks in archived:
+        if (io.archive_dir(layout) / name).exists():
+            raise io.SoftwareError(f"import destination already exists: {name}")
     if dry_run:
         return report
 
@@ -461,9 +474,9 @@ def render_report(report: dict, source: str) -> str:
                       f"**待合併：{'、'.join(c['needs-merge'])}**——它們用「以後者為準」局部取代，看不出目前"
                       f"到底是哪個版本。請寫出合併後的完整決策，經你確認後記成治理層決策。"]
     if report["active"]:
-        lines += ["", "接著做之前：用 `docspec code change status <change>` 看還缺什麼。匯入的任務沒有"
-                  "驗證方法與測試規劃，需要用 `docspec code task set` 補上，並由測試角色用 "
-                  "`docspec code testplan add` 規劃測試。", ""]
+        lines += ["", "接著做之前：用 `artispec code change status <change>` 看還缺什麼。匯入的任務沒有"
+                  "驗證方法與測試規劃，需要用 `artispec code task set` 補上，並由測試角色用 "
+                  "`artispec code testplan add` 規劃測試。", ""]
     lines += ["## 已封存的 change（歷史）", ""]
     for c in report["archived"]:
         lines.append(f"- {c['folder']}：{c['tasks']} 個任務")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -37,15 +38,48 @@ def spec_path(layout: Layout, capability: str) -> Path:
 
 
 def changes_dir(layout: Layout) -> Path:
+    return layout.planning_home / "changes"
+
+
+def legacy_changes_dir(layout: Layout) -> Path:
     return root(layout) / "changes"
 
 
+def change_roots(layout: Layout) -> tuple[Path, Path]:
+    return changes_dir(layout), legacy_changes_dir(layout)
+
+
+def check_change_id(cid: str) -> None:
+    if not isinstance(cid, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", cid):
+        raise SoftwareError("change id must be lowercase letters, digits and single hyphens (kebab-case)")
+
+
+def managed_path(layout: Layout, path: Path) -> Path:
+    if not path.resolve().is_relative_to(layout.planning_home.resolve()):
+        raise SoftwareError(f"change path leaves managed root: {path}")
+    return path
+
+
 def change_dir(layout: Layout, cid: str) -> Path:
-    return changes_dir(layout) / cid
+    check_change_id(cid)
+    candidates = [base / cid for base in change_roots(layout)
+                  if (base / cid / "proposal.yaml").is_file()]
+    if len(candidates) > 1:
+        raise SoftwareError(f'duplicate software change "{cid}": {candidates}')
+    return managed_path(layout, candidates[0] if candidates else changes_dir(layout) / cid)
 
 
 def archive_dir(layout: Layout) -> Path:
-    return changes_dir(layout) / ARCHIVE_DIR
+    return managed_path(layout, changes_dir(layout) / ARCHIVE_DIR)
+
+
+def archived_change_dir(layout: Layout, name: str) -> Path:
+    check_change_id(re.sub(r"^\d{4}-\d{2}-\d{2}-", "", name))
+    candidates = [base / ARCHIVE_DIR / name for base in change_roots(layout)
+                  if (base / ARCHIVE_DIR / name / "proposal.yaml").is_file()]
+    if len(candidates) > 1:
+        raise SoftwareError(f'duplicate archived software change "{name}": {candidates}')
+    return managed_path(layout, candidates[0] if candidates else archive_dir(layout) / name)
 
 
 def evidence_dir(layout: Layout) -> Path:
@@ -61,7 +95,8 @@ def config_path(layout: Layout) -> Path:
 
 
 def has_software(layout: Layout) -> bool:
-    return root(layout).is_dir()
+    return root(layout).is_dir() or any(
+        (p / "proposal.yaml").is_file() for p in changes_dir(layout).glob("*/"))
 
 
 # ── 封條讀寫 ─────────────────────────────────────────────────────────────
@@ -72,7 +107,7 @@ def _seal(kind: str, body) -> str:
 
 def dump(kind: str, body) -> str:
     header = (f"# docspec software {kind} — engine-owned; never edit by hand.\n"
-              f"# Change it through `docspec code …`; a hand-edit breaks the integrity seal.\n")
+              f"# Change it through `artispec code …`; a hand-edit breaks the integrity seal.\n")
     return header + _yaml_dump({"format": FORMAT_VERSION, "kind": f"software-{kind}",
                                 "integrity": _seal(kind, body), "body": body})
 
@@ -96,7 +131,7 @@ def load(path: Path, kind: str):
     if raw.get("integrity") != _seal(kind, raw["body"]):
         raise SoftwareError(f"integrity seal mismatch: {path} — the file was edited by hand. Restore it "
                             f"(e.g. `git checkout -- {path.name}` in its folder) and make the change "
-                            f"through `docspec code …`; hand edits cannot be adopted.")
+                            f"through `artispec code …`; hand edits cannot be adopted.")
     return raw["body"]
 
 

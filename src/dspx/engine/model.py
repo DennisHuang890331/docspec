@@ -176,20 +176,24 @@ def realized_statements(leaf, dindex: dict) -> list:
         rec = dindex.get(str(rid))
         if rec is not None:
             succ = _live_successor(rec.get("superseded_by"), dindex) if _is_dead_decision(rec) else None
-            out.append({"id": str(rid), "statement": rec["statement"],
+            row = {"id": str(rid), "statement": rec["statement"],
                         "from_section": rec["section"], "kind": rec["kind"],
                         "status": rec.get("status"),
                         "superseded_by": succ["id"] if succ else None,
-                        "successor_statement": succ["statement"] if succ else None})
+                        "successor_statement": succ["statement"] if succ else None}
+            if "source" in rec:
+                row["source"] = rec["source"]
+            out.append(row)
     return out
 
 
 def deps_doc_fingerprint(leaf, dindex: dict) -> str:
-    """同 deps_fingerprint，但只算「文件自己的依據」（治理決策、其他章節），不含軟體需求（req:）。
+    """同 deps_fingerprint，但只算文件依據；以來源種類排除正式與草稿軟體需求。
 
     用來分辨：deps 變了是因為文件的依據變了（要先更新才能定版），還是只因為它實現的軟體需求
     變了（stale-software：記下差異、不擋定版——2026/09/30 裁定「文件管文件、軟體管軟體」）。"""
-    doc_only = {k: v for k, v in dindex.items() if not str(k).startswith("req:")}
+    from dspx.engine.software.links import is_requirement_source
+    doc_only = {k: v for k, v in dindex.items() if not is_requirement_source(k, v)}
     return deps_fingerprint(leaf, doc_only)
 
 
@@ -206,15 +210,22 @@ def deps_fingerprint(leaf, dindex: dict) -> str:
     函式輸出＝投什麼就 hash 什麼，不可能漂移；零新遍歷）。附帶收益：終端接替 C 的 statement
     文字被改寫也有信號（draft 渲染的正是它）。活決策（無接替）succ 兩欄為 None＝單跳語義不變。
     """
-    items = sorted((r["id"], r["statement"], r.get("status"),
-                    r.get("superseded_by"), r.get("successor_statement"))
-                   for r in realized_statements(leaf, dindex))
+    items = sorted(realized_statements(leaf, dindex), key=lambda r: r["id"])
     if not items:
         return ""
     h = hashlib.sha256()
-    for rid, stmt, status, succ_id, succ_stmt in items:
-        h.update(json.dumps({"id": rid, "stmt": stmt, "status": status,
-                             "succ_id": succ_id, "succ_stmt": succ_stmt},
+    for row in items:
+        # Preserve existing req:/governance hash bytes. New draft references use
+        # semantic scope, including verification and basis, rather than titles.
+        if row["id"].startswith("draft-req:") and "source" in row:
+            source = row["source"]
+            state = source["state"]
+            payload = {"id": row["id"], "software-fingerprint": source["fingerprint"],
+                       "status": "accepted" if state in ("draft", "formal") else state}
+        else:
+            payload = {"id": row["id"], "stmt": row["statement"], "status": row.get("status"),
+                       "succ_id": row.get("superseded_by"), "succ_stmt": row.get("successor_statement")}
+        h.update(json.dumps(payload,
                             ensure_ascii=False).encode("utf-8"))
         h.update(b"\0")
     return h.hexdigest()[:16]
@@ -350,7 +361,8 @@ def _config_purpose(layout) -> str:
     的 load_config fail-loud 擋在所有指令之前，這裡防禦性回空字串即可。
     """
     from dspx.engine.config import CONFIG_FILE_NAME
-    path = layout.planning_home / CONFIG_FILE_NAME
+    selected = getattr(layout, "query_config_path", None)
+    path = selected() if callable(selected) else layout.planning_home / CONFIG_FILE_NAME
     if not path.is_file():
         return ""
     try:
@@ -580,5 +592,7 @@ def project_decision_index(layout, leaves: list) -> dict:
     hash 什麼」在各呼叫點一致——任一處漏接治理決策＝status 與 render 對同一章節判定不同。"""
     from dspx.engine.governance import decision_index_entries
     from dspx.engine.software.links import requirement_index_entries
-    return decision_index(leaves, {**requirement_index_entries(layout),
+    references = [ref for leaf in leaves for ref in
+                  ((leaf.concept or {}).get("realizes") or [])]
+    return decision_index(leaves, {**requirement_index_entries(layout, references),
                                    **decision_index_entries(layout)})

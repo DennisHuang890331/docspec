@@ -63,7 +63,13 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
         except GovernanceError:         # 壞封條等：由 ⑬ 回報，這裡不重複炸
             gov_decisions = {}
         from dspx.engine.software.links import requirement_index_entries
-        gov_decisions = {**requirement_index_entries(layout), **gov_decisions}   # req:（軟體需求）
+        refs = [ref for leaf in leaves for ref in ((leaf.concept or {}).get("realizes") or [])]
+        software_entries = requirement_index_entries(layout, refs)
+        gov_decisions = {**software_entries, **gov_decisions}   # 軟體來源與治理依據
+        source_errors = [f"{leaf.section}: concept.realizes {diagnosis}"
+                         for leaf in leaves for ref in ((leaf.concept or {}).get("realizes") or [])
+                         if str(ref).startswith("draft-req:")
+                         for diagnosis in software_entries.get(str(ref), {}).get("source", {}).get("diagnostics", [])]
     ref_errs = _ids_and_refs.check_dead_references(leaves, seen, gov_decisions)  # ②
     # 文件引用的軟體需求已退役＝兩個領域的差異：記下（提醒），不擋文件（2026/09/30 裁定）。
     retired_req = [e for e in ref_errs if "points to a retired software requirement" in e]
@@ -92,7 +98,12 @@ def run_check(leaves: list[Leaf], schema: Schema, layout=None) -> CheckResult:
             except _gv.GovernanceError:
                 pass                                                         # 壞封條已由 ⑬ 回報
         from dspx.engine.software import validate_all as _validate_sw
-        sw_errors, sw_warnings = _validate_sw(layout)                        # ⑭ — 軟體領域（software/）：另列、不擋文件
+        from dspx.engine.software.io import SoftwareError
+        try:
+            sw_errors, sw_warnings = _validate_sw(layout)                    # ⑭ — 軟體領域：另列、不擋文件
+        except SoftwareError as exc:
+            sw_errors, sw_warnings = [str(exc)], []
+        sw_errors = list(dict.fromkeys([*sw_errors, *source_errors]))
 
     ref_errors, warnings = _cross_section._cross_section_decision_refs(leaves)  # trailing F1 check
     errors.extend(ref_errors)

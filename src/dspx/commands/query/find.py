@@ -1,4 +1,4 @@
-"""docspec find <QUERY> [SCOPE] [--in FACE,…] [--regex] [--limit N] [--numbers] [--json]
+"""artispec find <QUERY> [SCOPE] [--in FACE,…] [--regex] [--limit N] [--numbers] [--json]
    — agent 快速查找：回「哪一節、哪個面、哪一行/位置、片段」，讓 agent 定位後只讀相關段、省 token。
 
 搜面（資料已在記憶體、零新讀取路徑）：prose（`docs/<a>_latest.md` 過 `mask_non_prose`，code/URL 不算）／
@@ -17,9 +17,11 @@ import json
 import re
 import sys
 
-from dspx.commands._shared import BootstrapError, bootstrap, load_model
+from dspx.commands._shared import BootstrapError, bootstrap
 from dspx.commands.query.show import _scope_leaves
 from dspx.engine.glossary import load_glossary
+from dspx.engine.document_context import add_context_arguments, load_context
+from dspx.engine.model import ModelError
 
 NAME = "find"
 HELP = ("locate a keyword/term across all faces (prose/concept/decisions/material/glossary/audit) — "
@@ -75,9 +77,10 @@ def _search_prose(layout, articles, query, regex, hits, scope_sections=None):
         path = layout.docs_latest(art)
         if not path.is_file():
             hits.append({"section": art, "face": "prose", "loc": "(not rendered)",
-                         "snippet": f"run `docspec render {art}` first", "id": None})
+                         "snippet": f"run `artispec render {art}` first", "id": None})
             continue
         text = path.read_text(encoding="utf-8")
+        source_path = path.relative_to(layout.project_root).as_posix()
         masked = mask_non_prose(text, kinds={HTML_COMMENT, FENCE, INLINE_CODE, MARKER})
         spans = classify_deliverable(text)
         for start, end in _match_positions(masked, query, regex):
@@ -86,7 +89,7 @@ def _search_prose(layout, articles, query, regex, hits, scope_sections=None):
                 continue   # #12：scope 限定時，別回報 scope 外同篇節的 prose 命中
             line = text.count("\n", 0, start) + 1
             hits.append({"section": sec, "face": "prose",
-                         "loc": f"docs/{art}/_latest.md L{line} (snapshot)",
+                         "loc": f"{source_path} L{line} (snapshot)",
                          "snippet": _snippet(text, start, end), "id": None})
 
 
@@ -174,7 +177,8 @@ def _referent_of(text: str, pos: int, glossary_terms: list[tuple[str, str]], lf,
     return sec, False
 
 
-def _run_numbers(layout, leaves, articles, as_json, scope_sections=None) -> int:
+def _run_numbers(layout, leaves, articles, as_json, scope_sections=None,
+                 context=None, diagnostics=()) -> int:
     """`find --numbers`：森林級聚合 number+unit → 依指涉分組攤出所有值＋出處。只攤不判。"""
     from dspx.engine.spans import (FENCE, HTML_COMMENT, INLINE_CODE, MARKER,
                                     classify_deliverable, mask_non_prose)
@@ -217,11 +221,17 @@ def _run_numbers(layout, leaves, articles, as_json, scope_sections=None) -> int:
         return (0 if (key in real_referent and multi) else 1, key)
     ordered = sorted(groups.items(), key=_rank)
     if as_json:
-        print(json.dumps({"groups": [{"referent": k, "byGlossaryTerm": k in real_referent,
+        print(json.dumps({**(context.metadata(diagnostics) if context else {}),
+                          "groups": [{"referent": k, "byGlossaryTerm": k in real_referent,
                                        "values": v} for k, v in ordered]},
                          ensure_ascii=False, indent=2))
-        return 0
+        return 1 if diagnostics else 0
+    if context:
+        context.print_context(diagnostics)
     if not ordered:
+        if diagnostics:
+            print("find --numbers: prose search is incomplete; resolve the preview diagnostics above.")
+            return 1
         print("find --numbers: no number+unit tokens found in the rendered prose.")
         return 0
     print("find --numbers — number+unit values grouped by referent "
@@ -239,11 +249,11 @@ def _run_numbers(layout, leaves, articles, as_json, scope_sections=None) -> int:
         print("\n  note: the glossary is empty, so numbers are grouped by section, not by the quantity "
               "they measure — populate docspec/glossary.yaml (the quantity names) to group the SAME "
               "quantity across documents and surface real cross-document value conflicts.")
-    return 0
+    return 1 if diagnostics else 0
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec find", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec find", description=HELP)
     parser.add_argument("query", nargs="?", default=None, help="keyword / regex to locate")
     parser.add_argument("scope", nargs="?", default=None, help="limit to a section/subtree/article")
     parser.add_argument("--in", dest="faces", default=None,
@@ -253,18 +263,23 @@ def run(argv: list[str]) -> int:
                         help="value presenter: aggregate number+unit by referent (present-only)")
     parser.add_argument("--limit", type=int, default=200, help="max hits to print (default 200)")
     parser.add_argument("--json", action="store_true", dest="as_json", help="JSON output")
+    add_context_arguments(parser)
     args = parser.parse_args(argv)
 
     try:
-        layout, _config = bootstrap()
-        leaves = load_model(layout)
+        layout, config = bootstrap()
+        context = load_context(layout, config, args.change)
+        layout, leaves = context.layout, context.leaves
     except BootstrapError as exc:
         return exc.exit_code
+    except (ModelError, OSError, ValueError) as exc:
+        sys.stderr.write(f"artispec find: {exc}\n")
+        return 1
 
     if args.scope:
         scoped = _scope_leaves(leaves, args.scope)
         if scoped is None:
-            sys.stderr.write(f"docspec find: scope \"{args.scope}\" matched no section\n")
+            sys.stderr.write(f"artispec find: scope \"{args.scope}\" matched no section\n")
             return 1
         leaves = scoped
     articles = []
@@ -274,22 +289,33 @@ def run(argv: list[str]) -> int:
     scope_sections = {lf.section for lf in leaves} if args.scope else None
 
     if args.numbers:
-        return _run_numbers(layout, leaves, articles, args.as_json, scope_sections)
+        try:
+            diagnostics = context.preview_diagnostics(articles)
+            unavailable = {diagnostic["article"] for diagnostic in diagnostics}
+            return _run_numbers(layout, leaves, [art for art in articles if art not in unavailable],
+                                args.as_json, scope_sections, context, diagnostics)
+        except (ModelError, OSError, ValueError) as exc:
+            sys.stderr.write(f"artispec find: {exc}\n")
+            return 1
 
     if not args.query:
-        sys.stderr.write("docspec find: give a QUERY (or use --numbers)\n")
+        sys.stderr.write("artispec find: give a QUERY (or use --numbers)\n")
         return 2
 
     faces = set(_ALL_FACES) if not args.faces else {f.strip() for f in args.faces.split(",")}
     unknown = faces - set(_ALL_FACES)
     if unknown:   # #6：未知面名 fail-loud（別靜默給假「不存在」）
-        sys.stderr.write(f"docspec find: unknown --in face(s) {sorted(unknown)}; "
+        sys.stderr.write(f"artispec find: unknown --in face(s) {sorted(unknown)}; "
                          f"valid: {', '.join(_ALL_FACES)}\n")
         return 2
     hits: list[dict] = []
+    diagnostics = []
     try:
         if "prose" in faces:
-            _search_prose(layout, articles, args.query, args.regex, hits, scope_sections)
+            diagnostics = context.preview_diagnostics(articles)
+            unavailable = {diagnostic["article"] for diagnostic in diagnostics}
+            _search_prose(layout, [art for art in articles if art not in unavailable],
+                          args.query, args.regex, hits, scope_sections)
         _search_source(leaves, args.query, args.regex, faces, hits)
         if "glossary" in faces:
             _search_glossary(layout, args.query, args.regex, hits)
@@ -297,15 +323,20 @@ def run(argv: list[str]) -> int:
             _search_audit(layout, leaves, args.query, args.regex, hits)
         if "explorations" in faces:
             _search_explorations(layout, args.query, args.regex, hits)
-    except ValueError as exc:
-        sys.stderr.write(f"docspec find: {exc}\n")
+    except (ModelError, OSError, ValueError) as exc:
+        sys.stderr.write(f"artispec find: {exc}\n")
         return 2
 
     if args.as_json:
-        print(json.dumps({"query": args.query, "hits": hits[:args.limit]},
+        print(json.dumps({"query": args.query, "hits": hits[:args.limit],
+                          **context.metadata(diagnostics)},
                          ensure_ascii=False, indent=2))
-        return 0
+        return 1 if diagnostics else 0
+    context.print_context(diagnostics)
     if not hits:
+        if diagnostics:
+            print(f'find: "{args.query}" — prose search is incomplete; resolve the preview diagnostics above.')
+            return 1
         print(f"find: \"{args.query}\" — no hits.")
         return 0
     print(f"find: \"{args.query}\" — {len(hits)} hit(s)"
@@ -314,5 +345,8 @@ def run(argv: list[str]) -> int:
         idtag = f"  [{h['id']}]" if h.get("id") else ""
         print(f"  § {h['section']}  ({h['face']}, {h['loc']}){idtag}")
         print(f"      …{h['snippet']}…")
-    print("\n  → drill down: docspec show <id> / get <section> <category>")
-    return 0
+    if context.change:
+        print(f"\n  → drill down: artispec get <section> <category> --change {context.change.id}")
+    else:
+        print("\n  → drill down: artispec show <id> / get <section> <category>")
+    return 1 if diagnostics else 0

@@ -1,0 +1,6 @@
+- [x] 保存修改前 wheel，由測試角色建立失敗基線
+- [x] 移除別名並更新現行命令說明
+- [x] 實作安全 hook 解析與刷新
+- [x] 記錄負責人授權與明確取代關係
+- [x] 驗證 Windows／Linux 乾淨安裝與隔離升級
+- [x] 完成回歸、PDF／proof、strict validation 與機械驗證報告；六案由另一 change 管理，未冒稱全數通過

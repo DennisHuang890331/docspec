@@ -1,4 +1,4 @@
-"""docspec roadmap [--json] | roadmap done <id> --note "..." — backlog 視圖 ＋ 完成分流。
+"""artispec roadmap [--json] | roadmap done <id> --note "..." — backlog 視圖 ＋ 完成分流。
 
 derive 層（Seam 2）：讀 roadmap.all_entries（統無狀態模型：在檔＝待辦、掉出＝完成）→
 算 blocked/unblocked → 按文件（target 的 article ／ forest）分組。
@@ -127,7 +127,10 @@ def run(argv: list[str]) -> int:
     if layout_v2 is not None:
         from dspx.commands.governance import _roadmap_v2_cli
         return _roadmap_v2_cli.run(argv, layout_v2)
-    parser = argparse.ArgumentParser(prog="docspec roadmap", description=HELP)
+    if argv[:1] == ["show"] or argv[:2] == ["--json", "show"]:
+        print("roadmap show requires the governance roadmap; run `artispec roadmap migrate` for this legacy project", file=sys.stderr)
+        return 1
+    parser = argparse.ArgumentParser(prog="artispec roadmap", description=HELP)
     sub = parser.add_subparsers(dest="op")
 
     p_add = sub.add_parser(
@@ -165,7 +168,7 @@ def run(argv: list[str]) -> int:
                                       target=args.target, what=args.what, priority=args.priority,
                                       depends_on=deps, from_audit=args.from_audit)
         except roadmap.RoadmapError as exc:
-            sys.stderr.write(f"docspec: {exc}\n")
+            sys.stderr.write(f"artispec: {exc}\n")
             return 1
         print(f"roadmap add: {entry['id']} ({entry['kind']}) \"{entry['title']}\" -> target {entry['target']}")
         return 0
@@ -174,7 +177,7 @@ def run(argv: list[str]) -> int:
         try:
             record = roadmap.mark_done(layout, leaves, args.id, args.note.strip())
         except roadmap.RoadmapError as exc:
-            sys.stderr.write(f"docspec: {exc}\n")
+            sys.stderr.write(f"artispec: {exc}\n")
             return 1
         print(f"{record['id']} -> roadmap-archive.yaml ({record['date']}): {record['note']}")
         return 0

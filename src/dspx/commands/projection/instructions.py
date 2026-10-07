@@ -1,4 +1,4 @@
-"""docspec instructions <skill> <section> — aperture projection (feed the right files to the right skill)."""
+"""artispec instructions <skill> <section> — aperture projection (feed the right files to the right skill)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,9 @@ import json
 import sys
 
 from dspx.engine.aperture import ApertureError, project
-from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema, load_model
+from dspx.commands._shared import BootstrapError, bootstrap, load_engine_schema
+from dspx.engine.document_context import add_context_arguments, load_context
+from dspx.engine.model import ModelError
 
 
 def _fill_template(template: str | None, section: str, layout) -> str | None:
@@ -53,6 +55,15 @@ def _realized_mark(r: dict) -> str:
     """前景化一個 realized 決策的退場狀態＋接替（FG-1 語義半）。活決策回空字串。
     退場（kind=history／status superseded|deprecated|retired）時提示重指活接替，避免
     draft/factcheck 只看 aperture 就把散文錨回死真相。"""
+    source = r.get("source")
+    if source:
+        parts = [source["state"]]
+        if source.get("source-ref"):
+            parts.append(f"source: {source['source-ref']}")
+        if source.get("baseline"):
+            parts.append(f"baseline: {source['baseline']}")
+        parts.extend(source["diagnostics"])
+        return "  [" + "; ".join(parts) + "]"
     status = r.get("status")
     retired = r.get("kind") == "history"
     if not retired and status not in ("superseded", "deprecated", "retired"):
@@ -87,27 +98,27 @@ def _sync_mode_verb(sync: str) -> tuple[str, str] | None:
     """一節的 staleness 型別 → apply 模式 + 對應 render/ack verb（change 外驅動）。
     synced / uncrystallized 等無工作態回 None。"""
     if sync == "unwritten":
-        return "rewrite", "docspec render <article>  (blind-render the section from its aperture)"
+        return "rewrite", "artispec render <article>  (blind-render the section from its aperture)"
     if sync in ("stale-own", "stale-upstream", "stale-software"):
         # ★源料變：散文**確實要改** → 改後 plain render 清；散文**合理不需改**（如 must_cover 長了
         # 但既有散文已涵蓋）→ `--ack-own --reason`（attest + 重戳 own/deps）。plain render 對「散文
         # 未變」的 stale-own **不清、也不報**（保住信號），別誤以為 render 沒反應＝完成；絕不 perturb-revert。
-        return "rewrite", ("docspec render <article>  (source changed — rewrite the prose to match) — "
+        return "rewrite", ("artispec render <article>  (source changed — rewrite the prose to match) — "
                            "else if the prose legitimately still holds unchanged, "
-                           "docspec render <article> --ack-own <section> --reason <text>  "
+                           "artispec render <article> --ack-own <section> --reason <text>  "
                            "(attest + re-stamp; NEVER perturb-then-revert to force a clear)")
     if sync == "stale-norm":
-        return "align", ("docspec render <article>  (a sentence violated the changed ruling) — else "
-                         "docspec render <article> --ack <section>  (re-checked; prose conforms)")
+        return "align", ("artispec render <article>  (a sentence violated the changed ruling) — else "
+                         "artispec render <article> --ack <section>  (re-checked; prose conforms)")
     if sync in ("stale-inherited", "stale-style"):
-        return "align", ("docspec render <article>  (you re-tuned the prose) — else "
-                         "docspec render <article> --ack <section>  (reviewed; no change needed)")
+        return "align", ("artispec render <article>  (you re-tuned the prose) — else "
+                         "artispec render <article> --ack <section>  (reviewed; no change needed)")
     if sync == "drifted":
-        return "align", "reconcile the hand-edit, then docspec render <article>"
+        return "align", "reconcile the hand-edit, then artispec render <article>"
     return None
 
 
-def _apply_mode(layout, schema, leaves, section: str) -> dict | None:
+def _apply_mode(layout, schema, leaves, section: str, selected_change=None) -> dict | None:
     """instructions apply <section> 的模式投影：change 內由 target action 選、change 外由
     staleness 型別選（同一套路由住 apply 內部，不外漏尾表）。回 {mode, verb, reason} 或 None。"""
     from dspx.engine import change as chg
@@ -119,11 +130,16 @@ def _apply_mode(layout, schema, leaves, section: str) -> dict | None:
     # change 內：target action 定模式（多單命中取第一個有 apply 模式的 action）
     concept_id = str(leaf.concept_id) if leaf is not None and leaf.concept_id else None
     for change, t in chg.changes_hitting_section(layout, section, concept_id, leaves):
+        if selected_change is None or change.id != selected_change.id:
+            continue
         mode = _ACTION_MODE.get(t.action)
         if mode:
             verb = (_sync_mode_verb("stale-own") if mode == "rewrite"
                     else _sync_mode_verb("stale-inherited"))
-            return {"mode": mode, "verb": verb[1] if verb else "",
+            clear_with = verb[1] if verb else ""
+            clear_with = clear_with.replace("artispec render <article>",
+                                            f"artispec render <article> --change {change.id}")
+            return {"mode": mode, "verb": clear_with,
                     "reason": f"change {change.id} action={t.action}"}
 
     # change 外：staleness 型別定模式
@@ -142,7 +158,11 @@ def _apply_mode(layout, schema, leaves, section: str) -> dict | None:
     mv = _sync_mode_verb(sync)
     if mv is None:
         return {"mode": "—", "verb": "", "reason": f"{sync} (no apply work needed)"}
-    return {"mode": mv[0], "verb": mv[1], "reason": sync}
+    clear_with = mv[1]
+    if selected_change is not None:
+        clear_with = clear_with.replace("artispec render <article>",
+                                        f"artispec render <article> --change {selected_change.id}")
+    return {"mode": mv[0], "verb": clear_with, "reason": sync}
 
 
 def _load_authoring(schema) -> dict:
@@ -224,18 +244,25 @@ def _print_change_context(layout, leaves, section: str) -> None:
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec instructions", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec instructions", description=HELP)
     parser.add_argument("skill", help="develop / apply / factcheck / publish / release")
     parser.add_argument("section", help="leaf-section path (relative to corpus/)")
     parser.add_argument("--json", action="store_true", dest="as_json", help="output as JSON")
+    add_context_arguments(parser)
     args = parser.parse_args(argv)
 
     try:
         layout, config = bootstrap()
+        context = load_context(layout, config, args.change)
+        layout, config, leaves = context.layout, context.config, context.leaves
         schema = load_engine_schema(config)
-        leaves = load_model(layout)
+        if context.change is not None:
+            context.require_section(args.section, allow_pending=args.skill == "develop")
     except BootstrapError as exc:
         return exc.exit_code
+    except (ModelError, OSError, ValueError) as exc:
+        sys.stderr.write(f"artispec instructions: {exc}\n")
+        return 1
 
     # not-yet-created sections must also project for the develop skill — the agent needs the
     # concept/decisions templates + field contract BEFORE the first `put` (put 是唯一建節入口，
@@ -249,9 +276,13 @@ def run(argv: list[str]) -> int:
                                     concept=None)]
 
     try:
+        diagnostics = context.preview_diagnostics([layout.article_of(args.section)],
+                                                  section=args.section)
         proj = project(layout, schema, args.skill, args.section, leaves, config)
-    except ApertureError as exc:
-        sys.stderr.write(f"docspec: {exc}\n")
+        if diagnostics:
+            proj.reads.pop("docs", None)
+    except (ApertureError, ModelError, OSError, ValueError) as exc:
+        sys.stderr.write(f"artispec: {exc}\n")
         return 1
 
     # Fill in {id}/{title}/{order} in the writes templates (at crystallization the agent just fills in the content)
@@ -266,12 +297,13 @@ def run(argv: list[str]) -> int:
         w["closed"] = bool(art.closed) if art else False
         w["yamlSkeleton"] = yaml_skeleton(art) if art else None
 
-    apply_mode = (_apply_mode(layout, schema, leaves, args.section)
+    apply_mode = (_apply_mode(layout, schema, leaves, args.section, context.change)
                   if args.skill == "apply" else None)
     apply_authoring = _load_authoring(schema) if args.skill == "apply" else None
 
     if args.as_json:
         print(json.dumps({
+            **context.metadata(diagnostics),
             "skill": proj.skill,
             "section": proj.section,
             "applyMode": apply_mode,
@@ -294,6 +326,7 @@ def run(argv: list[str]) -> int:
         }, ensure_ascii=False, indent=2))
         return 0
 
+    context.print_context(diagnostics)
     print(f"aperture projection: skill={proj.skill}  section={proj.section}\n")
 
     if apply_mode is not None:
@@ -327,11 +360,11 @@ def run(argv: list[str]) -> int:
             for a in d.get("anchors", []):
                 print(f"    anchor: {a['id']} — {a.get('title') or ''}  ({a['section']})")
         for h in f.get("hierarchy", []):
-            warn = "  ⚠ governs cycle — `docspec check` will fail" if h.get("cycle") else ""
+            warn = "  ⚠ governs cycle — `artispec check` will fail" if h.get("cycle") else ""
             print(f"  {h['childDoc']} → {h['parentDoc']}{warn}")
         for pair in f.get("parallel", []):
             print(f"  {pair[0]} ∥ {pair[1]}")
-        print("  (full concept catalogue of a document: docspec show <article> --concepts --json)")
+        print("  (full concept catalogue of a document: artispec show <article> --concepts --json)")
         print()
 
     if proj.roadmap is not None:
@@ -470,7 +503,9 @@ def run(argv: list[str]) -> int:
 
     if proj.glossary:
         print("\n── Terminology authority (lean index; apply the bucket treatment before writing; canonical is mandatory, aliases_forbidden is banned) ──")
-        print("  Drill down for definition/english via `docspec show <id>`; write per the definition in your own words (write-per, don't clone).")
+        lookup = (f"artispec find <canonical> --in glossary --change {context.change.id}"
+                  if context.change else "artispec show <id>")
+        print(f"  Drill down for definitions via `{lookup}`; write per the definition in your own words (write-per, don't clone).")
         _treat = {
             "module":   "use the canonical name · expand abbreviations · may attach the English original on first use",
             "standard": "official spelling verbatim · do not translate",

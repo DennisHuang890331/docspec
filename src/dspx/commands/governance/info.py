@@ -1,4 +1,4 @@
-"""docspec info — 使用者提供的現況資訊（不是決定）。
+"""artispec info — 使用者提供的現況資訊（不是決定）。
 
 2026/09/30 實測後裁定：原本文件樹每節分「決定（decisions）」與「資訊（material）」，治理層只做了
 決定那一半。負責人說的現況（例如「學校電腦大多是 Windows 10」「名單欄位是班級、座號、學號、姓名」）
@@ -23,7 +23,7 @@ def _label(r: dict) -> str:
 
 
 def run(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="docspec info", description=HELP)
+    p = argparse.ArgumentParser(prog="artispec info", description=HELP)
     sub = p.add_subparsers(dest="op")
     a = sub.add_parser("add", help="record information the owner gave")
     a.add_argument("--quote", required=True, help="the owner's exact words")

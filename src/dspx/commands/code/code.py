@@ -1,13 +1,13 @@
-"""docspec code — 軟體領域（取代 OpenSpec）：能力規格、change 資料夾、任務、測試規劃。
+"""artispec code — 軟體領域（取代 OpenSpec）：能力規格、change 資料夾、任務、測試規劃。
 
-    docspec code spec list | show <能力> [--req R1] [--json|--md]
-    docspec code change new|set|design|delta|show|status|list …
-    docspec code task add|list <change> …
-    docspec code testplan add|list|object|respond <change> …
-    docspec code evidence run|add|accept|waive|list <change> <task> …
-    docspec code archive <change> [--dry-run]      收尾：差異併回正式規格、資料夾收進 _archive/、寫基線
-    docspec code test [--capability X] [--list]    依正式規格的 verified-by 跑回歸測試
-    docspec code import-openspec [--path openspec] [--dry-run]   從 OpenSpec 搬過來
+    artispec code spec list | show <能力> [--req R1] [--json|--md]
+    artispec code change new|set|design|delta|show|status|list …
+    artispec code task add|list <change> …
+    artispec code testplan add|list|object|respond <change> …
+    artispec code evidence run|add|accept|waive|list <change> <task> …
+    artispec code archive <change> [--dry-run]      收尾：差異併回正式規格、資料夾收進 _archive/、寫基線
+    artispec code test [--capability X] [--list]    依正式規格的 verified-by 跑回歸測試
+    artispec code import-openspec [--path openspec] [--dry-run]   從 OpenSpec 搬過來
 
 任務的完成欄位沒有「打勾」指令：`evidence` 產生證據後，引擎依證據推導並寫回 tasks.yaml。
 
@@ -25,7 +25,7 @@ from pathlib import Path
 import yaml
 
 from dspx.commands.governance._gov_common import emit_json, fail, open_layout
-from dspx.engine import governance as gv
+from dspx.engine import actors, governance as gv
 from dspx.engine.software import archive as arc
 from dspx.engine.software import changes as chg
 from dspx.engine.software import evidence as ev
@@ -49,7 +49,7 @@ def _gov_csv(raw: str | None) -> list[str]:
 # ── parser ───────────────────────────────────────────────────────────────
 
 def _parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="docspec code", description=HELP)
+    p = argparse.ArgumentParser(prog="artispec code", description=HELP)
     top = p.add_subparsers(dest="area")
 
     repo = top.add_parser("repo", help="register the code repos whose tests the engine runs "
@@ -121,7 +121,8 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("--based-on", default=None, help="governance decision ids")
     x.add_argument("--when", default=None)
     x.add_argument("--then", default=None)
-    x.add_argument("--reason", default=None)
+    x.add_argument("--reason", default=None,
+                   help="required for remove-requirement / remove-scenario; not accepted by modify operations")
     x.add_argument("--scenario", action="append", default=[],
                    help="for add-requirement: 'title | when | then' (repeatable)")
     x.add_argument("--purpose", default=None, help="purpose of a new capability")
@@ -162,7 +163,7 @@ def _parser() -> argparse.ArgumentParser:
     x.add_argument("task", nargs="?")
     x.add_argument("--from", dest="from_file", default=None,
                    help="YAML with `tasks: [{task, implements, files, verify, tests, …}]` "
-                        "(see `docspec code change gaps --template`)")
+                        "(see `artispec code change gaps --template`)")
     x.add_argument("--title", default=None)
     x.add_argument("--implements", default=None, help="replace: cap/R1,…")
     x.add_argument("--files", default=None, help="replace: repo:path,…")
@@ -208,6 +209,7 @@ def _parser() -> argparse.ArgumentParser:
     x = tps.add_parser("remove", help="remove a planned test no task uses")
     x.add_argument("change")
     x.add_argument("test")
+    x.add_argument("--by", default=None)
     x = tps.add_parser("list", help="list planned tests and objections")
     x.add_argument("change")
     x.add_argument("--json", dest="as_json", action="store_true")
@@ -311,7 +313,7 @@ def _repo(layout, args) -> int:
     if args.as_json:
         print(json.dumps(rows, ensure_ascii=False, indent=2))
     elif not rows:
-        print("(no repos registered — `docspec code repo add <name> <path>`)")
+        print("(no repos registered — `artispec code repo add <name> <path>`)")
     else:
         for r in rows:
             print(f"{r['name']}: {r['path']}\n  tests run as: {r['command']}")
@@ -339,7 +341,7 @@ def _spec(layout, args) -> int:
         for cap, cids in pending.items():
             if cap not in {r["capability"] for r in rows}:
                 print(f"{cap} — new in active change {', '.join(cids)}, not archived yet "
-                      f"(`docspec code spec show {cap}`)")
+                      f"(`artispec code spec show {cap}`)")
         return 0
     spec, note = _spec_for_show(layout, args.capability, args.change)
     if spec is None:
@@ -396,8 +398,8 @@ def _spec_for_show(layout, capability: str, change: str | None) -> tuple[dict | 
     if pending:
         return None, (f"\"{capability}\" is new in several active changes ({', '.join(pending)}); "
                       f"pick one with --change")
-    return None, (f"no capability \"{capability}\" (see `docspec code spec list`; a change's own "
-                  f"deltas are in `docspec code change show <change>`)")
+    return None, (f"no capability \"{capability}\" (see `artispec code spec list`; a change's own "
+                  f"deltas are in `artispec code change show <change>`)")
 
 
 # ── change ───────────────────────────────────────────────────────────────
@@ -440,8 +442,8 @@ def _deltas_from_args(args) -> list[tuple[str, dict, str | None]]:
 def _gaps_template(cid: str, g: dict) -> str:
     """缺口草稿：agent 填好後分兩次載入（實作者 task set --from；測試角色 testplan add --from）。"""
     lines = [f"# Missing links for software change {cid}.",
-             "# Implementer: fill `tasks`, then  docspec code task set " + cid + " --from <file>",
-             "# Test role:   fill `tests`, then  docspec code testplan add " + cid + " --from <file>",
+             "# Implementer: fill `tasks`, then  artispec code task set " + cid + " --from <file>",
+             "# Test role:   fill `tests`, then  artispec code testplan add " + cid + " --from <file>",
              "#", "# Requirements that no task implements yet (put them in some task's `implements`):"]
     lines += [f"#   {r}" for r in g["requirements-without-task"]] or ["#   (none)"]
     lines += ["", "tasks:"]
@@ -569,7 +571,7 @@ def _change(layout, args) -> int:
         print(f"  tasks missing verification or files: {len(g['tasks-to-complete'])}")
         for t in g["tasks-to-complete"]:
             print(f"    - {t['id']}. {t.get('title')}")
-        print(f"(fill them in bulk: `docspec code change gaps {args.id} --template > links.yaml`)")
+        print(f"(fill them in bulk: `artispec code change gaps {args.id} --template > links.yaml`)")
         return 0
     if args.op == "undelta":
         removed = chg.remove_deltas(layout, args.id, args.capability, args.ref)
@@ -616,12 +618,15 @@ def _change(layout, args) -> int:
 def _task(layout, args) -> int:
     ch = chg.load_change(layout, args.change)
     if args.op == "add":
+        tool = gv.detect_tool(None)
         rec = tk.add_task(ch["tasks"], title=args.title, implements=_csv(args.implements),
                           files=_csv(args.files), methods=_csv(args.verify), tests=_csv(args.tests),
                           allow_skips=args.allow_skips, depends_on=_csv(args.depends_on),
-                          tool=gv.detect_tool(None))
+                          tool=tool, instance=actors.detect_instance(tool))
         chg.write_part(layout, args.change, "tasks", ch["tasks"])
         print(f"code task add: {args.change} task {rec['id']} — {rec['title']}")
+        if "test" in io.as_list(rec["verify"].get("methods")) and not rec["verify"].get("tests"):
+            print("  pending test planning／待測試規劃: the test role adds tests, then link them with `code task set … --tests`")
         return 0
     if args.op == "set":
         if args.from_file:
@@ -677,12 +682,23 @@ def _testplan(layout, args) -> int:
     ch = chg.load_change(layout, args.change)
     tests = ch["tests"]
     if args.op == "list":
+        signoffs = ev.signoff_view(layout, ch)
         if args.as_json:
-            emit_json(tests)
+            emit_json({**tests, "signoffs": signoffs})
         else:
             print(tk.render_md(layout, ch).split("## Tasks", 1)[0].strip())
+            for row in signoffs:
+                print(f"  {row['test']} sign-off: {row['status']}")
+                for problem in row["problems"]:
+                    print(f"    {problem}")
         return 0
+    tool = gv.detect_tool(args.by)
+    instance = actors.detect_instance(tool)
     if args.op == "remove":
+        test = next((t for t in tests.get("tests") or [] if str(t.get("id")) == args.test), None)
+        if test is None:
+            return fail(f"change {args.change} has no planned test \"{args.test}\"")
+        actors.require_author(test, tool, instance)
         users = [t["id"] for t in ch["tasks"].get("tasks") or []
                  if args.test in io.as_list((t.get("verify") or {}).get("tests"))]
         if users:
@@ -694,17 +710,15 @@ def _testplan(layout, args) -> int:
         chg.write_part(layout, args.change, "tests", tests)
         print(f"code testplan remove: {args.change} {args.test}")
         return 0
-    tool = gv.detect_tool(args.by)
     if args.op == "set":
         t = next((x for x in tests.get("tests") or [] if str(x.get("id")) == args.test), None)
         if t is None:
             return fail(f"change {args.change} has no planned test \"{args.test}\"")
-        if tool != "user" and tool != t.get("written-by"):
-            return fail(f"test {args.test} was written by {t.get('written-by')}; only its author "
-                        f"(the test role) or the owner changes it (you are \"{tool}\")")
+        actors.require_author(t, tool, instance)
         changed = []
-        if args.covers is not None:
+        if args.covers is not None and _csv(args.covers) != io.as_list(t.get("covers")):
             t["covers"] = _csv(args.covers)
+            t.pop("signed", None)
             changed.append("covers")
         if args.note is not None:
             if args.note.strip():
@@ -732,7 +746,7 @@ def _testplan(layout, args) -> int:
         ids = list(args.tests)
         if not ids and not args.sign_all:
             # 不帶編號＝只簽「還沒簽」或「簽了之後改過」的；逐一列出原因。全部重簽要明說 --all。
-            pending = [(t, ev.signoff_problems(layout, [t])) for t in tests.get("tests") or []]
+            pending = [(t, ev.signoff_problems(layout, [t], ch)) for t in tests.get("tests") or []]
             pending = [(t, probs) for t, probs in pending if probs]
             if not pending:
                 print(f"code testplan sign: {args.change}: every planned test is signed and unchanged "
@@ -743,10 +757,10 @@ def _testplan(layout, args) -> int:
                 why = "not signed yet" if not t.get("signed") else "changed since it was signed"
                 print(f"  {t['id']} {t['location']}: {why}")
         signed = tk.sign_tests(layout, ch, ids, tool=tool, now=ev._now(),
-                               fingerprint=lambda loc: ev.file_hash(layout, ev.test_file_key(loc)))
+                               fingerprint=lambda loc: ev.file_hash(layout, ev.test_file_key(loc)), instance=instance)
         chg.write_part(layout, args.change, "tests", tests)
         for t in signed:
-            print(f"code testplan sign: {args.change} {t['id']} {t['location']} signed by {tool}")
+            print(f"code testplan sign: {args.change} {t['id']} {t['location']} signed by {actors.label(tool, instance)}")
         _report_refresh(ev.refresh(layout, args.change), args.change)
         return 0
     if args.op == "add":
@@ -762,21 +776,21 @@ def _testplan(layout, args) -> int:
                 added.append(tk.add_test(tests, location=str(e["location"]).strip(),
                                          covers=io.as_list(e.get("covers")),
                                          level=str(e.get("level") or "unit"), tool=tool,
-                                         note=e.get("note"), today=gv.today()))
+                                         note=e.get("note"), today=gv.today(), instance=instance))
             msg = (f"code testplan add: {args.change} {len(added)} test(s) planned"
                    + (f"; {skipped} entr(ies) without a location skipped" if skipped else ""))
         else:
             if not args.location or not args.covers:
                 return fail("testplan add needs --location and --covers (or --from FILE)")
             rec = tk.add_test(tests, location=args.location, covers=_csv(args.covers), level=args.level,
-                              tool=tool, note=args.note, today=gv.today())
+                              tool=tool, note=args.note, today=gv.today(), instance=instance)
             msg = f"code testplan add: {args.change} {rec['id']} {rec['location']}"
     elif args.op == "object":
-        rec = tk.add_objection(tests, test_id=args.test, reason=args.reason, tool=tool, today=gv.today())
+        rec = tk.add_objection(tests, test_id=args.test, reason=args.reason, tool=tool, today=gv.today(), instance=instance)
         msg = f"code testplan object: {args.change} {rec['id']} on {rec['test']} (open)"
     else:
         rec = tk.respond_objection(tests, oid=args.objection, resolution=args.resolution,
-                                   response=args.reason, tool=tool, today=gv.today())
+                                   response=args.reason, tool=tool, today=gv.today(), instance=instance)
         msg = f"code testplan respond: {args.change} {rec['id']} -> {rec['resolution']}"
     chg.write_part(layout, args.change, "tests", tests)
     print(msg)
@@ -878,7 +892,7 @@ def _archive(layout, args) -> int:
             print(f"  suspect flag {sid} cleared (requirement rewritten by this change)")
         for other in res["affected"]:
             print(f"  ! active change {other} edits the same capability — run "
-                  f"`docspec code change status {other}` to check its deltas still apply")
+                  f"`artispec code change status {other}` to check its deltas still apply")
     return 0
 
 

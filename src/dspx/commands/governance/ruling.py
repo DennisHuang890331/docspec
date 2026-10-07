@@ -1,10 +1,10 @@
-"""docspec ruling — 使用者的決定（保存原話；寫入即生效）。
+"""artispec ruling — 使用者的決定（保存原話；寫入即生效）。
 
 2026/09/30 實測後修訂：
 1. 一律保存使用者原話（`--quote`）。
 2. 使用者講得清楚就直接記；講得不清楚時，先在對話中覆述（`--read-back`），使用者回覆確認後
    把回覆原文放進 `--confirmed`（兩者一起給）。
-3. 寫入後即生效，可作為決策的依據。使用者提供的現況資訊（不是決定）用 `docspec info`。
+3. 寫入後即生效，可作為決策的依據。使用者提供的現況資訊（不是決定）用 `artispec info`。
 使用者事後說「記錯了」→ `ruling reject <id> --reason "<使用者原話>"`，觸發影響分析。
 「被取代」不手寫：由之後的裁定 `--supersedes` 推導。
 """
@@ -19,14 +19,14 @@ from dspx.engine import governance as gv
 
 NAME = "ruling"
 HELP = ("governance: the owner's decisions, kept in their own words (read back only when unclear) "
-        "(add / reject / list / show); information the owner gives is `docspec info`")
+        "(add / reject / list / show); information the owner gives is `artispec info`")
 
 _STATUS_NOTE = {"effective": "effective", "rejected": "rejected by the owner",
                 "superseded": "superseded"}
 
 
 def run(argv: list[str]) -> int:
-    p = argparse.ArgumentParser(prog="docspec ruling", description=HELP)
+    p = argparse.ArgumentParser(prog="artispec ruling", description=HELP)
     sub = p.add_subparsers(dest="op")
     a = sub.add_parser("add", help="record a decision the owner made")
     a.add_argument("--quote", required=True, help="the owner's exact words")
@@ -79,18 +79,18 @@ def run(argv: list[str]) -> int:
             active = [d for d in gov.decisions if gv.decision_effective_status(d, gov) == "active"]
             if active:
                 print(f"  active project decisions — if this ruling changes one of them, write the full "
-                      f"new version with `docspec decision add --supersedes <id> --based-on {rid} …` "
+                      f"new version with `artispec decision add --supersedes <id> --based-on {rid} …` "
                       f"and activate it:")
                 for d in active[:8]:
                     print(f"    - {d.get('title')}（{d.get('id')}）")
                 if len(active) > 8:
-                    print(f"    … {len(active) - 8} more (`docspec decision list`)")
+                    print(f"    … {len(active) - 8} more (`artispec decision list`)")
             if rec.get("supersedes"):
                 from dspx.engine.impact import flag_after_change
                 flagged = flag_after_change(layout, rid)
                 if flagged:
                     print(f"impact: {len(flagged)} downstream item(s) marked suspect — "
-                          f"run `docspec impact` to review")
+                          f"run `artispec impact` to review")
             return 0
         if args.op == "reject":
             rid = gv.strip_ns(args.id)

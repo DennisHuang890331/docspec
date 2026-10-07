@@ -450,7 +450,7 @@ def test_guide_projects_verdict_verbs_and_whitelist(tmp_path, write_leaf, monkey
     out = capsys.readouterr().out
     assert "--ack-own" in out
     assert "must_cover" in out                                       # 白名單反例（content-bearing）
-    assert "docspec stale" in out
+    assert "artispec stale" in out
     assert "perturb-render-revert" in out                            # 禁止擾動復原 dance
 
 

@@ -23,7 +23,7 @@ def open_layout():
 
 
 def fail(msg: str, code: int = 1) -> int:
-    sys.stderr.write(f"docspec: {msg}\n")
+    sys.stderr.write(f"artispec: {msg}\n")
     return code
 
 

@@ -37,7 +37,7 @@ def _ensure_typst(*, force: bool, no_download: bool) -> bool:
     manifest = _pkg._TYPST_MANIFEST
     if pkey is None or pkey not in manifest["assets"]:
         sys.stderr.write(
-            f"docspec: the typst manifest does not cover this platform ({platform.system()}/{platform.machine()}).\n")
+            f"artispec: the typst manifest does not cover this platform ({platform.system()}/{platform.machine()}).\n")
         return False
 
     exe_name = paths.typst_exe_name()
@@ -47,7 +47,7 @@ def _ensure_typst(*, force: bool, no_download: bool) -> bool:
         return True
 
     if no_download:
-        sys.stderr.write("docspec: --no-download given and no typst in data_dir — aborting.\n")
+        sys.stderr.write("artispec: --no-download given and no typst in data_dir — aborting.\n")
         return False
 
     asset_name, sha = manifest["assets"][pkey]

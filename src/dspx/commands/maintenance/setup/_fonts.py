@@ -148,7 +148,7 @@ def _extract_fonts_from_zip(archive: Path, members: dict[str, str], dest: Path) 
         names = set(zf.namelist())
         for inner, target in members.items():
             if inner not in names:
-                sys.stderr.write(f"docspec: {inner} not found in zip {archive.name} (skipping).\n")
+                sys.stderr.write(f"artispec: {inner} not found in zip {archive.name} (skipping).\n")
                 continue
             with zf.open(inner) as fh, open(dest / target, "wb") as out:
                 shutil.copyfileobj(fh, out)
@@ -213,7 +213,7 @@ def _ensure_fonts(*, force: bool, no_download: bool = False) -> bool:
     # 主路：從 pinned OFL 來源下載（只抓還缺的檔所屬的來源）。
     if no_download:
         sys.stderr.write(
-            "docspec: --no-download given, no local font source, and fonts incomplete — aborting.\n"
+            "artispec: --no-download given, no local font source, and fonts incomplete — aborting.\n"
             "  Missing: " + ", ".join(still) + "\n")
         return False
 
@@ -222,7 +222,7 @@ def _ensure_fonts(*, force: bool, no_download: bool = False) -> bool:
     for f in still:
         k = _pkg._FONT_FILE_SOURCE.get(f)
         if k is None:
-            sys.stderr.write(f"docspec: font {f} is not in the download manifest — cannot fetch automatically.\n")
+            sys.stderr.write(f"artispec: font {f} is not in the download manifest — cannot fetch automatically.\n")
             return False
         if k not in need_keys:
             need_keys.append(k)
@@ -230,13 +230,13 @@ def _ensure_fonts(*, force: bool, no_download: bool = False) -> bool:
     for k in need_keys:
         if not _download_font_source(k, dest, force=force):
             sys.stderr.write(
-                f"docspec: font source \"{k}\" download/extraction did not complete — setup aborted.\n")
+                f"artispec: font source \"{k}\" download/extraction did not complete — setup aborted.\n")
             return False
 
     still_missing = [f for f in paths.REQUIRED_FONT_FILES if not (dest / f).is_file()]
     if still_missing:
         sys.stderr.write(
-            "docspec: fonts still missing (incomplete after download): " + ", ".join(still_missing) + "\n")
+            "artispec: fonts still missing (incomplete after download): " + ", ".join(still_missing) + "\n")
         return False
     print(f"  Fonts ready (including downloads) in {dest}")
     return True

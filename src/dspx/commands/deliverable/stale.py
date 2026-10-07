@@ -1,4 +1,4 @@
-"""docspec stale <section|article> — 標髒散文（散文必須重寫，即使指紋一根沒動）。
+"""artispec stale <section|article> — 標髒散文（散文必須重寫，即使指紋一根沒動）。
 
 台中港〔#18〕實證：大重構後的橫掃可能讓某些源料位元不變、散文卻已不合時宜——沒有標髒動詞時，
 作者被迫假改 concept 觸發 stale（竄改真相源去搬簿記旗標）。本指令在帳本記錄上設
@@ -8,8 +8,8 @@ render 的重算路徑自然清除、或 render --ack-own 顯式清除。強制 
 verdicts journal。agent-facing（不進 HUMAN_COMMANDS）。
 
 位置引數兩態（由是節路徑還是文章名自動判定）：
-  - **一節** `docspec stale <section>`：標髒單一已撰寫節（journal verb=stale）。
-  - **整篇** `docspec stale <article>`：對該文章**每個有帳本記錄（已撰寫）的節**批次標髒＝
+  - **一節** `artispec stale <section>`：標髒單一已撰寫節（journal verb=stale）。
+  - **整篇** `artispec stale <article>`：對該文章**每個有帳本記錄（已撰寫）的節**批次標髒＝
     大重構／全文重投後的批次版（journal verb=redraft）。標髒前自動把現行
     `docs/<article>/_latest.md` 備份到 `docspec/.ledger/redraft-backup/<article>.<ts>.md`
     ——draft 隨後會批次重寫全文散文，備份是唯一悔棋點；放 `.ledger/` 不放 `docs/`（交付潔癖）。
@@ -44,14 +44,14 @@ def _stale_one(layout, section: str, reason: str) -> int:
     article = section.split("/", 1)[0]
     if ledger_needs_migration(layout, article):
         sys.stderr.write(
-            f"docspec: the ledger of \"{article}\" is an older fingerprint version — migrate first "
-            f"with `docspec render {article} --rebaseline`, then mark sections.\n")
+            f"artispec: the ledger of \"{article}\" is an older fingerprint version — migrate first "
+            f"with `artispec render {article} --rebaseline`, then mark sections.\n")
         return 1
     ledger = read_ledger(layout, article)
     rec = ledger.get(section)
     if not isinstance(rec, dict):
         sys.stderr.write(
-            f"docspec: \"{section}\" has no ledger entry (its prose was never written) — an "
+            f"artispec: \"{section}\" has no ledger entry (its prose was never written) — an "
             "unwritten section is already draft's work; nothing to mark.\n")
         return 1
 
@@ -61,7 +61,7 @@ def _stale_one(layout, section: str, reason: str) -> int:
         verdict_entry("stale", section, reason, rec.get("own"), rec.get("own"), rec.get("prose"))])
 
     print(f"marked \"{section}\" for rewrite (redraft flag set; fingerprints untouched).")
-    print("  docspec status now reports it stale-own — apply picks it up; a real prose rewrite "
+    print("  artispec status now reports it stale-own — apply picks it up; a real prose rewrite "
           "(or render --ack-own) clears the flag.")
     return 0
 
@@ -70,15 +70,15 @@ def _stale_article(layout, article: str, reason: str) -> int:
     """整篇批次標髒＝全文重投（journal verb=redraft）；標髒前備份現行交付物（唯一悔棋點）。"""
     if ledger_needs_migration(layout, article):
         sys.stderr.write(
-            f"docspec: the ledger of \"{article}\" is an older fingerprint version — migrate "
-            f"first with `docspec render {article} --rebaseline`, then mark sections.\n")
+            f"artispec: the ledger of \"{article}\" is an older fingerprint version — migrate "
+            f"first with `artispec render {article} --rebaseline`, then mark sections.\n")
         return 1
 
     ledger = read_ledger(layout, article)
     written = [(s, rec) for s, rec in ledger.items() if isinstance(rec, dict)]
     if not written:
         sys.stderr.write(
-            f"docspec: article \"{article}\" has no written sections in its ledger — "
+            f"artispec: article \"{article}\" has no written sections in its ledger — "
             "unwritten sections are already draft's work; nothing to mark.\n")
         return 1
 
@@ -105,13 +105,13 @@ def _stale_article(layout, article: str, reason: str) -> int:
     if backup is not None:
         print(f"  backed up the current deliverable to {backup} — the pre-redraft prose survives "
               "the coming rewrite.")
-    print("  docspec status now reports them stale-own — apply re-renders each; a real prose "
+    print("  artispec status now reports them stale-own — apply re-renders each; a real prose "
           "rewrite (or render --ack-own) clears the flag.")
     return 0
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec stale", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec stale", description=HELP)
     parser.add_argument("target",
                         help="a leaf section (mark one) OR an article name (mark every written "
                              "section of it = whole re-projection)")
@@ -123,7 +123,7 @@ def run(argv: list[str]) -> int:
 
     if not args.reason:
         sys.stderr.write(
-            "docspec: stale requires --reason <text> — the verdict is journaled; say why this "
+            "artispec: stale requires --reason <text> — the verdict is journaled; say why this "
             "prose must be rewritten.\n")
         return 2
 
@@ -140,6 +140,6 @@ def run(argv: list[str]) -> int:
     if any(lf.article == target for lf in leaves):
         return _stale_article(layout, target, args.reason)
     sys.stderr.write(
-        f"docspec: no leaf section or article found for \"{target}\" "
+        f"artispec: no leaf section or article found for \"{target}\" "
         "(give a leaf section path to mark one, or an article name to mark the whole article).\n")
     return 1

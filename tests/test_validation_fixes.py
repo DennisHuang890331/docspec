@@ -67,7 +67,7 @@ def test_sign_names_the_unregistered_repo(proj, capsys):
     capsys.readouterr()
     assert code("testplan", "sign", "fix") == 1
     err = capsys.readouterr().err
-    assert "not registered" in err and "docspec code repo add" in err
+    assert "not registered" in err and "artispec code repo add" in err
     assert "write it first" not in err
 
 
@@ -199,7 +199,8 @@ def test_brief_notes_outdated_skills_and_rules(tmp_path, monkeypatch, capsys):
     agents = tmp_path / "AGENTS.md"
     agents.write_text(agents.read_text(encoding="utf-8").replace("講得不清楚", "不清楚"), encoding="utf-8")
     stale = outdated_installs(tmp_path)
-    assert ".claude/skills/dspx-test/SKILL.md" in stale and "AGENTS.md (docspec block)" in stale
+    normalized = [item.replace("\\", "/") for item in stale]
+    assert ".claude/skills/dspx-test/SKILL.md" in normalized and "AGENTS.md (docspec block)" in stale
     assert init_cmd.run(["--tool", "claude", "--agents-md", "--no-tex-hint", "--no-update-check"]) == 0
     assert outdated_installs(tmp_path) == []
 
@@ -244,8 +245,10 @@ def test_testplan_set_fixes_a_test_in_place_and_sign_skips_unchanged(proj, capsy
     capsys.readouterr()
     assert code("testplan", "set", "fix", "T1", "--covers", "entry/R1/S2", "--note", "改對情境") == 0
     t = chg.load_change(proj, "fix")["tests"]["tests"][0]
-    assert t["id"] == "T1" and t["covers"] == ["entry/R1/S2"] and t.get("signed")   # 簽收還在
+    assert t["id"] == "T1" and t["covers"] == ["entry/R1/S2"] and not t.get("signed")
     capsys.readouterr()
+    assert code("testplan", "sign", "fix") == 0
+    assert "signed by gemini" in capsys.readouterr().out       # 改情境後測試角色重新簽收
     assert code("testplan", "sign", "fix") == 0
     assert "every planned test is signed and unchanged" in capsys.readouterr().out
     monkeypatch.setenv("DOCSPEC_AGENT", "claude")

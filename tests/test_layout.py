@@ -11,14 +11,14 @@ def test_per_article_paths(tmp_path):
     home = tmp_path / "docspec"
     lay = Layout(home, "per-article")
     assert lay.docs_latest("guide") == home.parent / "docs" / "guide" / "_latest.md"
-    assert lay.docs_snapshot("guide", "1.2.0") == home.parent / "docs" / "guide" / "archive" / "v1.2.0.md"
+    assert lay.docs_snapshot("guide", "1.2.0") == home / "changes" / "_versions" / "guide" / "1.2.0" / "snapshot" / "document.md"
 
 
 def test_flat_paths(tmp_path):
     home = tmp_path / "docspec"
     lay = Layout(home, "flat")
     assert lay.docs_latest("guide") == home.parent / "docs" / "guide_latest.md"
-    assert lay.docs_snapshot("guide", "1.2.0") == home.parent / "docs" / "archive" / "guide_v1.2.0.md"
+    assert lay.docs_snapshot("guide", "1.2.0") == home / "changes" / "_versions" / "guide" / "1.2.0" / "snapshot" / "document.md"
 
 
 def test_existing_versions_flat(tmp_path):

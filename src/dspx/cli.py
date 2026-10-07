@@ -1,4 +1,4 @@
-"""dspx — docspec 指令列入口。
+"""ArtiSpec 指令列入口（執行名稱 artispec，安裝套件 docspec）。
 
 子指令採 registry 模式：每個子指令一個模組（dspx.commands.*），
 模組提供 NAME、HELP、run(argv) -> int，並於 dspx.commands 註冊。
@@ -11,7 +11,7 @@ import sys
 
 from dspx.commands import HUMAN_COMMANDS, REGISTRY
 
-_PROG = "docspec"
+_PROG = "artispec"
 
 
 def _ensure_utf8_output() -> None:
@@ -25,7 +25,7 @@ def _ensure_utf8_output() -> None:
 
 def _help_text(show_all: bool = False) -> str:
     lines = [
-        f"{_PROG} — document SDD tool",
+        "ArtiSpec — document and software SDD tool",
         "",
         f"Usage: {_PROG} <command> [args]",
         f"       {_PROG} --version | --help | --help-all",
@@ -38,8 +38,8 @@ def _help_text(show_all: bool = False) -> str:
     if not show_all:
         lines += [
             "",
-            "The rest are agent commands (driven by skills via `docspec guide` / "
-            "`docspec instructions`,",
+            "The rest are agent commands (driven by skills via `artispec guide` / "
+            "`artispec instructions`,",
             f"normally not run by hand). List them all: {_PROG} --help-all",
         ]
     return "\n".join(lines)
@@ -79,12 +79,13 @@ def _domain_error_types() -> tuple[type, ...]:
     from dspx.reports.audit import AuditError
     from dspx.reports.roadmap import RoadmapError
     from dspx.engine.config import ConfigError
+    from dspx.engine.layout import LayoutError
     from dspx.typeset.format_config import FormatConfigError
     from dspx.reports.freeze import FreezeError
     from dspx.env.frontmatter import FrontmatterError
     from dspx.engine.model import ModelError
     from dspx.engine.schema import SchemaError
-    return (ModelError, SchemaError, AuditError, RoadmapError, FrontmatterError, ConfigError,
+    return (ModelError, SchemaError, AuditError, RoadmapError, FrontmatterError, ConfigError, LayoutError,
             FormatConfigError, FreezeError)
 
 

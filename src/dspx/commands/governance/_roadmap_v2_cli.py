@@ -1,4 +1,4 @@
-"""`docspec roadmap` 在啟用治理層的專案（有 docspec/governance/）：唯一一份專案 roadmap。
+"""`artispec roadmap` 在啟用治理層的專案（有 docspec/governance/）：唯一一份專案 roadmap。
 
 子指令：
   （無）            檢視：各里程碑進度與工作項目的推導狀態（--json、--milestone）
@@ -18,6 +18,8 @@ from dspx.commands._shared import BootstrapError, load_model
 from dspx.commands.governance._gov_common import emit_json, fail, split_csv
 from dspx.engine import governance as gv
 from dspx.engine import roadmap_v2 as rv
+from dspx.engine.model import ModelError
+from dspx.engine.change import ChangeError
 
 _LEGACY_FOREST = "forest"
 
@@ -37,6 +39,8 @@ def _load(layout, rid: str, kind: str = "work") -> dict | None:
 def _print_view(v: dict) -> None:
     def line(r: dict, indent: str = "  ") -> None:
         print(f"{indent}- [{rv.status_label(r['status'], r)}] {r['title']}（{r['id']}）")
+        for detail in r.get("details") or []:
+            print(f"{indent}  {detail}")
         for c in v["children"].get(str(r["id"]), []):
             line(c, indent + "  ")
 
@@ -55,11 +59,16 @@ def _print_view(v: dict) -> None:
 
 
 def run(argv: list[str], layout) -> int:
-    p = argparse.ArgumentParser(prog="docspec roadmap",
+    p = argparse.ArgumentParser(prog="artispec roadmap",
                                 description="the single project roadmap (governance layer)")
     p.add_argument("--json", dest="as_json", action="store_true")
     p.add_argument("--milestone", default=None, help="only this milestone")
     sub = p.add_subparsers(dest="op")
+    show = sub.add_parser("show", help="read-only summary of one work item and its recorded sources")
+    show.add_argument("id")
+    show.add_argument("--json", dest="as_json", action="store_true", default=argparse.SUPPRESS)
+    show.add_argument("--schema-version", type=int, choices=(1, 2), default=2,
+                      help="summary schema (default: 2; 1 retains the original full signed scopes)")
     a = sub.add_parser("add", help="add a work item")
     a.add_argument("--title", required=True)
     a.add_argument("--what", default="")
@@ -96,6 +105,14 @@ def run(argv: list[str], layout) -> int:
     except BootstrapError as exc:
         return exc.exit_code
     try:
+        if args.op == "show":
+            from dspx.engine import work_summary
+            result = work_summary.build(layout, leaves, args.id, schema_version=args.schema_version)
+            if args.as_json:
+                emit_json(result)
+            else:
+                print(work_summary.render(result))
+            return 0
         if args.op == "migrate":
             res = rv.migrate_legacy(layout, leaves, gv.detect_tool(None))
             if not res["created"]:
@@ -150,6 +167,15 @@ def run(argv: list[str], layout) -> int:
                         refs.append(r)
                 rec["refs"] = refs
             elif args.op == "done":
+                refs = [r for r in gv._as_list(rec.get("refs")) if not rv.is_constraint_ref(r)]
+                children = [w for w in gv.load_governance(layout).work
+                            if str(w.get("parent")) == rid]
+                if refs or children:
+                    conditions = refs + [str(w["id"]) for w in children]
+                    return fail("completion is derived from linked work or children: "
+                                + ", ".join(conditions) + "; finish these conditions and check `artispec roadmap`")
+                if not args.note.strip():
+                    return fail("manual completion requires a non-empty reason (--note)")
                 rec["closed"] = {"date": gv.today(), "note": args.note.strip()}
             else:
                 ruling = gv.strip_ns(args.ruling)
@@ -172,5 +198,5 @@ def run(argv: list[str], layout) -> int:
         else:
             _print_view(v)
         return 0
-    except gv.GovernanceError as exc:
+    except (gv.GovernanceError, ModelError, ChangeError, OSError, UnicodeError, ValueError) as exc:
         return fail(str(exc))

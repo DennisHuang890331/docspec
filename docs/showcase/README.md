@@ -1,5 +1,7 @@
 # Showcase — real docspec output, and exactly how it was made
 
+Historical run: the original names, commands and results below are preserved. The current executable is `artispec`; use the current [README](../../README.md) for installation and workflows rather than replaying these old command lines.
+
 This folder holds six complete documents produced end-to-end with docspec, across three genres
 (fiction / essay / academic survey) × two languages (English / Traditional Chinese). Each was written
 from scratch by an AI agent driving docspec, passed docspec's structural, cleanliness, and

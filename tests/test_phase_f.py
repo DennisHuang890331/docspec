@@ -23,6 +23,7 @@ from dspx.commands.maintenance import version as version_cmd
 def _healthy_env(monkeypatch, tmp_path):
     """建立健康環境（tex.lock 對齊 _MANIFEST、全字型齊、xelatex/pandoc 命中）。"""
     monkeypatch.setattr(paths, "data_dir", lambda: tmp_path)
+    monkeypatch.setattr(paths, "legacy_data_dir", lambda: tmp_path / "missing-legacy")
     fonts = tmp_path / "fonts"
     fonts.mkdir(parents=True)
     for f in paths.REQUIRED_FONT_FILES:
@@ -57,7 +58,7 @@ def test_doctor_missing_typst_fails(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "[FAIL]" in out
     assert "typst" in out
-    assert "docspec setup" in out      # 修復指令
+    assert "artispec setup" in out      # 修復指令
 
 
 def test_doctor_missing_tinytex_warns(monkeypatch, tmp_path, capsys):
@@ -68,7 +69,7 @@ def test_doctor_missing_tinytex_warns(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "[FAIL]" not in out
     assert "[WARN]" in out
-    assert "docspec setup --with-latex" in out  # 修復指令指向可選安裝
+    assert "artispec setup --with-latex" in out  # 修復指令指向可選安裝
 
 
 def test_doctor_missing_fonts_fails(monkeypatch, tmp_path, capsys):
@@ -78,7 +79,7 @@ def test_doctor_missing_fonts_fails(monkeypatch, tmp_path, capsys):
     assert doctor_cmd.run([]) == 1
     out = capsys.readouterr().out
     assert "[FAIL]" in out
-    assert "docspec setup" in out
+    assert "artispec setup" in out
     assert paths.REQUIRED_FONT_FILES[0] in out
 
 
@@ -88,7 +89,7 @@ def test_doctor_missing_pandoc_fails(monkeypatch, tmp_path, capsys):
     assert doctor_cmd.run([]) == 1
     out = capsys.readouterr().out
     assert "controlled pandoc not found" in out
-    assert "docspec setup" in out
+    assert "artispec setup" in out
 
 
 def test_doctor_lock_missing_packages_warns(monkeypatch, tmp_path, capsys):
@@ -100,7 +101,7 @@ def test_doctor_lock_missing_packages_warns(monkeypatch, tmp_path, capsys):
     assert doctor_cmd.run([]) == 0      # WARN 不致非零
     out = capsys.readouterr().out
     assert "[WARN]" in out
-    assert "docspec setup" in out
+    assert "artispec setup" in out
 
 
 def test_doctor_no_lock_warns_setup(monkeypatch, tmp_path, capsys):
@@ -109,7 +110,7 @@ def test_doctor_no_lock_warns_setup(monkeypatch, tmp_path, capsys):
     assert doctor_cmd.run([]) == 0
     out = capsys.readouterr().out
     assert "[WARN]" in out
-    assert "docspec setup" in out
+    assert "artispec setup" in out
 
 
 def test_doctor_is_read_only(monkeypatch, tmp_path):
@@ -190,14 +191,14 @@ def test_version_report_includes_three(monkeypatch, tmp_path):
     _healthy_env(monkeypatch, tmp_path)
     monkeypatch.setattr(version_cmd, "_pandoc_version", lambda: "3.9.0.2")
     rep = version_cmd.report()
-    assert "docspec" in rep
+    assert rep.startswith("ArtiSpec ")
     assert setup_cmd._MANIFEST["tag"] in rep    # tex.lock 的 TinyTeX 版
     assert "3.9.0.2" in rep                     # pandoc 版
 
 
 def test_version_no_lock_hints_setup(monkeypatch, tmp_path):
     monkeypatch.setattr(paths, "data_dir", lambda: tmp_path)   # 無 tex.lock
-    assert "docspec setup" in version_cmd._tinytex_version()
+    assert "artispec setup" in version_cmd._tinytex_version()
 
 
 def test_cli_version_flag_uses_report(monkeypatch, tmp_path, capsys):
@@ -285,7 +286,7 @@ def test_init_hint_when_no_lock(monkeypatch, tmp_path, capsys):
     monkeypatch.chdir(proj)
     monkeypatch.setattr(paths, "read_tex_lock", lambda: None)   # 無 tex.lock
     assert init_cmd.run(["--tool", "claude"]) == 0
-    assert "docspec doctor" in capsys.readouterr().out
+    assert "artispec doctor" in capsys.readouterr().out
 
 
 def test_init_hint_when_tag_mismatch(monkeypatch, tmp_path, capsys):
@@ -295,7 +296,7 @@ def test_init_hint_when_tag_mismatch(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(paths, "read_tex_lock", lambda: {"tinytex_tag": "v0000.00"})
     assert init_cmd.run(["--tool", "claude"]) == 0
     out = capsys.readouterr().out
-    assert "docspec doctor" in out
+    assert "artispec doctor" in out
     assert "does not match" in out
 
 
@@ -306,7 +307,7 @@ def test_init_no_hint_when_aligned(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(paths, "read_tex_lock",
                         lambda: {"tinytex_tag": setup_cmd._MANIFEST["tag"]})
     assert init_cmd.run(["--tool", "claude"]) == 0
-    assert "docspec doctor" not in capsys.readouterr().out
+    assert "artispec doctor" not in capsys.readouterr().out
 
 
 def test_init_no_tex_hint_flag_silences(monkeypatch, tmp_path, capsys):
@@ -315,7 +316,7 @@ def test_init_no_tex_hint_flag_silences(monkeypatch, tmp_path, capsys):
     monkeypatch.chdir(proj)
     monkeypatch.setattr(paths, "read_tex_lock", lambda: None)   # 本會提示
     assert init_cmd.run(["--tool", "claude", "--no-tex-hint"]) == 0
-    assert "docspec doctor" not in capsys.readouterr().out
+    assert "artispec doctor" not in capsys.readouterr().out
 
 
 # ── CLI robustness (oss-release-prep group 2) ─────────────────────────

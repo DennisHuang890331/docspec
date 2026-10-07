@@ -303,7 +303,7 @@ def test_publish_snapshot_has_no_binding_comments(make_project, write_leaf, monk
     _put_prose(home, "g", "g/b", "乙散文。")
     _put_prose(home, "g", "g/c", "丙散文。")
     assert publish_cmd.run(["g"]) == 0
-    snaps = sorted((home.parent / "docs" / "g" / "archive").glob("v*.md"))
+    snaps = sorted((home / "changes" / "_versions" / "g").glob("*/snapshot/document.md"))
     assert snaps, "expected a frozen snapshot"
     snap = snaps[-1].read_text("utf-8")
     assert "<!--@" not in snap                   # 零綁定痕跡

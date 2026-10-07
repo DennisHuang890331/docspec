@@ -58,9 +58,9 @@ def read_ledger(layout: Layout, article: str) -> dict:
             # 否則 drift 偵測會默默失效（手改交付物不再被抓）。注意：render **不會**默默修復
             # （那會把待重寫的 stale 信號永久吸收成新基準）——render 遇壞帳本會隔離備份並拒跑。
             sys.stderr.write(
-                f"docspec: ⚠ ledger sidecar {ledger} is malformed ({exc}); "
+                f"artispec: ⚠ ledger sidecar {ledger} is malformed ({exc}); "
                 "staleness/drift signals are unavailable. Restore it from git/Drive history, "
-                "or run `docspec render <article> --rebaseline` to quarantine it and rebuild "
+                "or run `artispec render <article> --rebaseline` to quarantine it and rebuild "
                 "the baseline (this permanently absorbs any pending stale signals).\n")
             return {}
         sections = data.get("sections") if isinstance(data, dict) else None
@@ -73,7 +73,7 @@ def read_ledger(layout: Layout, article: str) -> dict:
         except FrontmatterError as exc:
             # 人手改 `_latest.md` 把 frontmatter 改壞時，別讓 status/diff/check 噴 traceback。
             sys.stderr.write(
-                f"docspec: ⚠ {latest} frontmatter is malformed ({exc}); treating as no ledger.\n")
+                f"artispec: ⚠ {latest} frontmatter is malformed ({exc}); treating as no ledger.\n")
             return {}
         sections = meta.get("sections")
         return dict(sections) if isinstance(sections, dict) else {}
@@ -106,7 +106,7 @@ def read_ledger_version(layout: Layout, article: str) -> int | None:
     鍵，或更舊的 frontmatter-sections 格式＝本 change 前的算法）；≥2＝頂層版本鍵的值。
     壞檔（不可解析）→ None——壞帳本由 render 的隔離閘／read_ledger 的警告另行負責，這裡不重複。
     v1 的舊值與 v2 算法現值**不可比**：status 顯 needs-migration、render 拒跑，
-    `docspec render <article> --rebaseline` 一次遷移。"""
+    `artispec render <article> --rebaseline` 一次遷移。"""
     for ledger in (layout.docs_ledger(article), layout.docs_ledger_prev(article),
                    layout.docs_ledger_legacy(article)):
         if not ledger.is_file():
@@ -357,7 +357,7 @@ def group_marker(section: str) -> str:
 
 # 標題層級上限＝四級（中文期刊規範 GB/T 3179：編號到 1.1.1.1 為極限）。markdown 標題＝`#`×(depth+1)，
 # 上限 5（經 --shift-heading-level-by=-1 後＝typst L4＝四級，模板地板）。更深：render clamp 到此（防靜默
-# 吐 `#######`＝CommonMark 字面文字、破版），且由 `docspec check` 結構不變式 fail-loud 擋下（見 check._check_hierarchy）。
+# 吐 `#######`＝CommonMark 字面文字、破版），且由 `artispec check` 結構不變式 fail-loud 擋下（見 check._check_hierarchy）。
 MAX_HEADING_LEVEL = 5
 
 
@@ -398,7 +398,7 @@ def _group_meta(layout: Layout, group_section: str) -> dict:
         if key not in _warned_group_files:
             _warned_group_files.add(key)
             sys.stderr.write(
-                f"docspec: ⚠ {gy} is malformed ({exc}); its title/order are ignored "
+                f"artispec: ⚠ {gy} is malformed ({exc}); its title/order are ignored "
                 "and the heading falls back to the humanized slug — fix the file.\n")
     return {}
 
@@ -442,7 +442,7 @@ def _depth(article: str, section: str) -> int:
     return len([p for p in section.split("/") if p]) - 1
 
 
-# ── outline 排序拓樸：引擎單一共用來源（render 正史；aperture document map／`docspec status` group 列
+# ── outline 排序拓樸：引擎單一共用來源（render 正史；aperture document map／`artispec status` group 列
 #    一律 import 這三個函式，勿另寫副本——副本已實證漂移：漏讀 group.yaml order、退回字典序）──
 
 def outline_order_by_section(layout: Layout, leaves: list[Leaf]) -> dict[str, float]:
@@ -499,7 +499,7 @@ def outline_numbering(layout: Layout, art_leaves: list[Leaf],
 
     回傳 section → 顯示標籤：str（如 `6.`／`6.1`／`附錄 A`／`A.1`）或 None（`numbering: none`＝不
     編號）；不在表內的 section（如文章根節＝文件標題）＝無編號。章號 derive 自 outline 排序拓樸
-    （與 render／aperture document-map／`docspec status` 同一套 `outline_order_by_section`＋
+    （與 render／aperture document-map／`artispec status` 同一套 `outline_order_by_section`＋
     `outline_sort_key`）＋各節 `numbering` 政策——corpus title 永不含章號，單一真相＝order＋樹位
     置＋政策，重排即自動重編號（散文不動、指紋照 F2 沿用）。
 
@@ -856,7 +856,7 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
             if detect_language("\n".join(prose_bodies), "en") == "zh":
                 import sys
                 sys.stderr.write(
-                    f"docspec: ⚠ cover title falls back to the humanized slug "
+                    f"artispec: ⚠ cover title falls back to the humanized slug "
                     f"\"{_group_title(layout, article, article)}\" but the article's content is CJK "
                     f"— add corpus/{article}/group.yaml with a localized title: to fix the cover "
                     f"heading.\n")
@@ -893,7 +893,7 @@ def render_article(layout: Layout, leaves: list[Leaf], article: str,
                 where = ("the preamble (before the first section marker)"
                          if loc == "preamble" else f"group \"{loc}\"")
                 sys.stderr.write(
-                    f"docspec: ⚠ \"{article}\": unowned prose at {where} belongs to no section "
+                    f"artispec: ⚠ \"{article}\": unowned prose at {where} belongs to no section "
                     "and was DISCARDED by this render — hand-edits there are never preserved; "
                     "move the content into a section's own slot (or a corpus file).\n")
 

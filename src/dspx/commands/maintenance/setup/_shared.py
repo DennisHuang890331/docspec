@@ -69,13 +69,13 @@ def _resolve_asset(tag: str, name_substr: str) -> tuple[str, str] | None:
         with urllib.request.urlopen(req, timeout=30) as resp:
             data = json.load(resp)
     except (urllib.error.URLError, OSError, ValueError) as exc:
-        sys.stderr.write(f"docspec: cannot query TinyTeX release ({api}): {exc}\n")
+        sys.stderr.write(f"artispec: cannot query TinyTeX release ({api}): {exc}\n")
         return None
     for asset in data.get("assets", []):
         nm = asset.get("name", "")
         if nm.startswith(name_substr) and tag in nm:
             return asset.get("browser_download_url", ""), nm
-    sys.stderr.write(f"docspec: release {tag} has no asset matching \"{name_substr}*{tag}*\".\n")
+    sys.stderr.write(f"artispec: release {tag} has no asset matching \"{name_substr}*{tag}*\".\n")
     return None
 
 
@@ -88,7 +88,7 @@ def _download(url: str, dest: Path, expect_sha256: str) -> bool:
         with urllib.request.urlopen(req, timeout=120) as resp, open(tmp, "wb") as fh:
             shutil.copyfileobj(resp, fh)
     except (urllib.error.URLError, OSError) as exc:
-        sys.stderr.write(f"docspec: download failed ({url}): {exc}\n")
+        sys.stderr.write(f"artispec: download failed ({url}): {exc}\n")
         tmp.unlink(missing_ok=True)
         return False
     h = hashlib.sha256()
@@ -97,7 +97,7 @@ def _download(url: str, dest: Path, expect_sha256: str) -> bool:
             h.update(chunk)
     if h.hexdigest() != expect_sha256:
         sys.stderr.write(
-            f"docspec: sha256 verification failed ({dest.name}): got {h.hexdigest()}, expected {expect_sha256}.\n")
+            f"artispec: sha256 verification failed ({dest.name}): got {h.hexdigest()}, expected {expect_sha256}.\n")
         tmp.unlink(missing_ok=True)
         return False
     tmp.replace(dest)
@@ -135,7 +135,7 @@ def _extract_windows_exe(installer: Path, target_root: Path) -> bool:
         subprocess.run([str(installer), "-y", f"-o{target_root.parent}"],
                        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except (subprocess.CalledProcessError, OSError) as exc:
-        sys.stderr.write(f"docspec: failed to extract the TinyTeX installer: {exc}\n")
+        sys.stderr.write(f"artispec: failed to extract the TinyTeX installer: {exc}\n")
         return False
     return _normalize_extracted_root(target_root)
 
@@ -147,7 +147,7 @@ def _extract_tar(archive: Path, target_root: Path) -> bool:
         with tarfile.open(archive) as tf:
             tf.extractall(target_root.parent, filter="data")  # noqa: S202 — 官方 release、已驗 sha256
     except (tarfile.TarError, OSError) as exc:
-        sys.stderr.write(f"docspec: failed to extract the TinyTeX tar: {exc}\n")
+        sys.stderr.write(f"artispec: failed to extract the TinyTeX tar: {exc}\n")
         return False
     return _normalize_extracted_root(target_root)
 

@@ -31,7 +31,7 @@ from dspx.engine.schema import Schema
 
 # apply（rewrite 模式）讀 concept 的准投欄位（治理欄 realizes 不投）
 _DRAFT_CONCEPT_FIELDS = ("concept", "brief", "must_cover", "sources")
-# glossary 注入＝精瘦索引（省 token）；definition/english 是下鑽欄（`docspec show <id>`），不注入。
+# glossary 注入＝精瘦索引（省 token）；definition/english 是下鑽欄（`artispec show <id>`），不注入。
 # 白名單單一來源住 glossary.GLOSSARY_INDEX_FIELDS——style 面 gloss 子軸指紋（model）同源共用，
 # 「投給 agent 的術語義務」與「入帳的術語義務」不可能漂移。
 _GLOSSARY_INDEX_FIELDS = GLOSSARY_INDEX_FIELDS
@@ -187,7 +187,7 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
         article = leaf.article
         art_leaves = [lf for lf in leaves if lf.article == article]
         order_by_section = outline_order_by_section(layout, art_leaves)
-        # 章號同源：與 render 交付物、`docspec status` 走同一 outline_numbering（單一真相＝order＋
+        # 章號同源：與 render 交付物、`artispec status` 走同一 outline_numbering（單一真相＝order＋
         # 樹位置＋numbering 政策）；draft 看得到每節推導章號（None＝根節/numbering:none＝不編號）。
         numbers = outline_numbering(layout, art_leaves, article)
         rows = [
@@ -209,7 +209,7 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
         proj.writing_guide = layout.writing_guide.read_text(encoding="utf-8")
 
     # ── 術語權威（專案級；draft 寫前拿正名→不靠事後 lint WARN，閉合 writing-guide「術語→glossary」迴圈）──
-    # 注入＝精瘦索引（canonical/bucket/code/aliases_forbidden）；definition/english＝下鑽（`docspec show <id>`），不 slurp。
+    # 注入＝精瘦索引（canonical/bucket/code/aliases_forbidden）；definition/english＝下鑽（`artispec show <id>`），不 slurp。
     if skill in _GLOSSARY_SKILLS:
         proj.glossary = [
             {k: t[k] for k in _GLOSSARY_INDEX_FIELDS if k in t}
@@ -285,7 +285,8 @@ def project(layout: Layout, schema: Schema, skill: str, section: str,
             coh["realized"] = [{"id": r.get("id"), "from_section": r.get("from_section"),
                                 "statement": r.get("statement"), "status": r.get("status"),
                                 "kind": r.get("kind"), "superseded_by": r.get("superseded_by"),
-                                "successor_statement": r.get("successor_statement")}
+                                "successor_statement": r.get("successor_statement"),
+                                **({"source": r["source"]} if "source" in r else {})}
                                for r in proj.realized]
         if coh:
             proj.coherence_contract = coh

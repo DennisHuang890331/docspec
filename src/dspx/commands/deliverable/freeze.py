@@ -1,4 +1,4 @@
-"""docspec freeze <article> — 定版（舊名 publish）：唯一不可逆指令：閘→render→蓋版→凍結唯讀「乾淨」快照。
+"""artispec freeze <article> — 定版（舊名 publish）：唯一不可逆指令：閘→render→蓋版→凍結唯讀「乾淨」快照。
 
 2026/09/30 裁定：原本寫在 dspx-publish skill 裡要 agent 逐步做的檢查，全部併進指令本身——
 章節都寫好且沒有待更新、check 與 lint 無錯誤、快照不含殘留標記；factcheck 沒跑過只提醒；
@@ -14,7 +14,6 @@ publish 只做確定性的事：
 from __future__ import annotations
 
 import argparse
-import stat
 import sys
 from datetime import date
 
@@ -69,7 +68,7 @@ def run(argv: list[str]) -> int:
         from dspx.commands.governance import _freeze
         return _freeze.run(argv)
 
-    parser = argparse.ArgumentParser(prog="docspec freeze", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec freeze", description=HELP)
     parser.add_argument("article", help="name of the article to publish")
     parser.add_argument(
         "--level", choices=["major", "minor", "patch"], default=None,
@@ -98,7 +97,7 @@ def run(argv: list[str]) -> int:
     #    靜默跳過＝版本鏈斷裂且無人察覺）→ 不合格即拒、不凍結。──
     if args.set_version is not None and parse_semver(args.set_version) is None:
         sys.stderr.write(
-            f"docspec: freeze aborted -- --set-version \"{args.set_version}\" is not strict "
+            f"artispec: freeze aborted -- --set-version \"{args.set_version}\" is not strict "
             "semver X.Y.Z (a malformed version would be silently skipped by the version scan "
             "and break the chain).\n")
         return 1
@@ -111,11 +110,24 @@ def run(argv: list[str]) -> int:
         return exc.exit_code
 
     if not any(lf.article == args.article for lf in leaves):
-        sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n")
+        sys.stderr.write(f"artispec: no leaf sections found for article \"{args.article}\"\n")
+        return 1
+    from dspx.engine import document_versions
+    try:
+        history = document_versions._safe(layout, layout.docs_changelog(args.article))
+        if history.exists() and not history.is_file():
+            raise document_versions.LayoutError(f"document history is not a regular file: {history}")
+    except (OSError, document_versions.LayoutError) as exc:
+        sys.stderr.write(f"artispec: freeze aborted -- {exc}\n")
+        return 1
+    if any(p.exists() for p in layout.legacy_changelogs(args.article)):
+        sys.stderr.write(f"artispec: freeze aborted -- legacy revision history must be relocated first: "
+                         f"`artispec versions migrate {args.article} --dry-run`, then "
+                         f"`artispec versions migrate {args.article}`.\n")
         return 1
     if args.date_version or args.article in (config.get("date_versions") or []):
         if args.set_version or args.level:
-            sys.stderr.write("docspec: freeze aborted -- a date-versioned document takes no --level "
+            sys.stderr.write("artispec: freeze aborted -- a date-versioned document takes no --level "
                              "or --set-version.\n")
             return 1
         today = date.today()
@@ -134,20 +146,20 @@ def run(argv: list[str]) -> int:
     #    被 .freeze.yaml hash net 抓、lint 閘在版本推導前就 abort（design D8）。──
     if args.set_version is not None and layout.existing_versions(args.article) and not args.date_versioned:
         sys.stderr.write(
-            "docspec: freeze aborted -- version chain already exists; "
+            "artispec: freeze aborted -- version chain already exists; "
             "--set-version cannot rewrite history.\n")
         return 1
 
     # ── 閘 ──
     check = run_check(leaves, schema, layout)
     if not check.ok:
-        sys.stderr.write("docspec: freeze aborted -- check did not pass:\n")
+        sys.stderr.write("artispec: freeze aborted -- check did not pass:\n")
         for e in check.errors:
             sys.stderr.write(f"  ✗ {e}\n")
         return 1
     lint_errors = [f for f in run_lint(layout, leaves, schema) if f.level == ERROR]
     if lint_errors:
-        sys.stderr.write("docspec: freeze aborted -- lint has ERROR(s):\n")
+        sys.stderr.write("artispec: freeze aborted -- lint has ERROR(s):\n")
         for f in lint_errors:
             sys.stderr.write(f"  ✗ [{f.rule}] {f.where}: {f.detail}\n")
         return 1
@@ -162,15 +174,15 @@ def run(argv: list[str]) -> int:
     open_findings = _count_open_findings(layout, leaves, args.article)
     if open_findings:
         sys.stderr.write(
-            f"docspec: ⚠ article \"{args.article}\" still has {open_findings} unresolved audit finding(s)"
-            f" (audit is non-blocking, publish proceeds; to view: docspec audit --open --article {args.article})\n"
+            f"artispec: ⚠ article \"{args.article}\" still has {open_findings} unresolved audit finding(s)"
+            f" (audit is non-blocking, publish proceeds; to view: artispec audit --open --article {args.article})\n"
         )
 
     # ── render：同步骨架 + 記源 hash ──
     result = render_article(layout, leaves, args.article)
     if result["drafted"] == 0:
         sys.stderr.write(
-            f"docspec: article \"{args.article}\" has no written sections yet (draft has not produced prose) -- not freezing.\n"
+            f"artispec: article \"{args.article}\" has no written sections yet (draft has not produced prose) -- not freezing.\n"
         )
         return 1
 
@@ -181,21 +193,21 @@ def run(argv: list[str]) -> int:
     incomplete = [(sec, sync) for sec, sync in incomplete if sync != "stale-software"]
     unlinked = _unlinked_sections(layout, leaves, args.article)
     if unlinked:
-        sys.stderr.write(f"docspec: note -- {len(unlinked)} section(s) link to no decision, information "
+        sys.stderr.write(f"artispec: note -- {len(unlinked)} section(s) link to no decision, information "
                          f"or requirement, so later changes to those will not mark them for an update "
                          f"(recorded with this version, not blocking): {', '.join(unlinked)}\n")
     if software_divergence:
-        sys.stderr.write(f"docspec: note -- {len(software_divergence)} section(s) describe software "
+        sys.stderr.write(f"artispec: note -- {len(software_divergence)} section(s) describe software "
                          f"requirements that changed since they were written (recorded with this "
                          f"version, not blocking): {', '.join(software_divergence)}\n")
     if incomplete and not args.allow_incomplete:
-        sys.stderr.write(f"docspec: freeze aborted -- {len(incomplete)} section(s) are not ready "
+        sys.stderr.write(f"artispec: freeze aborted -- {len(incomplete)} section(s) are not ready "
                          f"(write or update them first, or pass --allow-incomplete):\n")
         for sec, sync in incomplete:
             sys.stderr.write(f"  ✗ {sec}: {sync}\n")
         return 1
     if not _ever_reviewed(layout, leaves, args.article):
-        sys.stderr.write(f"docspec: note -- \"{args.article}\" has no review record yet; consider an "
+        sys.stderr.write(f"artispec: note -- \"{args.article}\" has no review record yet; consider an "
                          f"independent check with dspx-factcheck before handing it out (not required).\n")
 
     latest = layout.docs_latest(args.article)
@@ -204,7 +216,7 @@ def run(argv: list[str]) -> int:
     # --set-version 走到這裡必為首次（非首次已在前面 abort）＝直接以指定版號鑄造
     if args.set_version and args.date_versioned and args.set_version in {
             ".".join(str(p) for p in v) for v in prev_versions}:
-        sys.stderr.write(f"docspec: freeze aborted -- \"{args.article}\" already has a version for "
+        sys.stderr.write(f"artispec: freeze aborted -- \"{args.article}\" already has a version for "
                          f"today (v{args.set_version}).\n")
         return 1
     level = args.level or _suggest_level(layout, args.article, leaves)
@@ -219,36 +231,28 @@ def run(argv: list[str]) -> int:
     # ── 殘留標記自查（原本 skill 叫 agent 定版後自己 grep）：寫入前就擋 ──
     residue = [m for m in _RESIDUE if m in clean_body]
     if residue:
-        sys.stderr.write(f"docspec: freeze aborted -- the snapshot would still contain machinery "
+        sys.stderr.write(f"artispec: freeze aborted -- the snapshot would still contain machinery "
                          f"({', '.join(residue)}); fix the prose (lint shows where) and freeze again.\n")
         return 1
 
     # ── no-op 偵測：與上一凍結快照位元相同 → 拒（不鑄幻影新版；--allow-noop 才放行）──
     if prev_versions and not args.allow_noop:
         prev_v = ".".join(str(p) for p in max(prev_versions))
-        prev_snap = layout.docs_snapshot(args.article, prev_v)
-        if prev_snap.is_file() and prev_snap.read_text(encoding="utf-8").strip() + "\n" == clean_body:
+        from dspx.engine.document_versions import identical_to_snapshot
+        if identical_to_snapshot(layout, args.article, prev_v, clean_body):
             sys.stderr.write(
-                f"docspec: freeze aborted — content is byte-identical to v{prev_v}; nothing new to "
+                f"artispec: freeze aborted — content is byte-identical to v{prev_v}; nothing new to "
                 f"release (use --allow-noop to force a no-op version bump).\n")
             return 1
 
-    # ── 蓋版號到 _latest（保留標記，它是工作副本）──
+    # Freeze the source and referenced image bytes together before stamping latest.
+    try:
+        snapshot = document_versions.capture(layout, args.article, version, clean_body)
+    except (OSError, document_versions.LayoutError) as exc:
+        sys.stderr.write(f"artispec: freeze aborted -- {exc}\n")
+        return 1
     meta["version"] = version
     latest.write_text(render_frontmatter(meta, body), encoding="utf-8", newline="\n")
-
-    # ── 凍結快照：完全剝除隱形標記 ──
-    snapshot = layout.docs_snapshot(args.article, version)
-    snapshot.parent.mkdir(parents=True, exist_ok=True)
-    snapshot.write_text(clean_body, encoding="utf-8", newline="\n")
-    # 凍結區 hash 抓包（主保證，跨工具、Drive 有效）＋ OS 唯讀（加分，Drive 可能失效）
-    from dspx.reports import freeze
-    freeze.record(layout.planning_home, layout.project_root, snapshot)
-    frozen = True
-    try:
-        snapshot.chmod(stat.S_IREAD | stat.S_IRGRP | stat.S_IROTH)
-    except OSError:
-        frozen = False
 
     # ── changelog：機械寫一列精瘦 markdown 表（版本/日期/級別/說明）──
     # 列只摘要：細節＝快照間 diff（可 derive）＋ decisions/history，不抄進 changelog
@@ -273,7 +277,7 @@ def run(argv: list[str]) -> int:
                    _FIRST_LABEL[clang] if is_first else _LEVEL_LABELS[clang][args.level])
     if is_first and args.level != "patch" and not args.date_versioned and args.level:
         sys.stderr.write(
-            f"docspec: note — --level {args.level} has no effect on the first version (it is {version}).\n")
+            f"artispec: note — --level {args.level} has no effect on the first version (it is {version}).\n")
     with changelog.open("a", encoding="utf-8", newline="\n") as fh:
         fh.write(f"| {version} | {when} | {level_label} | {summary} |\n")
 
@@ -284,7 +288,7 @@ def run(argv: list[str]) -> int:
 
     print(f"frozen \"{args.article}\" v{version}")
     print(f"  _latest: {latest} (working copy, section markers preserved)")
-    print(f"  snapshot: {snapshot}" + (" (read-only, markers stripped)" if frozen else " (markers stripped; read-only attribute failed, freeze is by convention)"))
+    print(f"  snapshot: {snapshot} (markers stripped; source and images integrity-protected)")
     print(f"  changelog: {changelog}")
     print(f"  {result['drafted']} section(s) frozen.")
     if base_path is not None:
@@ -350,7 +354,7 @@ def _suggest_level(layout, article: str, leaves) -> str:
     latest = layout.docs_latest(article)
     now = heads(latest.read_text(encoding="utf-8")) if latest.is_file() else 0
     level = "minor" if now != heads(prev.read_text(encoding="utf-8")) else "patch"
-    sys.stderr.write(f"docspec: note -- version level {level} chosen automatically "
+    sys.stderr.write(f"artispec: note -- version level {level} chosen automatically "
                      f"(pass --level to override).\n")
     return level
 
@@ -373,13 +377,13 @@ def _dry_run(layout: Layout, schema, leaves, args) -> int:
         print("  ✓ check: passed")
     else:
         ok = False
-        print(f"  ✗ check: {len(check.errors)} error(s) — freeze would abort (run docspec check)")
+        print(f"  ✗ check: {len(check.errors)} error(s) — freeze would abort (run artispec check)")
 
     # ② lint ERROR（真 publish：有 → abort）
     lint_errors = [f for f in run_lint(layout, leaves, schema) if f.level == ERROR]
     if lint_errors:
         ok = False
-        print(f"  ✗ lint: {len(lint_errors)} ERROR finding(s) — freeze would abort (run docspec lint)")
+        print(f"  ✗ lint: {len(lint_errors)} ERROR finding(s) — freeze would abort (run artispec lint)")
     else:
         print("  ✓ lint: no ERROR findings")
 
@@ -409,8 +413,8 @@ def _dry_run(layout: Layout, schema, leaves, args) -> int:
         else:
             clean_body = "\n"
         prev_v = ".".join(str(p) for p in max(prev_versions))
-        prev_snap = layout.docs_snapshot(article, prev_v)
-        if prev_snap.is_file() and prev_snap.read_text(encoding="utf-8").strip() + "\n" == clean_body:
+        from dspx.engine.document_versions import identical_to_snapshot
+        if identical_to_snapshot(layout, article, prev_v, clean_body):
             ok = False
             print(f"  ✗ no-op: content is byte-identical to v{prev_v} — freeze would abort "
                   f"(use --allow-noop to force)")
@@ -469,12 +473,12 @@ def _change_policy_gate(layout, leaves, article: str) -> int:
             blockers.append((change, undone))
         else:
             sys.stderr.write(
-                f"docspec: ⚠ article \"{article}\" is hit by active change \"{change.id}\" "
+                f"artispec: ⚠ article \"{article}\" is hit by active change \"{change.id}\" "
                 f"(publish: advisory) — publish proceeds (the gate governs timing, not content; "
                 "staged content never reaches official docs before archive).\n")
     if blockers:
         sys.stderr.write(
-            f"docspec: freeze aborted -- article \"{article}\" is hit by release-bound active "
+            f"artispec: freeze aborted -- article \"{article}\" is hit by release-bound active "
             "change(s):\n")
         for change, undone in blockers:
             sys.stderr.write(f"  ✗ {change.id} ({change.title}) — archive or abandon it first"

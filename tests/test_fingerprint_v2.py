@@ -502,7 +502,7 @@ def test_v1_ledger_shows_needs_migration_not_stale_storm(
     # 人讀輸出帶遷移指示
     assert status_cmd.run(["g"]) == 0
     out = capsys.readouterr().out
-    assert "needs-migration" in out and "docspec render g --rebaseline" in out
+    assert "needs-migration" in out and "artispec render g --rebaseline" in out
 
 
 def test_regular_render_refuses_v1_ledger(make_project, write_leaf, monkeypatch, capsys):

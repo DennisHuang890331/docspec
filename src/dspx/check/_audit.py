@@ -18,7 +18,8 @@ def _audit_faces(layout) -> tuple[str, ...]:
     from dspx.reports.audit import DEFAULT_FACES
     try:
         from dspx.engine.config import load_config
-        config = load_config(layout.planning_home)
+        selected = getattr(layout, "query_config", None)
+        config = selected() if callable(selected) else load_config(layout.planning_home)
         audit = config.get("audit") or {}
         core = tuple(audit.get("core") or ())
         packs = tuple((audit.get("packs") or {}).keys())

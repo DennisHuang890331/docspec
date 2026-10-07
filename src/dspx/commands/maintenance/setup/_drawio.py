@@ -65,7 +65,7 @@ def _extract_drawio(archive: Path, pkey: str) -> bool:
                 if binary.is_file():
                     binary.chmod(0o755)  # zip 不保留執行位元
     except (zipfile.BadZipFile, OSError) as exc:
-        sys.stderr.write(f"docspec: failed to extract draw.io ({archive.name}): {exc}\n")
+        sys.stderr.write(f"artispec: failed to extract draw.io ({archive.name}): {exc}\n")
         return False
     return paths.drawio_managed_binary(plat).is_file()
 
@@ -132,7 +132,7 @@ def _ensure_drawio(*, force: bool, no_download: bool, interactive: bool = False)
     manifest = _pkg._DRAWIO_MANIFEST
     if pkey is None or pkey not in manifest["assets"]:
         sys.stderr.write(
-            f"docspec: the draw.io manifest does not cover this platform ({platform.system()}/{platform.machine()}).\n")
+            f"artispec: the draw.io manifest does not cover this platform ({platform.system()}/{platform.machine()}).\n")
         return False
 
     plat = "windows" if pkey == "windows" else ("darwin" if pkey.startswith("darwin") else "linux")
@@ -154,7 +154,7 @@ def _ensure_drawio(*, force: bool, no_download: bool, interactive: bool = False)
         # 確實低於門檻 → 重抓 pinned。
         if no_download:
             sys.stderr.write(
-                f"docspec: draw.io at {target}: v{ver} is below the v{floor} floor; "
+                f"artispec: draw.io at {target}: v{ver} is below the v{floor} floor; "
                 f"--no-download given, keeping it (its CLI may reject -x -f export flags).\n")
             _pkg._check_linux_drawio_runtime(interactive=interactive)
             return True
@@ -162,7 +162,7 @@ def _ensure_drawio(*, force: bool, no_download: bool, interactive: bool = False)
         # 落到下面重抓
 
     if no_download:
-        sys.stderr.write("docspec: --no-download given and no draw.io in data_dir — aborting.\n")
+        sys.stderr.write("artispec: --no-download given and no draw.io in data_dir — aborting.\n")
         return False
 
     asset_name, sha = manifest["assets"][pkey]
@@ -177,13 +177,13 @@ def _ensure_drawio(*, force: bool, no_download: bool, interactive: bool = False)
             return False
     print(f"  Extracting draw.io → {paths.drawio_dir()}")
     if not _extract_drawio(pkg, pkey):
-        sys.stderr.write("docspec: draw.io extraction did not yield a runnable binary.\n")
+        sys.stderr.write("artispec: draw.io extraction did not yield a runnable binary.\n")
         return False
     print(f"  draw.io ready ({target})")
     ver = _pkg._drawio_version(target)
     if ver is not None and ver != pinned:
         sys.stderr.write(
-            f"docspec: warning — installed draw.io self-reports v{ver} but pinned v{pinned} "
+            f"artispec: warning — installed draw.io self-reports v{ver} but pinned v{pinned} "
             f"(the export flags it accepts may differ).\n")
     elif ver:
         print(f"  draw.io version {ver} (matches pinned v{pinned})")

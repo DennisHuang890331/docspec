@@ -1,4 +1,4 @@
-"""docspec rename-term <old> <new> [--article A] [--dry-run] — 全庫術語代換（prose-span 限定）。
+"""artispec rename-term <old> <new> [--article A] [--dry-run] — 全庫術語代換（prose-span 限定）。
 
 確定性批次代換，**只在散文 span 內**（復用 spans.py `classify_deliverable`／`PROSE_KINDS`）：
 code fence／inline code／URL／圖 path／裸識別碼一律 byte-exact 不動。額外守門：即便落在散文
@@ -79,7 +79,7 @@ def _apply(text: str, hits: list[_Hit], old: str, new: str) -> str:
 
 
 def run(argv: list[str]) -> int:
-    parser = argparse.ArgumentParser(prog="docspec rename-term", description=HELP)
+    parser = argparse.ArgumentParser(prog="artispec rename-term", description=HELP)
     parser.add_argument("old", help="term to replace (prose occurrences only)")
     parser.add_argument("new", help="replacement term")
     parser.add_argument("--article", default=None,
@@ -90,10 +90,10 @@ def run(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     if not args.old:
-        sys.stderr.write("docspec: <old> term must be non-empty\n")
+        sys.stderr.write("artispec: <old> term must be non-empty\n")
         return 2
     if args.old == args.new:
-        sys.stderr.write("docspec: <old> and <new> are identical (nothing to rename)\n")
+        sys.stderr.write("artispec: <old> and <new> are identical (nothing to rename)\n")
         return 2
 
     try:
@@ -106,7 +106,7 @@ def run(argv: list[str]) -> int:
     all_articles = layout.articles()
     if args.article is not None:
         if args.article not in all_articles:
-            sys.stderr.write(f"docspec: no leaf sections found for article \"{args.article}\"\n")
+            sys.stderr.write(f"artispec: no leaf sections found for article \"{args.article}\"\n")
             return 1
         articles = [args.article]
     else:
@@ -157,5 +157,5 @@ def run(argv: list[str]) -> int:
     arts = ", ".join(a for a, _t, _h in per_article)
     print(f"  prose changed in: {arts}. Prose fingerprints were updated in-place (no false drift). "
           "Re-review the touched sections for term coherence; if any ledger is fingerprint-v1 "
-          "run `docspec render <article> --rebaseline`.")
+          "run `artispec render <article> --rebaseline`.")
     return 0
