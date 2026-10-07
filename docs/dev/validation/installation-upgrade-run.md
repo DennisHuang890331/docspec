@@ -43,7 +43,13 @@ Windows Python 3.12.13：**2135 passed／1 skipped**，pytest 597.78 秒，wrapp
 
 本機分支已從 claude/software-domain-redesign 改為 dev。暫存成果經另一角色核對，349 個文字檔未見真實專案資料、binary、wheel、appdata、原始案例對話或常見金鑰格式。成果已提交為 `a919a9e`，349 檔／21,228 行新增／1,811 行刪除；原本未提交成果保留在此開發提交中。
 
-推送命令 `git push --set-upstream origin dev` 真 exit128：本機沒有 GitHub 登入，無法取得驗證，不是程式／回歸失敗，也不是負責人未授權。GitHub CLI 不在 PATH，Credential Manager 沒有已登入帳號。案外 device 登入未提供驗證碼，已精確停止本次自有程序，請負責人在自己的 PowerShell 完成 `git credential-manager github login --browser`；不索取密碼或 token。遠端 dev 尚未推送成功，task 5.2 保持未勾選。
+先前 HTTPS 推送命令 `git push --set-upstream origin dev` 真 exit128，原失敗保留：GitHub CLI 不在 PATH，HTTPS Credential Manager 沒有已登入帳號。案外 device 登入未提供驗證碼，已精確停止本次自有程序。當時只檢查 HTTPS，未檢查現有 SSH，是 agent 判斷缺漏，不是工具／回歸缺陷，也不是負責人未授權。
+
+負責人其後指出既有 SSH 與 `git@github.com:DennisHuang890331/docspec.git`。已用 BatchMode／StrictHostKeyChecking 驗證為 DennisHuang890331；ssh -T 的 exit1 是 GitHub 不提供 shell 的正常成功訊息，Git SSH ls-remote 真 exit0。origin 的 fetch／push 均改為此 SSH URL，推送 dev 成功，遠端當時 HEAD 與本機 `587c84d80a489facf6dc3c8b468ebb724ed0b697` 完全相同，不需要額外瀏覽器登入。
+
+原遠端開發分支在 `5a942b6`，已確認其提交全部是 dev 的祖先後，以限定該舊 SHA 的 lease 刪除舊名稱，完成遠端改名；沒有丟失提交歷史。task 5.2 已按實際結果完成。最新驗證與 OpenSpec 結案紀錄會另提交到 dev，不以本報告嵌入自身提交 SHA。
+
+此 change 九項任務完成後已封存於 `openspec/changes/archive/2026-10-07-align-artispec-installation/`，五條安裝與升級需求同步為 `openspec/specs/artispec-installation/spec.md`。結案後 strict 真 exit0，24 項通過（21 個活動 change、三個正式 spec），未完成的其他 change 不勾為通過。
 
 本機 main 仍為 `0a910a13f87cfb59cd80bf0a99fa688835e93808`，遠端 main 仍為 `0f0c18bf1239c9b7e9be4c685639fa6a12add47a`；沒有修改 main 或開 PR。未完成事項仍包含 roadmap 錯誤連結恢復待裁定、新 Linux 包 GUI 與兩案初版接受／封存、容量變更及全新會話接手。中英文 README 仍待定稿；ArtiSpec 自用開發尚未遷移。
 
