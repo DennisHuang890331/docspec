@@ -6,7 +6,7 @@
 
 本次由 `align-artispec-installation` 管理，實際回歸及安裝升級證據另見[本批報告](validation/installation-upgrade-run.md)。
 
-本批最終回歸（2026/10/07）：Windows **2135 passed／1 skipped**、實際 WSL Linux **2132 passed／4 skipped**，各 2136 項、0 failed／0 error，原退出碼及 XML 已核；276 個 src／tests／pyproject／lock 檔前後 bytes 相同。四個已安裝 wheel 乾淨／升級情境合計 50 命令、88 項核對、696 次套件檔案比對通過；Windows 23,620／Linux 20,751 個受管工具檔已明確遷移、原來源保留。全域 uv tool 已升級為 `artispec v0.1.0` 唯一入口，實際全域 doctor／deep 中文一頁實編與 16 個套件的 pip check 均 exit0；舊工具資料與 2026/10/06 wheel 備份保留。共用新 wheel 更新、提交與遠端 `dev` 推送仍準備中。這些機械與安裝結果不補足同題兩案的接受／封存、變更與接手驗收。
+本批最終回歸（2026/10/07）：Windows **2135 passed／1 skipped**、實際 WSL Linux **2132 passed／4 skipped**，各 2136 項、0 failed／0 error，原退出碼及 XML 已核；276 個 src／tests／pyproject／lock 檔前後 bytes 相同。四個已安裝 wheel 乾淨／升級情境合計 50 命令、88 項核對、696 次套件檔案比對通過；Windows 23,620／Linux 20,751 個受管工具檔已明確遷移、原來源保留。全域 uv tool 已升級為 `artispec v0.1.0` 唯一入口，實際全域 doctor／deep 中文一頁實編與 16 個套件的 pip check 均 exit0；舊工具資料與 2026/10/06 wheel 備份保留。共用新 wheel 已更新，成果已本機提交為 `a919a9e`；遠端 `dev` 推送因 GitHub 尚未登入而待完成。這些機械與安裝結果不補足同題兩案的接受／封存、變更與接手驗收。
 
 前輪驗證（2026/10/04）：核心修正及機械回歸已完成，Windows 2096 passed／1 skipped、實際 WSL Linux 2093 passed／4 skipped，OpenSpec strict 23 passed。Windows 實測已輸出兩房 HTML 與兩份原生列印 PDF；Linux 新版手冊 1.0.1 與 ZIP 已完成，原包 GUI 已獨立核過，新包不直接沿用該結果。Linux 新版獨立核對通過，Windows 紙面審查亦通過；Windows 錯誤連結的合法恢復待裁定，最新同題兩案尚未初版接受／封存、需求變更或新會話接手。此次升級不修 unlink、不補造完整 workflow passed；驗證完成但尚未 archive 的 change 保留原狀態。明細見[本輪紀錄](validation/workflow-alignment-run.md)。
 

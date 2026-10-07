@@ -194,7 +194,7 @@ freeze 保存所引用的受管圖資產；新 snapshot 缺圖不得 fallback �
 
 實際回歸補註（2026/10/07）：Windows 2135 passed／1 skipped、實際 WSL Linux 2132 passed／4 skipped，各 2136 項、0 failed／0 error，已核原退出及 XML；src／tests／pyproject／lock 的 276 檔前後 bytes 相同。Windows Python 3.12.13、Linux Python 3.12.3；既有退役 warning 案兩平台各跳過一項，Linux 另三項 Windows junction，PDF／proof 無跳過。四個乾淨／舊包升級情境共 50 個命令、88 項核對、696 次套件檔案比對通過；新 wheel SHA-256 為 `4b61c1d088294ae5a2f1d4cc37ac085d83379b0e680d9135e0f0ef64c2e70dce`。Windows 23,620／Linux 20,751 個受管工具檔完成明確遷移，舊來源保留且七個已知 lock 路徑重指新根；Windows 候選環境 doctor／deep 真 exit0，一頁中英文實編通過。
 
-本機升級補註（2026/10/07）：全域 uv tool list 現為 `artispec v0.1.0`、唯一入口 `artispec`，`Roaming/uv/tools/artispec` 已建立、原 `docspec` tool 環境已移除。`Local/artispec` 的 Typst 0.15、Pandoc 3.10、19 個字型及 TinyTeX 檢查通過；實際全域 doctor／deep 中文一頁實編與 16 個套件的 pip check 均 exit0。已安裝上述新 wheel，依賴使用 repo lock 匯出的 constraints、與回歸一致；舊 `Local/docspec/docspec` 來源及 2026/10/06 wheel 備份保留。共用新 wheel 更新、提交與遠端 `dev` 推送仍待完成；這批升級不代表未完成的完整 agent workflow 通過。
+本機升級補註（2026/10/07）：全域 uv tool list 現為 `artispec v0.1.0`、唯一入口 `artispec`，`Roaming/uv/tools/artispec` 已建立、原 `docspec` tool 環境已移除。`Local/artispec` 的 Typst 0.15、Pandoc 3.10、19 個字型及 TinyTeX 檢查通過；實際全域 doctor／deep 中文一頁實編與 16 個套件的 pip check 均 exit0。已安裝上述新 wheel，依賴使用 repo lock 匯出的 constraints、與回歸一致；舊 `Local/docspec/docspec` 來源及 2026/10/06 wheel 備份保留。共用新 wheel 已更新，成果已本機提交為 `a919a9e`；遠端 `dev` 推送因 GitHub 尚未登入而待完成；這批升級不代表未完成的完整 agent workflow 通過。
 
 ### 現行 change 容器與入口
 

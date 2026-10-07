@@ -41,6 +41,10 @@ Windows Python 3.12.13：**2135 passed／1 skipped**，pytest 597.78 秒，wrapp
 
 回歸結束後才整理暫存檢查列出的 17 個 EOF 多餘空白：16 個規劃／spec／script 只去末尾空白，Python script AST 不變；測試角色另整理 tests/test_workflow_integrity.py，AST 含位置資訊完全相同、單檔回歸 **48 passed（40.92 秒）**。整套回歸驗的是整理前 bytes，末尾空白與單檔驗證另存，沒有虛稱前後原檔完全未變。封條／歷史正文與產品套件程式未改。
 
-本機分支已從 claude/software-domain-redesign 改為 dev。暫存成果經另一角色核對，349 個文字檔未見真實專案資料、binary、wheel、appdata、原始案例對話或常見金鑰格式。整理提交與遠端 dev 推送進行中；未完成事項仍包含 roadmap 錯誤連結恢復待裁定、新 Linux 包 GUI 與兩案初版接受／封存、容量變更及全新會話接手。中英文 README 仍待定稿；ArtiSpec 自用開發尚未遷移。
+本機分支已從 claude/software-domain-redesign 改為 dev。暫存成果經另一角色核對，349 個文字檔未見真實專案資料、binary、wheel、appdata、原始案例對話或常見金鑰格式。成果已提交為 `a919a9e`，349 檔／21,228 行新增／1,811 行刪除；原本未提交成果保留在此開發提交中。
+
+推送命令 `git push --set-upstream origin dev` 真 exit128：本機沒有 GitHub 登入，無法取得驗證，不是程式／回歸失敗，也不是負責人未授權。GitHub CLI 不在 PATH，Credential Manager 沒有已登入帳號。案外 device 登入未提供驗證碼，已精確停止本次自有程序，請負責人在自己的 PowerShell 完成 `git credential-manager github login --browser`；不索取密碼或 token。遠端 dev 尚未推送成功，task 5.2 保持未勾選。
+
+本機 main 仍為 `0a910a13f87cfb59cd80bf0a99fa688835e93808`，遠端 main 仍為 `0f0c18bf1239c9b7e9be4c685639fa6a12add47a`；沒有修改 main 或開 PR。未完成事項仍包含 roadmap 錯誤連結恢復待裁定、新 Linux 包 GUI 與兩案初版接受／封存、容量變更及全新會話接手。中英文 README 仍待定稿；ArtiSpec 自用開發尚未遷移。
 
 本批案外證據根：`C:/Users/zxc22/AppData/Local/Temp/artispec-installation-upgrade-20261007-4e6289/`。portable-receipts/summary.json 含全部命令、初始失敗與來源指紋；regression/ 保存完整回歸，Windows 原始唯讀失敗另保存於同使用者 Temp 的 artispec-runtime-readonly-red.json。真實專案內容與工具資料未複製進 repo。
